@@ -4,8 +4,6 @@ Records that a later slice produces (parsed games, analysis findings, stored blu
 are added by that slice, next to the code that fills them in.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Literal

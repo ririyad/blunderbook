@@ -55,7 +55,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ### M1 Core: pure logic, no database
 
-- [x] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.12),
+- [x] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.15),
       `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker that skips when no
       Stockfish is found.
       _Done when_ `uv sync && uv run pytest` passes on an empty suite.
@@ -144,7 +144,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ## Requirements
 
-- **Python 3.12**, managed with [uv](https://docs.astral.sh/uv/). `uv sync` downloads 3.12 if needed.
+- **Python 3.15+**, managed with [uv](https://docs.astral.sh/uv/). `uv sync` downloads it if needed (uv 0.13.7+ knows 3.15 final).
 - **Stockfish 17+**, installed by you. Put it on `PATH` or set `stockfish_path` in `config.toml`.
   Without it, the app can't analyse games and engine tests are skipped.
 

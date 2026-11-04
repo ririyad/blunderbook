@@ -1,7 +1,5 @@
 """Parse PGN ``TimeControl`` headers and classify game speed (CLAUDE.md §7.2)."""
 
-from __future__ import annotations
-
 import re
 from typing import Final
 

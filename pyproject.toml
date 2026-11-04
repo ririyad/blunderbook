@@ -3,7 +3,7 @@ name = "blunderbook"
 version = "0.1.0"
 description = "A personal, local-first chess mistake library."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.15"
 dependencies = [
     "chess>=1.11.2",
     "fastapi>=0.162.0",
@@ -17,7 +17,7 @@ dependencies = [
 blunderbook = "blunderbook.cli:app"
 
 [build-system]
-requires = ["uv_build>=0.12.13,<0.13.0"]
+requires = ["uv_build>=0.13.7,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -28,7 +28,7 @@ module-root = ""
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py315"
 # Code blocks in CLAUDE.md / README.md are illustrative; don't lint or reformat them.
 extend-exclude = ["*.md"]
 
@@ -40,7 +40,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 # `strict = true` isn't allowed in per-module sections, so the strict flags are listed.
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.15"
 files = ["blunderbook"]
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -67,6 +67,11 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "engine: needs a Stockfish binary; skipped when none is found",
+]
+filterwarnings = [
+    # python-chess 1.11.2 uses an asyncio API that Python 3.16 removes. Harmless on 3.15;
+    # needs a python-chess release that drops it before we move to 3.16.
+    "ignore:'asyncio.DefaultEventLoopPolicy' is deprecated:DeprecationWarning:chess.engine",
 ]
 
 [dependency-groups]

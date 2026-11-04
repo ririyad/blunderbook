@@ -52,7 +52,7 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
 
 ## 3. Tech stack
 
-- **Python 3.12**, managed with **uv** (`uv sync`, `uv run`).
+- **Python 3.15+**, managed with **uv** (`uv sync`, `uv run`).
 - **python-chess**: PGN parsing, move legality, SAN/UCI, and the UCI engine wrapper.
 - **Stockfish 17+** as an external binary (user-installed; path from config or `PATH`).
 - **FastAPI + Uvicorn**: local web server and JSON API.
