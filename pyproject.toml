@@ -1,0 +1,77 @@
+[project]
+name = "blunderbook"
+version = "0.1.0"
+description = "A personal, local-first chess mistake library."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chess>=1.11.2",
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "platformdirs>=4.14.4",
+    "typer>=0.27.3",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+blunderbook = "blunderbook.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blunderbook"
+module-root = ""
+
+# ---------------------------------------------------------------- ruff
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Code blocks in CLAUDE.md / README.md are illustrative; don't lint or reformat them.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+# ---------------------------------------------------------------- mypy
+# Whole package is type-checked; blunderbook/core is strict (CLAUDE.md §3).
+# `strict = true` isn't allowed in per-module sections, so the strict flags are listed.
+
+[tool.mypy]
+python_version = "3.12"
+files = ["blunderbook"]
+warn_unused_configs = true
+warn_redundant_casts = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["blunderbook.core", "blunderbook.core.*"]
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+warn_unused_ignores = true
+warn_return_any = true
+implicit_reexport = false
+strict_equality = true
+extra_checks = true
+
+# ---------------------------------------------------------------- pytest
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "engine: needs a Stockfish binary; skipped when none is found",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]

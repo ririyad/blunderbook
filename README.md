@@ -27,7 +27,7 @@ _Last updated: 2026-11-04_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | Not started | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (1/8) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,9 +35,10 @@ _Last updated: 2026-11-04_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.1 Scaffold.
+**Next up:** M1.2 Models + time control.
 
-There's no application code yet. None of the commands below work so far.
+The project scaffold is in place (`uv sync`, tests, lint, types). Only `blunderbook --version`
+works so far. None of the commands below are implemented yet.
 
 ---
 
@@ -54,8 +55,8 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ### M1 Core: pure logic, no database
 
-- [ ] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.12),
-      `.gitignore`, package tree, ruff/mypy/pytest config, `engine` marker that skips when no
+- [x] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.12),
+      `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker that skips when no
       Stockfish is found.
       _Done when_ `uv sync && uv run pytest` passes on an empty suite.
 - [ ] **1.2 Models + time control.** `core/models.py`, `core/timecontrol.py` (parse, speed, label).
@@ -165,7 +166,15 @@ uv sync                                   # install deps into .venv
 uv run pytest                             # all tests (engine tests skip without Stockfish)
 uv run pytest -m engine                   # engine tests only
 uv run ruff check . && uv run ruff format --check .
-uv run mypy blunderbook/core
+uv run mypy                               # whole package; strict on blunderbook/core
+```
+
+Engine tests (`@pytest.mark.engine`) look for Stockfish in `BLUNDERBOOK_STOCKFISH` first, then
+`stockfish` on `PATH`. On Windows the binary usually has a long name, so the variable is easiest:
+
+```sh
+export BLUNDERBOOK_STOCKFISH="C:/path/to/stockfish-windows-x86-64-avx2.exe"   # Git Bash
+$env:BLUNDERBOOK_STOCKFISH = "C:\path\to\stockfish-windows-x86-64-avx2.exe"    # PowerShell
 ```
 
 Tests never call Lichess or Chess.com. Sync tests use files in `tests/fixtures/http/`.
