@@ -27,7 +27,7 @@ _Last updated: 2026-11-04_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (2/8) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (3/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,10 +35,11 @@ _Last updated: 2026-11-04_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.3 PGN parsing.
+**Next up:** M1.4 PGN parsing.
 
-The project scaffold is in place (`uv sync`, tests, lint, types). Only `blunderbook --version`
-works so far. None of the commands below are implemented yet.
+In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
+parsing, config.toml, and Stockfish setup. The working commands are `blunderbook --version`
+and `blunderbook engine show|set|clear` (see Usage).
 
 ---
 
@@ -56,29 +57,39 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ### M1 Core: pure logic, no database
 
 - [x] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.15),
-      `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker that skips when no
-      Stockfish is found.
+      `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker
+      that skips when no Stockfish is found.
       _Done when_ `uv sync && uv run pytest` passes on an empty suite.
 - [x] **1.2 Models + time control.** `core/models.py` (shared types, `CAUSES`, `Eval` with its JSON
       form, `TimeControl`) and `core/timecontrol.py` (parse, speed, label). Records like parsed games
       and findings arrive with the slices that fill them in.
       _Done when_ `180+2` → blitz / `"3+2"`, `1500+10` → classical / `"25+10"` (estimate 1900 s),
       and `-` / `?` / daily `1/86400` → unknown.
-- [ ] **1.3 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only,
-      FEN before/after each ply, `[%clk]` values, per-game errors, verbatim text.
+- [x] **1.3 Config + Stockfish path.** `config.py` (load/save config.toml with a small built-in
+      writer, typed checks that name the bad key, token never shown) and Stockfish lookup:
+      `--stockfish` option → `BLUNDERBOOK_STOCKFISH` → `stockfish_path` → `PATH`. A broken setting
+      is reported, never skipped. Paths can be pasted with quotes, use `~` or env vars, or point at
+      the unzipped folder. `core/engine.py` `probe()` checks that the program is Stockfish and reads
+      its version. CLI `engine show|set|clear`.
+      _Done when_ `engine set <folder>` finds the program, checks it, saves it, and `show` / `clear` work.
+- [ ] **1.4 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only,
+      FEN before/after each ply, `[%clk]` values, per-game errors, verbatim text. Files are read as
+      UTF-8 with a cp1252 fallback (see Open decisions).
       _Done when_ `multi_game.pgn` gives the good games plus one reported error.
-- [ ] **1.4 Identity + source.** `core/identity.py` (side detection, fingerprints), `core/source.py`.
+- [ ] **1.5 Identity + source.** `core/identity.py` (side detection, fingerprints), `core/source.py`.
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
-- [ ] **1.5 Detection maths.** `core/detect.py`: winning chances, swing, judgment, flagging,
+- [ ] **1.6 Detection maths.** `core/detect.py`: winning chances, swing, judgment, flagging,
       `best_line_san` and `refutation_san` formatting.
       _Done when_ thresholds and Black-start move numbering (`5... Nxe5 6. Be2`) are tested.
-- [ ] **1.6 Engine wrapper.** `core/engine.py`: Stockfish context manager, pass 1, MultiPV 3 pass 2,
+- [ ] **1.7 Engine analysis.** Builds on `probe()` in `core/engine.py`: pass 1, MultiPV 3 pass 2,
       terminal positions without the engine, scores stored from White's point of view.
       _Done when_ the engine always closes, even on errors.
-- [ ] **1.7 Suggested causes.** `core/hints.py`: time trouble, moved too fast, missed their threat,
+- [ ] **1.8 Suggested causes.** `core/hints.py`: time trouble, moved too fast, missed their threat,
       hung a piece. _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
-- [ ] **1.8 Importer + CLI.** `config.py`, `importer.py`, CLI `init` / `doctor` / `import` (prints the
-      report and doesn't save it yet), all nine §12 PGN fixtures.
+- [ ] **1.9 Importer + CLI.** `importer.py`, CLI `init` (asks for your names and the Stockfish path,
+      Enter = PATH, checked like `engine set`), `doctor` (includes the `engine show` report) and
+      `import` (prints the report and doesn't save it yet). `--stockfish` option on `import` and
+      `doctor`. All nine §12 PGN fixtures.
       _Done when_ every fixture flags its expected move under `uv run pytest -m engine`.
 
 ### M2 Storage
@@ -90,7 +101,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
       supports `--side`, and prints the summary line. `init` creates the DB.
       _Done when_ importing the same file twice adds nothing.
 - [ ] **2.4 `fen` command.** Synthetic `source='fen'` game row. Logs the move with its judgment,
-      even below the blunder line.
+      even below the blunder line. Takes `--stockfish` too.
 
 ### M3 API + Log view
 
@@ -115,9 +126,11 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ### M5 Import view + jobs
 
 - [ ] **5.1 Jobs.** `jobs.py`: in-process background queue, progress as positions done / total.
-- [ ] **5.2 Import API.** `/api/import/*`, `/api/fen/check`, `/api/fen/add`, `/api/settings`.
+- [ ] **5.2 Import API.** `/api/import/*`, `/api/fen/check`, `/api/fen/add`, `/api/settings`, and
+      `GET/PUT /api/engine` (same lookup and check as `engine show` / `engine set`).
 - [ ] **5.3 Import view.** Paste / file picker / drag-and-drop, names field, per-game queue statuses,
-      side picker, depth selector, links to found blunders.
+      side picker, depth selector, links to found blunders. The "Engine: …" line in the queue header
+      shows the engine name and path, with a **Change** control (enter a path, "Check and save").
 - [ ] **5.4 FEN quick entry.** Board editor with tap-to-move, engine verdict, opponent and date, Add to log.
 
 ### M6 Sync (no network in tests)
@@ -136,7 +149,8 @@ Each item is one small commit, with its tests in the same change. Every commit m
 - [ ] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
       and `print --ids / --due --out`.
 - [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
-- [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README.
+- [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
+      ending with `blunderbook engine set <program or folder>`.
 
 **Later (not v1):** opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile PWA.
 
@@ -145,22 +159,42 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ## Requirements
 
 - **Python 3.15+**, managed with [uv](https://docs.astral.sh/uv/). `uv sync` downloads it if needed (uv 0.13.7+ knows 3.15 final).
-- **Stockfish 17+**, installed by you. Put it on `PATH` or set `stockfish_path` in `config.toml`.
-  Without it, the app can't analyse games and engine tests are skipped.
+- **Stockfish 17+**, installed by you. Then tell Blunderbook where it is:
+
+  ```sh
+  blunderbook engine set "C:\Users\you\Downloads\stockfish"   # the program, or the unzipped folder
+  blunderbook engine show                                     # which Stockfish, and where that came from
+  blunderbook engine clear                                    # forget it; look on PATH again
+  ```
+
+  If `stockfish` is already on `PATH`, you don't need to set anything. Without Stockfish, the
+  app can't analyse games and engine tests are skipped.
 
 Full install steps arrive in M7.
 
-## Usage (planned, not implemented yet)
+## Usage
 
-| Command | Does | Lands in |
+Settings live in `config.toml` in your user config folder (on Windows,
+`%LOCALAPPDATA%\blunderbook\config.toml`). Stockfish is looked up in this order:
+
+1. `--stockfish PATH` on the command
+2. the `BLUNDERBOOK_STOCKFISH` environment variable
+3. `stockfish_path` in config.toml (set by `engine set`)
+4. `stockfish` on `PATH`
+
+If one of these is set but broken, you get an error saying which one. The app never quietly
+uses the next one.
+
+| Command | Does | Status |
 |---|---|---|
-| `blunderbook init` | Create config (and the DB from M2), ask for your names, check Stockfish | M1 / M2 |
-| `blunderbook doctor` | Check Stockfish, DB migrations and config | M1 |
-| `blunderbook import PATH [--side white\|black] [--depth N]` | Import a PGN file | M1 (report) / M2 (saved) |
-| `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | M2 |
-| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` | M3 / M7 |
-| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | M6 |
-| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | M7 |
+| `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
+| `blunderbook init` | Create config (and the DB from M2), ask for your names and Stockfish | Planned (1.9 / M2) |
+| `blunderbook doctor [--stockfish PATH]` | Check Stockfish, DB migrations and config | Planned (1.9) |
+| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file | Planned (1.9 report / M2 saved) |
+| `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
+| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` | Planned (M3 / M7) |
+| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
+| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M7) |
 
 ## Development
 
@@ -172,15 +206,22 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy                               # whole package; strict on blunderbook/core
 ```
 
-Engine tests (`@pytest.mark.engine`) look for Stockfish in `BLUNDERBOOK_STOCKFISH` first, then
-`stockfish` on `PATH`. On Windows the binary usually has a long name, so the variable is easiest:
+Engine tests (`@pytest.mark.engine`) find Stockfish the same way the app does (environment
+variable, then your config.toml, read only, then `PATH`). So `blunderbook engine set PATH` once
+is enough. To point the tests at a different binary for one run:
 
 ```sh
-export BLUNDERBOOK_STOCKFISH="C:/path/to/stockfish-windows-x86-64-avx2.exe"   # Git Bash
-$env:BLUNDERBOOK_STOCKFISH = "C:\path\to\stockfish-windows-x86-64-avx2.exe"    # PowerShell
+BLUNDERBOOK_STOCKFISH="C:/path/to/stockfish.exe" uv run pytest -m engine          # Git Bash
+$env:BLUNDERBOOK_STOCKFISH = "C:\path\to\stockfish.exe"; uv run pytest -m engine   # PowerShell
 ```
 
-Tests never call Lichess or Chess.com. Sync tests use files in `tests/fixtures/http/`.
+Tests that only check how the engine is started and identified use a fake UCI engine
+(`tests/fixtures/fake_uci.py`), so they run without Stockfish. Tests never call Lichess or
+Chess.com. Sync tests use files in `tests/fixtures/http/`.
+
+python-chess 1.11.2 uses asyncio APIs that Python 3.16 will remove. That's harmless on 3.15,
+and the warnings are filtered in `pyproject.toml`. Check for a newer python-chess before
+moving to 3.16.
 
 ## Open decisions
 
@@ -197,3 +238,11 @@ These are flagged against the spec and need your confirmation or a change.
    the answer, and the server checks every attempt.
 4. **Recorded HTTP fixtures.** Development never calls the sites, so the M6 fixtures will be
    built by hand from the documented formats and marked `TODO(verify)` until you record real ones.
+5. **config.toml vs the `settings` table.** §5 has a DB `settings` table and §10 has
+   `/api/settings`, but §6 keeps the same values (names, engine, thresholds) in config.toml.
+   Proposal: config.toml is the single source of truth, and `/api/settings` and `/api/engine`
+   read and write it. The Lichess token is write-only and never returned. The DB `settings` table
+   holds UI preferences only. To decide by M2 / M5.
+6. **PGN file encoding (affects 1.4).** Python 3.15 defaults to UTF-8 (PEP 686), but ChessBase
+   and older over-the-board PGNs are often cp1252. Proposal: read as `utf-8-sig`, fall back to
+   `cp1252`, and note the fallback in the import report.

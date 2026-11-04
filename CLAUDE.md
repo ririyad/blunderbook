@@ -77,8 +77,8 @@ blunderbook/
 ├── pyproject.toml
 ├── blunderbook/
 │   ├── __init__.py
-│   ├── cli.py                 # Typer app: init, import, fen, sync, serve, print, doctor
-│   ├── config.py              # load/save config.toml, paths via platformdirs
+│   ├── cli.py                 # Typer app: init, engine, import, fen, sync, serve, print, doctor
+│   ├── config.py              # load/save config.toml, paths via platformdirs, Stockfish lookup
 │   ├── db/
 │   │   ├── connection.py      # sqlite3 connection, PRAGMAs, migration runner
 │   │   ├── migrations/        # 0001_init.sql, 0002_....sql (forward-only)
@@ -251,6 +251,18 @@ contact = ""                          # used in the User-Agent header Chess.com 
 
 Never print the Lichess token, never write it to the DB, and redact it from error messages.
 
+The app writes config.toml from a fixed, commented template (stdlib `tomllib` can only read).
+Your own comments aren't kept, and strings are written as TOML literal strings when possible,
+so Windows paths stay readable.
+
+**Stockfish lookup** (first match wins): `--stockfish PATH` option → `BLUNDERBOOK_STOCKFISH`
+env var → `stockfish_path` → `stockfish` on `PATH`. A setting that is present but broken is an
+error naming that setting. It never falls through to the next one. Paths accept surrounding
+quotes, `~` and env vars. A relative `stockfish_path` is relative to the config folder. A
+folder is searched, plus one level down, for a single `stockfish*` program (the unzipped
+release). The program must identify as Stockfish over UCI. Older than 17 gives a warning, not
+an error. `blunderbook engine set` checks a path before saving it.
+
 ---
 
 ## 7. Core logic (exact rules)
@@ -369,10 +381,13 @@ They return **PGN text only**. The importer does everything else.
 
 | Command | Does |
 |---|---|
-| `init` | Create config and DB, ask for names, check Stockfish. |
-| `doctor` | Check Stockfish path and version, DB migrations, config sanity. |
-| `import PATH [--side white\|black] [--depth N]` | Import a PGN file. `--side` applies to games with no name match; otherwise they're listed as needing a side. |
-| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Quick entry for one position. Logs it even below the blunder line, with its judgment. |
+| `init` | Create config and DB, ask for names and the Stockfish path (Enter = PATH), check Stockfish. |
+| `doctor [--stockfish PATH]` | Check Stockfish path and version, DB migrations, config sanity. |
+| `engine show` | Which Stockfish is used, its version, and where the setting came from. |
+| `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
+| `engine clear` | Set `stockfish_path = ""` (look on PATH again). |
+| `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file. `--side` applies to games with no name match; otherwise they're listed as needing a side. |
+| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position. Logs it even below the blunder line, with its judgment. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
@@ -405,6 +420,8 @@ POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, le
 
 GET    /api/patterns
 GET    /api/settings  | PUT /api/settings
+GET    /api/engine                {name, version, path, origin, problem?}  (same lookup as `engine show`)
+PUT    /api/engine                {path} -> checks like `engine set`, saves only if it works
 POST   /api/sync/{source}         start a sync job
 ```
 

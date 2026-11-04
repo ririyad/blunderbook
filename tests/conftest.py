@@ -1,36 +1,38 @@
 """Shared test setup.
 
-Engine tests are marked ``@pytest.mark.engine`` and skipped when no Stockfish binary is
-found. Set ``BLUNDERBOOK_STOCKFISH`` to the binary's path, or put ``stockfish`` on PATH.
+Engine tests are marked ``@pytest.mark.engine`` and skipped when no Stockfish is found.
+They use the app's own lookup: ``BLUNDERBOOK_STOCKFISH``, then your config.toml (read
+only), then ``stockfish`` on PATH. So ``blunderbook engine set PATH`` once is enough.
 """
 
-import os
-import shutil
+import sys
+from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 
 import pytest
 
-STOCKFISH_ENV = "BLUNDERBOOK_STOCKFISH"
+from blunderbook import config
+
+FAKE_UCI = Path(__file__).parent / "fixtures" / "fake_uci.py"
 
 
-def find_stockfish() -> Path | None:
-    configured = os.environ.get(STOCKFISH_ENV, "").strip()
-    if configured:
-        path = Path(configured)
-        return path if path.is_file() else None
-    found = shutil.which("stockfish")
-    return Path(found) if found else None
+@cache
+def _stockfish() -> config.StockfishLocation:
+    try:
+        cfg: config.Config | None = config.load()
+    except config.ConfigError:
+        cfg = None
+    return config.locate_stockfish(config=cfg)
 
 
 def _skip_reason() -> str:
-    configured = os.environ.get(STOCKFISH_ENV, "").strip()
-    if configured:
-        return f"{STOCKFISH_ENV} points to a missing file: {configured}"
-    return f"Stockfish not found (set {STOCKFISH_ENV} or put stockfish on PATH)"
+    problem = _stockfish().problem or "Stockfish not found"
+    return problem.splitlines()[0]
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if find_stockfish() is not None:
+    if _stockfish().path is not None:
         return
     skip = pytest.mark.skip(reason=_skip_reason())
     for item in items:
@@ -40,7 +42,17 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture(scope="session")
 def stockfish_path() -> Path:
-    path = find_stockfish()
+    path = _stockfish().path
     if path is None:
         pytest.skip(_skip_reason())
     return path
+
+
+@pytest.fixture
+def fake_engine() -> Callable[..., list[str]]:
+    """Builds the command line for the fake UCI engine in tests/fixtures/fake_uci.py."""
+
+    def command(*args: str) -> list[str]:
+        return [sys.executable, "-I", str(FAKE_UCI), *args]
+
+    return command
