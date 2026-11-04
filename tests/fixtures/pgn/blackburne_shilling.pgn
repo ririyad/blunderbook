@@ -1,0 +1,9 @@
+[Event "Blitz with friends"]
+[Date "2026.09.14"]
+[White "Rashed"]
+[Black "N. Ahmed"]
+[Result "0-1"]
+[TimeControl "300+3"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Nd4 4. Nxe5 Qg5 5. Nxf7?? { The knight was poisoned. }
+(5. O-O Qxe5 6. c3) 5... Qxg2 6. Rf1 Qxe4+ 7. Be2 Nf3# 0-1

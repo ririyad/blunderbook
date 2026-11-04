@@ -1,0 +1,14 @@
+[Event "Casual blitz game"]
+[Site "https://lichess.org/bAckR4nk"]
+[Date "2026.11.01"]
+[White "Rashed"]
+[Black "endgame_eel"]
+[Result "0-1"]
+[WhiteElo "1450"]
+[BlackElo "1462"]
+[Variant "From Position"]
+[TimeControl "180+2"]
+[FEN "3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32"]
+[SetUp "1"]
+
+32. Rc7 { [%clk 0:00:09] } 32... Qe1# { [%clk 0:00:41] } 0-1

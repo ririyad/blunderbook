@@ -1,0 +1,12 @@
+[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2026.11.03"]
+[White "guest_4417"]
+[Black "rashed_blitz"]
+[Result "1-0"]
+[WhiteElo "1402"]
+[BlackElo "1431"]
+[TimeControl "180"]
+[ECO "B10"]
+
+1. e4 {[%clk 0:02:59]} 1... c6 {[%clk 0:02:59]} 2. d4 {[%clk 0:02:58]} 2... d5 {[%clk 0:02:57]} 3. Nc3 {[%clk 0:02:56]} 3... dxe4 {[%clk 0:02:55]} 4. Nxe4 {[%clk 0:02:55]} 4... Nd7 {[%clk 0:02:53]} 5. Qe2 {[%clk 0:02:52]} 5... Ngf6 {[%clk 0:02:52]} 6. Nd6# {[%clk 0:02:50]} 1-0

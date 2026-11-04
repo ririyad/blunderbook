@@ -27,7 +27,7 @@ _Last updated: 2026-11-04_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (3/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (4/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,11 +35,11 @@ _Last updated: 2026-11-04_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.4 PGN parsing.
+**Next up:** M1.5 Identity + source.
 
 In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
-parsing, config.toml, and Stockfish setup. The working commands are `blunderbook --version`
-and `blunderbook engine show|set|clear` (see Usage).
+parsing, config.toml, Stockfish setup, and PGN reading with all nine §12 fixtures. The working
+commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see Usage).
 
 ---
 
@@ -72,10 +72,14 @@ Each item is one small commit, with its tests in the same change. Every commit m
       the unzipped folder. `core/engine.py` `probe()` checks that the program is Stockfish and reads
       its version. CLI `engine show|set|clear`.
       _Done when_ `engine set <folder>` finds the program, checks it, saves it, and `show` / `clear` work.
-- [ ] **1.4 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only,
-      FEN before/after each ply, `[%clk]` values, per-game errors, verbatim text. Files are read as
-      UTF-8 with a cp1252 fallback that's noted in the report (CLAUDE.md §7.1).
-      _Done when_ `multi_game.pgn` gives the good games plus one reported error.
+- [x] **1.4 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only
+      (variations skipped unparsed), FEN before/after each ply, `[%clk]` in seconds, each game's own
+      verbatim text, plain reasons for unreadable games, and nothing logged to the console.
+      `decode()` reads UTF-8, falling back to cp1252 (CLAUDE.md §7.1). `parse_date` / `parse_int`
+      for headers. Read-only headers use the 3.15 `frozendict`. Text python-chess skips silently is
+      caught too (see Open decisions 7). All nine §12 fixtures are in `tests/fixtures/pgn/`, each
+      checked for its blunder move, side and ply.
+      _Done when_ `multi_game.pgn` gives the good games plus one reported error (`Illegal move 2. Ke3`).
 - [ ] **1.5 Identity + source.** `core/identity.py` (side detection, fingerprints), `core/source.py`.
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
 - [ ] **1.6 Detection maths.** `core/detect.py`: winning chances, swing, judgment, flagging,
@@ -89,7 +93,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
 - [ ] **1.9 Importer + CLI.** `importer.py`, CLI `init` (asks for your names and the Stockfish path,
       Enter = PATH, checked like `engine set`), `doctor` (includes the `engine show` report) and
       `import` (prints the report and doesn't save it yet). `--stockfish` option on `import` and
-      `doctor`. All nine §12 PGN fixtures.
+      `doctor`. Engine tests for the nine §12 fixtures (the files arrived in 1.4).
       _Done when_ every fixture flags its expected move under `uv run pytest -m engine`.
 
 ### M2 Storage
@@ -240,6 +244,25 @@ These are flagged against the spec and need your confirmation or a change.
    the answer, and the server checks every attempt.
 4. **Recorded HTTP fixtures.** Development never calls the sites, so the M6 fixtures will be
    built by hand from the documented formats and marked `TODO(verify)` until you record real ones.
+5. **Time spent on the first move of a game that starts from a FEN (affects 1.8).** §7.7 says
+   my first move's time is `base − clock + inc`. That's wrong when the game starts midway.
+   `back_rank.pgn` starts at move 32 with 9 s left, which gives 180 − 9 + 2 = 173 s. Proposal:
+   for games with a `FEN` header, that first move's time is unknown, so "Moved too fast" skips
+   it. "Time trouble" still works, because it only needs the clock.
+6. **Variants and null moves are rejected (done in 1.4).** Chess960, Atomic and other variants,
+   unknown variants, and null moves (`--`) become problems with a plain reason, such as
+   "Chess960 isn't supported, only standard chess." Stockfish can analyse Chess960
+   (`UCI_Chess960`), so it could be added later if you play it.
+7. **Movetext python-chess skips silently (done in 1.4; proposed addition to §7.1).** python-chess
+   ignores any token that doesn't look like SAN. So a typo in a typed-up score sheet can vanish,
+   or be misread: `♘f3` becomes the pawn move `f3`. Blunderbook now checks each game's mainline
+   text:
+   - If a token was only skipped (`Ke9`, `resigns`), the game is kept with a warning, such as
+     "Skipped unreadable text 'Ke9' at 2."
+   - If a token was misread, the game is rejected: "Couldn't read '♘f3' at 2."
+   - If an illegal move follows skipped text, the reason names it: "Illegal move 2. Nc6
+     (after unreadable text 'O-0')".
+   - Symbols such as `±` are left alone.
 
 ### Decided
 

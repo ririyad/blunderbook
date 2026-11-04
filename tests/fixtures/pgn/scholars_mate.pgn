@@ -1,0 +1,19 @@
+% Fixture: the [%eval] values below are deliberately wrong (all 0.0).
+% Blunderbook must ignore them and run its own analysis (CLAUDE.md §1.5).
+[Event "Rated blitz game"]
+[Site "https://lichess.org/sCh0lar1"]
+[Date "2026.10.28"]
+[White "quickmate77"]
+[Black "Rashed"]
+[Result "1-0"]
+[UTCDate "2026.10.28"]
+[UTCTime "18:42:10"]
+[WhiteElo "1388"]
+[BlackElo "1412"]
+[WhiteRatingDiff "+6"]
+[BlackRatingDiff "-6"]
+[Variant "Standard"]
+[TimeControl "180+0"]
+[Termination "Normal"]
+
+1. e4 { [%eval 0.0] [%clk 0:03:00] } 1... e5 { [%eval 0.0] [%clk 0:03:00] } 2. Bc4 { [%eval 0.0] [%clk 0:02:58] } 2... Nc6 { [%eval 0.0] [%clk 0:02:57] } 3. Qh5 { [%eval 0.0] [%clk 0:02:55] } 3... Nf6 { [%eval 0.0] [%clk 0:02:53] } 4. Qxf7# { [%clk 0:02:54] } 1-0
