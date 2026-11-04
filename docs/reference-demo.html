@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blunder Log — demo</title>
+<style>
+
+:root{
+  --ink:#1b1b1b; --muted:#5c5c5c; --line:#e3dfd6; --bg:#f7f5f0; --panel:#ffffff;
+  --red:#b83227; --red-bg:#fbeceb; --green:#1d7a52; --green-bg:#e7f4ee; --amber:#9a6412; --amber-bg:#fbf1df;
+  --blue:#2a5d9f; --blue-bg:#e8eff9; --light:#ece6d9; --dark:#a99f8b;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}
+button{font:inherit;color:inherit}
+h1,h2,h3{margin:0;line-height:1.2}
+.app{max-width:1240px;margin:0 auto;padding:16px 20px 40px}
+/* top bar */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-bottom:14px;border-bottom:2px solid var(--ink)}
+.brand{display:flex;flex-direction:column}
+.brand h1{font-family:Georgia,"Times New Roman",serif;font-size:26px;letter-spacing:-.01em}
+.brand span{color:var(--muted);font-size:12.5px}
+.tabs{display:flex;gap:4px;margin-left:8px}
+.tab{border:1px solid transparent;background:none;padding:7px 12px;border-radius:999px;cursor:pointer;color:var(--muted);font-weight:600;display:flex;gap:6px;align-items:center}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--ink);color:#fff}
+.badge{background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;min-width:18px;text-align:center;line-height:18px}
+.sync{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.acct{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 10px 4px 6px;font-size:12.5px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.btn{border:1px solid var(--ink);background:var(--panel);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600}
+.btn:hover{background:#f0eee8}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.primary:hover{background:#333}
+.btn.ghost{border-color:var(--line)}
+.btn:disabled{opacity:.55;cursor:default}
+.demo-note{margin:12px 0 16px;padding:9px 12px;border:1px dashed #b9b2a3;border-radius:8px;background:#fffdf8;color:#4a4a4a;font-size:12.5px}
+.demo-note b{color:var(--ink)}
+.synclog{font-size:12.5px;color:var(--muted);min-height:18px}
+
+/* layout */
+.view{display:none}
+.view.on{display:block}
+.log{display:grid;grid-template-columns:320px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.log{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px;border-bottom:1px solid var(--line)}
+.filters select{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;flex:1;min-width:90px}
+.list{list-style:none;margin:0;padding:6px;max-height:720px;overflow:auto}
+.item{width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:8px;padding:10px;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center}
+.item:hover{background:#f6f4ef}
+.item[aria-current="true"]{border-color:var(--ink);background:#fbfaf7}
+.item .mv{font-weight:700;font-variant-numeric:tabular-nums}
+.item .sub{grid-column:2/4;color:var(--muted);font-size:12px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.p-blunder{background:var(--red-bg);color:var(--red)}
+.p-new{background:var(--blue-bg);color:var(--blue)}
+.p-due{background:var(--amber-bg);color:var(--amber)}
+.p-solved{background:var(--green-bg);color:var(--green)}
+.p-missed{background:var(--red-bg);color:var(--red)}
+.src{font-size:11px;font-weight:700;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--muted)}
+.empty{padding:20px;color:var(--muted);text-align:center}
+
+/* detail */
+.detail{padding:18px;display:grid;grid-template-columns:minmax(260px,440px) minmax(0,1fr);gap:22px}
+@media (max-width:1100px){.detail{grid-template-columns:1fr}}
+.boardwrap{display:flex;flex-direction:column;gap:8px}
+.board{position:relative;width:100%;aspect-ratio:1;container-type:inline-size;border:2px solid var(--ink);border-radius:4px;overflow:hidden;user-select:none}
+.squares{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr)}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;border:0;padding:0;margin:0;font-size:9.6cqw;line-height:1}
+.sq.l{background:var(--light)}.sq.d{background:var(--dark)}
+.sq.hl-played::after,.sq.hl-best::after,.sq.hl-sel::after,.sq.hl-ok::after,.sq.hl-bad::after{content:"";position:absolute;inset:0;pointer-events:none}
+.sq.hl-played::after{background:rgba(196,48,38,.42)}
+.sq.hl-best::after{background:rgba(29,122,82,.42)}
+.sq.hl-sel::after{background:rgba(240,190,40,.55)}
+.sq.hl-ok::after{background:rgba(29,122,82,.55)}
+.sq.hl-bad::after{background:rgba(196,48,38,.55)}
+.sq .pc{position:relative;z-index:1}
+.pc.w{color:#fff;-webkit-text-stroke:1.1px #1b1b1b;text-shadow:0 1px 0 rgba(0,0,0,.25)}
+.pc.b{color:#1b1b1b;text-shadow:0 1px 0 rgba(255,255,255,.25)}
+.coord{position:absolute;font-size:2.6cqw;font-weight:700;font-family:system-ui,sans-serif;line-height:1;z-index:2}
+.coord.r{top:3%;left:4%}.coord.f{bottom:3%;right:5%}
+.sq.l .coord{color:#8a7f6a}.sq.d .coord{color:#f1ece2}
+button.sq{cursor:pointer}
+button.sq:focus-visible{outline:3px solid var(--blue);outline-offset:-3px}
+.arrows{position:absolute;inset:0;pointer-events:none;z-index:3}
+.nav{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.nav .grp{display:flex;gap:4px}
+.icon{width:36px;height:32px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.icon:hover{background:#f3f1ec}
+.icon svg{width:16px;height:16px}
+.navlabel{font-size:12px;color:var(--muted)}
+.toggle{display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.head h2{font-size:22px;font-variant-numeric:tabular-nums}
+.head h2 .bad{color:var(--red)}
+.meta{color:var(--muted);font-size:13px;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+@media (max-width:560px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cell{border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.cell .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.cell .v{font-weight:600;font-variant-numeric:tabular-nums}
+.moves{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.mvbox{border-radius:8px;padding:9px 11px}
+.mvbox.bad{background:var(--red-bg)}.mvbox.good{background:var(--green-bg)}
+.mvbox .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.mvbox.bad .k{color:var(--red)}.mvbox.good .k{color:var(--green)}
+.mvbox .v{font-size:18px;font-weight:700}
+.mvbox .line{font-size:12px;color:#3d3d3d;margin-top:2px}
+.evalrow{margin-top:12px}
+.evalbar{display:flex;align-items:center;gap:10px;font-size:13px;font-variant-numeric:tabular-nums}
+.bar{flex:1;height:10px;background:#e6e2d9;border-radius:999px;position:relative;overflow:hidden}
+.bar .before{position:absolute;top:0;bottom:0;left:0;background:#9a9384;border-radius:999px}
+.bar .after{position:absolute;top:2px;bottom:2px;left:0;background:var(--red);border-radius:999px}
+.small{font-size:12px;color:var(--muted)}
+.sec{margin-top:16px}
+.sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;cursor:pointer;font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{border-color:#9b9486}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip.sugg{border-style:dashed;border-color:var(--amber);color:var(--amber)}
+.chip.sugg[aria-pressed="true"]{color:#fff}
+.chip .auto{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+textarea{width:100%;font:inherit;border:1px solid var(--line);border-radius:8px;padding:9px 10px;resize:vertical;min-height:62px;background:#fffefb}
+textarea:focus,select:focus{outline:2px solid var(--blue);outline-offset:1px}
+label.lbl{display:block;font-weight:700;font-size:13px;margin-bottom:5px}
+.saved{font-size:12px;color:var(--green);min-height:16px}
+.rtrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* retest */
+.rt{display:grid;grid-template-columns:minmax(260px,460px) minmax(0,1fr);gap:24px;padding:20px}
+@media (max-width:900px){.rt{grid-template-columns:1fr}}
+.prompt h2{font-size:22px}
+.prompt .q{margin-top:6px;color:var(--muted)}
+.feedback{margin-top:16px;border-radius:10px;padding:14px;display:none}
+.feedback.on{display:block}
+.feedback.ok{background:var(--green-bg)}
+.feedback.no{background:var(--red-bg)}
+.feedback h3{font-size:17px;margin-bottom:6px}
+.feedback .lesson{margin-top:8px;padding:9px 11px;background:#fff;border-radius:8px;border:1px solid var(--line)}
+.rt-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.queue{font-size:12.5px;color:var(--muted);margin-top:16px}
+
+/* patterns */
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{padding:14px}
+.tile .k{font-size:12px;color:var(--muted);font-weight:600}
+.tile .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .s{font-size:12px;color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;margin-top:12px}
+@media (max-width:860px){.two{grid-template-columns:1fr}}
+.card{padding:16px}
+.card h3{font-size:15px;margin-bottom:4px}
+.card p.small{margin:0 0 12px}
+.hbar{display:grid;grid-template-columns:150px 1fr 28px;gap:10px;align-items:center;margin:7px 0;font-size:13px}
+.hbar .track{height:14px;background:#efece5;border-radius:4px;overflow:hidden;display:flex}
+.hbar .c{background:var(--ink)}
+.hbar .s{background:repeating-linear-gradient(45deg,#b9b2a3 0 3px,#d9d4c8 3px 6px)}
+.hbar .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.insight{margin-top:12px;padding:10px 12px;border-left:3px solid var(--ink);background:#faf8f3;font-size:13px}
+
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+.toast.on{opacity:1}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+
+/* ---- v2: import ---- */
+.src.s-pgn,.src.s-otb{border-color:#c9c2b3;color:#4a4436}
+.src.s-fen{border-color:#b9c7de;color:var(--blue)}
+.imp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:960px){.imp{grid-template-columns:1fr}}
+.stack{display:flex;flex-direction:column;gap:16px}
+.card h3{font-size:16px;margin-bottom:4px}
+.card .lead{margin:0 0 12px;color:var(--muted);font-size:13px}
+.drop{position:relative}
+.drop textarea{min-height:150px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5}
+.drop.over textarea{border-color:var(--blue);background:var(--blue-bg)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.field{display:flex;flex-direction:column;gap:4px;margin-top:12px}
+.field input,.field select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.field .hint{font-size:12px;color:var(--muted)}
+.inline{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:6px}
+.qhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}
+.qhead h3{font-size:16px}
+.engine{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.engine .dot{background:#bbb}
+.engine.ready .dot{background:var(--green)}
+.engine.fail .dot{background:var(--red)}
+.qlist{list-style:none;margin:0;padding:8px}
+.qrow{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.qrow .t{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:700}
+.qrow .m{font-size:12.5px;color:var(--muted);margin-top:2px}
+.qrow .side{display:flex;gap:10px;align-items:center;margin-top:8px;font-size:13px;flex-wrap:wrap}
+.qrow .side label{display:flex;gap:4px;align-items:center;cursor:pointer}
+.prog{height:6px;background:#ece8df;border-radius:999px;overflow:hidden;margin-top:8px}
+.prog i{display:block;height:100%;background:var(--ink);width:0;transition:width .2s}
+.qfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.qfoot select{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--line);border-radius:6px}
+.p-ready{background:#eeece6;color:#3f3f3f}
+.p-need{background:var(--amber-bg);color:var(--amber)}
+.p-dup{background:#eeece6;color:#666}
+.p-done{background:var(--green-bg);color:var(--green)}
+.p-run{background:var(--blue-bg);color:var(--blue)}
+.p-err{background:var(--red-bg);color:var(--red)}
+.found{margin-top:8px;font-size:13px}
+.found button{border:0;background:none;padding:0;color:var(--blue);text-decoration:underline;cursor:pointer;font:inherit}
+.fenwrap{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);gap:16px;margin-top:12px}
+.fenwrap[hidden]{display:none}
+#fenResult .inline{grid-template-columns:1fr}
+#fenResult input{width:100%}
+@media (max-width:560px){.fenwrap{grid-template-columns:1fr}}
+.verdict{border-radius:8px;padding:10px 12px;font-size:13px}
+.verdict.bad{background:var(--red-bg)}.verdict.ok{background:var(--green-bg)}.verdict.mid{background:var(--amber-bg)}
+.verdict b.big{display:block;font-size:16px;margin-bottom:2px}
+.sites .site{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.sites .site:first-of-type{border-top:0}
+.how{font-size:12.5px;color:var(--muted);margin:10px 0 0;padding-left:18px}
+.how li{margin:2px 0}
+.na{color:var(--muted);font-weight:500}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Blunder Log</h1><span>Your mistake library, built from any game you play</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" aria-selected="true" data-view="log">Log</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="retest">Re-test <span class="badge" id="dueBadge">0</span></button>
+      <button class="tab" role="tab" aria-selected="false" data-view="patterns">Patterns</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="import">Import</button>
+    </nav>
+    <div class="sync">
+      <button class="btn primary" id="addBtn">+ Add games</button>
+    </div>
+  </header>
+  <p class="demo-note"><b>Demo.</b> PGN import and FEN quick entry are real: Stockfish 17.1 runs in your browser and finds the blunders. Lichess and Chess.com sync is simulated here. The 6 entries already in the log are engine-checked samples. Everything you add is saved only in this browser.</p>
+
+  <section class="view on" id="view-log">
+    <div class="log">
+      <aside class="panel">
+        <div class="filters">
+          <label class="sr" for="fSource">Source</label>
+          <select id="fSource"><option value="">All sources</option><option value="lichess">Lichess</option><option value="chesscom">Chess.com</option><option value="pgn">PGN file</option><option value="otb">Over the board</option><option value="fen">FEN entry</option></select>
+          <label class="sr" for="fStatus">Status</label>
+          <select id="fStatus"><option value="">Any status</option><option value="due">Due for re-test</option><option value="new">New</option><option value="missed">Missed again</option><option value="solved">Solved</option></select>
+          <label class="sr" for="fCause">Cause</label>
+          <select id="fCause"><option value="">Any cause</option></select>
+        </div>
+        <ul class="list" id="list"></ul>
+      </aside>
+      <article class="panel" id="detail"></article>
+    </div>
+  </section>
+
+  <section class="view" id="view-retest"><div class="panel rt" id="rt"></div></section>
+  <section class="view" id="view-patterns"><div id="patterns"></div></section>
+
+  <section class="view" id="view-import">
+    <div class="imp">
+      <div class="stack">
+        <div class="panel card">
+          <h3>Import PGN</h3>
+          <p class="lead">From any source: a .pgn file from Lichess, Chess.com or ChessBase, a tournament download, or an over-the-board game you typed up from your score sheet. A file can hold many games.</p>
+          <div class="drop" id="drop">
+            <label class="sr" for="pgnText">PGN text</label>
+            <textarea id="pgnText" spellcheck="false" placeholder='Paste PGN here, or drop a .pgn file on this box.
+
+[White "Rashed"]
+[Black "Opponent"]
+1. e4 e5 2. Nf3 Nc6 ...'></textarea>
+          </div>
+          <div class="row">
+            <span class="btn ghost filebtn">Choose .pgn file<input type="file" id="pgnFile" accept=".pgn,.txt,application/x-chess-pgn" aria-label="Choose a PGN file"></span>
+            <button class="btn ghost" id="sampleBtn">Load sample PGN</button>
+            <button class="btn primary" id="queueBtn">Add to queue</button>
+          </div>
+          <div class="err" id="pgnErr" role="alert"></div>
+          <div class="field">
+            <label class="lbl" for="names" style="margin:0">My names and usernames</label>
+            <input id="names" type="text" autocomplete="off">
+            <span class="hint">Comma-separated. Used to work out which side you played. If no name matches, the app asks.</span>
+          </div>
+        </div>
+
+        <div class="panel card">
+          <h3>Quick entry from a FEN</h3>
+          <p class="lead">Only have one position, e.g. a game with no score sheet? Paste its FEN, play the move you made, and the engine checks it.</p>
+          <div class="field" style="margin-top:0">
+            <label class="lbl" for="fenIn" style="margin:0">FEN</label>
+            <input id="fenIn" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4">
+          </div>
+          <div class="row"><button class="btn ghost" id="fenLoad">Set up position</button><button class="btn ghost" id="fenSample">Use an example</button></div>
+          <div class="err" id="fenErr" role="alert"></div>
+          <div class="fenwrap" id="fenArea" hidden>
+            <div><div class="board" id="fenBoard"></div><p class="small" style="margin-top:6px" id="fenTip">Tap the piece you moved, then its square.</p></div>
+            <div id="fenResult"></div>
+          </div>
+        </div>
+
+        <div class="panel card sites">
+          <h3>Connected sites (optional)</h3>
+          <p class="lead">These just download your games as PGN and send them through the same import.</p>
+          <div class="site"><span><b>Lichess</b> · rashed_demo</span><button class="btn ghost" data-sync="Lichess">Sync</button></div>
+          <div class="site"><span><b>Chess.com</b> · rashed_demo</span><button class="btn ghost" data-sync="Chess.com">Sync</button></div>
+          <div class="synclog" id="syncLog" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="qhead">
+          <h3>Import queue</h3>
+          <span class="engine" id="engineStatus"><span class="dot" aria-hidden="true"></span><span>Engine: loading…</span></span>
+        </div>
+        <ul class="qlist" id="queue"><li class="empty">No games queued yet. Paste a PGN or load the sample.</li></ul>
+        <div class="qfoot">
+          <label class="small">Depth <select id="depth"><option value="10">Fast (10)</option><option value="12" selected>Normal (12)</option><option value="16">Deep (16)</option></select></label>
+          <button class="btn primary" id="analyseBtn" disabled>Analyse games</button>
+        </div>
+        <ol class="how">
+          <li>Read each game and its headers (players, ratings, date, time control, clocks).</li>
+          <li>Skip games already imported (matched on players, date and moves).</li>
+          <li>Run Stockfish on every position and flag your moves where your winning chances dropped sharply.</li>
+          <li>Add each blunder to the log with the board, moves, evals and suggested causes filled in.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { Chess } from "./chess.js";
+
+const SAMPLES = [{"id":"g1","source":"lichess","me":"white","opponent":"kotha_bolo","oppRating":1512,"myRating":1486,"tc":"10+0","speed":"Rapid","date":"2026-10-29","result":"L","opening":"Queen's Gambit Declined","startFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","movesUci":["d2d4","d7d5","c2c4","e7e6","b1c3","g8f6","c1g5","b8d7","c4d5","e6d5"],"fen":"r1bqkb1r/pppn1ppp/5n2/3p2B1/3P4/2N5/PP2PPPP/R2QKBNR w KQkq - 0 6","moveNo":6,"played":{"uci":"c3d5","san":"Nxd5"},"best":{"uci":"e2e3","san":"e3"},"bestLine":"6. e3 Be7 7. Bd3 c6 8. h3 Nf8","refutation":"6...Nxd5 7. Bd2 N7f6 8. f3 Nb6","accept":[{"uci":"e2e3","san":"e3"},{"uci":"d1c2","san":"Qc2"},{"uci":"a2a3","san":"a3"},{"uci":"g1f3","san":"Nf3"}],"evalBefore":{"cp":36},"evalAfter":{"cp":-409},"judgment":"Blunder","swing":0.352,"clockLeft":402,"timeSpent":4,"autoCauses":[],"causes":["Hung a piece","Miscalculated a line"],"thinking":"Thought the d5 pawn was just loose and the knight on f6 was pinned to the queen.","lesson":"A pin is only real if the pinned piece's capture doesn't come with check. Look for Bb4+ before grabbing.","status":"missed","retests":2,"dueOffset":0},{"id":"g2","source":"chesscom","me":"black","opponent":"dhaka_knight","oppRating":1390,"myRating":1455,"tc":"3+0","speed":"Blitz","date":"2026-10-31","result":"L","opening":"Bishop's Opening","startFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","movesUci":["e2e4","e7e5","f1c4","b8c6","d1h5"],"fen":"r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3","moveNo":3,"played":{"uci":"g8f6","san":"Nf6"},"best":{"uci":"g7g6","san":"g6"},"bestLine":"3...g6 4. Qf3 Nf6 5. Ne2 Bg7 6. d3","refutation":"4. Qxf7#","accept":[{"uci":"g7g6","san":"g6"},{"uci":"d8e7","san":"Qe7"},{"uci":"d8f6","san":"Qf6"},{"uci":"g8h6","san":"Nh6"}],"evalBefore":{"cp":-32},"evalAfter":{"mate":1},"judgment":"Blunder","swing":0.529,"clockLeft":176,"timeSpent":1,"autoCauses":["Moved too fast","Missed their threat"],"causes":[],"thinking":"","lesson":"","status":"new","retests":0,"dueOffset":0},{"id":"g3","source":"lichess","me":"black","opponent":"pawnstorm_88","oppRating":1544,"myRating":1490,"tc":"5+0","speed":"Blitz","date":"2026-11-01","result":"L","opening":"Philidor Defence","startFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","movesUci":["e2e4","e7e5","g1f3","d7d6","f1c4","c8g4","b1c3","g7g6","f3e5"],"fen":"rn1qkbnr/ppp2p1p/3p2p1/4N3/2B1P1b1/2N5/PPPP1PPP/R1BQK2R b KQkq - 0 5","moveNo":5,"played":{"uci":"g4d1","san":"Bxd1"},"best":{"uci":"d6e5","san":"dxe5"},"bestLine":"5...dxe5 6. Qxg4 Nc6 7. d3 h5 8. Qf3","refutation":"6. Bxf7+ Ke7 7. Nd5#","accept":[{"uci":"d6e5","san":"dxe5"},{"uci":"g4e6","san":"Be6"}],"evalBefore":{"cp":208},"evalAfter":{"mate":2},"judgment":"Blunder","swing":0.317,"clockLeft":271,"timeSpent":2,"autoCauses":["Moved too fast","Missed their threat"],"causes":["Missed their threat","Overconfident / tilt"],"thinking":"Free queen! Didn't ask why he gave it.","lesson":"When the opponent 'gives' the queen, ask what they get. Check every check (Bxf7+).","status":"solved","retests":1,"dueOffset":5},{"id":"g4","source":"chesscom","me":"white","opponent":"rook_lift","oppRating":1420,"myRating":1462,"tc":"10+0","speed":"Rapid","date":"2026-11-02","result":"L","opening":"Italian Game: Blackburne Shilling","startFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","movesUci":["e2e4","e7e5","g1f3","b8c6","f1c4","c6d4","f3e5","d8g5"],"fen":"r1b1kbnr/pppp1ppp/8/4N1q1/2BnP3/8/PPPP1PPP/RNBQK2R w KQkq - 1 5","moveNo":5,"played":{"uci":"e5f7","san":"Nxf7"},"best":{"uci":"e1g1","san":"O-O"},"bestLine":"5. O-O Qxe5 6. c3 Ne6 7. d4 Qxe4","refutation":"5...Qxg2 6. d3 Qxh1+ 7. Kd2 Qxd1+","accept":[{"uci":"e1g1","san":"O-O"},{"uci":"c4f7","san":"Bxf7+"}],"evalBefore":{"cp":-52},"evalAfter":{"cp":-538},"judgment":"Blunder","swing":0.331,"clockLeft":560,"timeSpent":3,"autoCauses":["Moved too fast","Hung a piece"],"causes":[],"thinking":"","lesson":"","status":"new","retests":0,"dueOffset":0},{"id":"g5","source":"lichess","me":"white","opponent":"endgame_ena","oppRating":1601,"myRating":1498,"tc":"3+2","speed":"Blitz","date":"2026-11-03","result":"L","opening":"Sicilian Defence (middlegame)","startFen":"3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32","movesUci":[],"fen":"3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32","moveNo":32,"played":{"uci":"c1c7","san":"Rc7"},"best":{"uci":"g2g3","san":"g3"},"bestLine":"32. g3 Qe5 33. h4 g6 34. Qf3 Qd5","refutation":"32...Qe1#","accept":[{"uci":"g2g3","san":"g3"},{"uci":"b3c3","san":"Qc3"},{"uci":"b3f3","san":"Qf3"},{"uci":"c1d1","san":"Rd1"}],"evalBefore":{"cp":3},"evalAfter":{"mate":-1},"judgment":"Blunder","swing":0.503,"clockLeft":9,"timeSpent":1,"autoCauses":["Time trouble","Missed their threat"],"causes":["Time trouble","Missed their threat"],"thinking":"Wanted to attack the queen and 7th rank. Was down to seconds.","lesson":"Before moving the last back-rank defender: is there a check on my first rank? Make luft (h3) early.","status":"missed","retests":1,"dueOffset":-1},{"id":"g6","source":"chesscom","me":"black","opponent":"petrov_fan","oppRating":1475,"myRating":1460,"tc":"5+5","speed":"Blitz","date":"2026-11-03","result":"L","opening":"Petrov's Defence","startFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","movesUci":["e2e4","e7e5","g1f3","g8f6","f3e5","f6e4","d1e2"],"fen":"rnbqkb1r/pppp1ppp/8/4N3/4n3/8/PPPPQPPP/RNB1KB1R b KQkq - 1 4","moveNo":4,"played":{"uci":"e4f6","san":"Nf6"},"best":{"uci":"d8e7","san":"Qe7"},"bestLine":"4...Qe7 5. Qxe4 d6 6. d4 dxe5 7. dxe5","refutation":"5. Nc6+ Qe7 6. Nxe7 Bxe7 7. Qd1","accept":[{"uci":"d8e7","san":"Qe7"}],"evalBefore":{"cp":52},"evalAfter":{"cp":500},"judgment":"Blunder","swing":0.315,"clockLeft":288,"timeSpent":2,"autoCauses":["Moved too fast","Hung a piece"],"causes":[],"thinking":"","lesson":"","status":"new","retests":0,"dueOffset":0}];
+const SAMPLE_PGN = "[Event \"Club rapid night\"]\n[Site \"Dhaka Chess Club\"]\n[Date \"2026.11.02\"]\n[White \"Rashed\"]\n[Black \"Tanvir H.\"]\n[Result \"0-1\"]\n[TimeControl \"1500+10\"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6 5. d3 d6 6. Bg5 h6 7. Bh4 g5 8. Bg3 h5 9. Nxg5 h4 10. Nxf7 hxg3 11. Nxd8 Bg4 12. Qd2 Nd4 13. Nc3 Nf3+ 14. gxf3 Bxf3 0-1\n\n[Event \"Live Chess\"]\n[Site \"Chess.com\"]\n[Date \"2026.11.03\"]\n[White \"guest_4417\"]\n[Black \"rashed_blitz\"]\n[Result \"1-0\"]\n[WhiteElo \"1402\"]\n[BlackElo \"1431\"]\n[TimeControl \"180\"]\n[ECO \"B10\"]\n\n1. e4 {[%clk 0:02:59]} 1... c6 {[%clk 0:02:59]} 2. d4 {[%clk 0:02:58]} 2... d5 {[%clk 0:02:57]} 3. Nc3 {[%clk 0:02:56]} 3... dxe4 {[%clk 0:02:55]} 4. Nxe4 {[%clk 0:02:55]} 4... Nd7 {[%clk 0:02:53]} 5. Qe2 {[%clk 0:02:52]} 5... Ngf6 {[%clk 0:02:52]} 6. Nd6# {[%clk 0:02:50]} 1-0\n";
+const CAUSES = ["Hung a piece","Missed their threat","Missed my tactic","Miscalculated a line","Time trouble","Moved too fast","Wrong plan","Opening gap","Endgame technique","Overconfident / tilt","Skipped blunder check","Other"];
+const INTERVALS = [1,3,7,14,30,60];
+const KEY = "blunderlog.demo.v2";
+const GLYPH = {k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
+const SRC = {lichess:"Lichess", chesscom:"Chess.com", pgn:"PGN", otb:"OTB", fen:"FEN"};
+const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/* ---------- dates ---------- */
+const today = new Date(); today.setHours(0,0,0,0);
+const iso = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const parseIso = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
+const fmtDate = s => parseIso(s).toLocaleDateString(undefined,{day:"numeric",month:"short"});
+const TODAY = iso(today);
+
+/* ---------- storage (best effort) ---------- */
+function load(){ try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e){ return {}; } }
+const store = load();
+const savedOv = store.overrides || {};
+let fingerprints = new Set(store.fingerprints || []);
+let entries = SAMPLES.map(s => Object.assign({}, s, { due: iso(addDays(today, s.dueOffset)), streak: s.status === "solved" ? 1 : 0, history: [] }, savedOv[s.id] || {}))
+  .concat(store.imported || []);
+function persist(){
+  const overrides = {}, imported = [];
+  entries.forEach(e => {
+    if (e.imported) imported.push(e);
+    else overrides[e.id] = {causes:e.causes,thinking:e.thinking,lesson:e.lesson,status:e.status,retests:e.retests,streak:e.streak,due:e.due,history:e.history};
+  });
+  try { localStorage.setItem(KEY, JSON.stringify({overrides, imported, fingerprints:[...fingerprints], names: namesEl.value})); } catch(e){}
+}
+
+/* ---------- chess helpers ---------- */
+const sqIdx = s => (s.charCodeAt(0)-97) + (Number(s[1])-1)*8;
+const sqName = i => String.fromCharCode(97 + i%8) + (Math.floor(i/8)+1);
+function fenToBoard(fen){
+  const b = new Array(64).fill(null);
+  fen.split(" ")[0].split("/").forEach((row, ri) => { let f = 0; const rank = 7-ri; for (const ch of row){ if (/\d/.test(ch)) f += Number(ch); else { b[rank*8+f] = ch; f++; } } });
+  return b;
+}
+function applyUci(b, uci){
+  const n = b.slice(); const from = sqIdx(uci.slice(0,2)), to = sqIdx(uci.slice(2,4)); const pc = n[from]; if (!pc) return n;
+  if (pc.toLowerCase() === "p" && (from%8) !== (to%8) && !n[to]) n[Math.floor(from/8)*8 + to%8] = null;
+  if (pc.toLowerCase() === "k" && Math.abs((to%8)-(from%8)) === 2){ const r = Math.floor(from/8)*8; if (to%8 === 6){ n[r+5] = n[r+7]; n[r+7] = null; } else { n[r+3] = n[r]; n[r] = null; } }
+  n[to] = uci[4] ? (pc === pc.toUpperCase() ? uci[4].toUpperCase() : uci[4]) : pc; n[from] = null; return n;
+}
+const isWhitePc = p => p && p === p.toUpperCase();
+const asCp = ev => "mate" in ev ? (ev.mate > 0 ? 10000 : ev.mate < 0 ? -10000 : 0) : ev.cp;
+const win = cp => 2/(1+Math.exp(-0.00368208*cp)) - 1;
+function fmtEval(ev){
+  if ("mate" in ev) return ev.mate === 0 ? "#" : (ev.mate > 0 ? "+" : "−") + "M" + Math.abs(ev.mate);
+  const v = ev.cp/100; return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+}
+function myWin(ev, me){ let cp = asCp(ev); if (me === "black") cp = -cp; return 50 + 50*win(cp); }
+const moveLabel = e => e.moveNo + (e.me === "white" ? ". " : "... ");
+const isDue = e => e.due <= TODAY;
+const fmtClock = s => s == null ? "—" : Math.floor(s/60) + ":" + String(Math.round(s%60)).padStart(2,"0");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const na = v => v == null || v === "" ? '<span class="na">—</span>' : esc(v);
+
+/* ---------- board renderer ---------- */
+function renderBoard(el, board, orient, opts = {}){
+  const hl = opts.hl || {}, arrows = opts.arrows || [], click = opts.onClick;
+  el.innerHTML = "";
+  const grid = document.createElement("div"); grid.className = "squares";
+  const order = []; for (let r = 7; r >= 0; r--) for (let f = 0; f < 8; f++) order.push(r*8+f);
+  if (orient === "black") order.reverse();
+  order.forEach((i, pos) => {
+    const f = i%8, r = Math.floor(i/8), pc = board[i];
+    const sq = document.createElement(click ? "button" : "div");
+    sq.className = "sq " + ((f + r) % 2 === 0 ? "d" : "l") + (hl[i] ? " hl-" + hl[i] : "");
+    if (click){ sq.type = "button"; sq.setAttribute("aria-label", sqName(i) + (pc ? " " + (isWhitePc(pc) ? "white " : "black ") + ({k:"king",q:"queen",r:"rook",b:"bishop",n:"knight",p:"pawn"})[pc.toLowerCase()] : " empty")); sq.addEventListener("click", () => click(i)); }
+    if (pc){ const s = document.createElement("span"); s.className = "pc " + (isWhitePc(pc) ? "w" : "b"); s.textContent = GLYPH[pc.toLowerCase()] + "︎"; s.setAttribute("aria-hidden","true"); sq.appendChild(s); }
+    if (pos % 8 === 0){ const c = document.createElement("span"); c.className = "coord r"; c.textContent = r+1; c.setAttribute("aria-hidden","true"); sq.appendChild(c); }
+    if (pos >= 56){ const c = document.createElement("span"); c.className = "coord f"; c.textContent = "abcdefgh"[f]; c.setAttribute("aria-hidden","true"); sq.appendChild(c); }
+    grid.appendChild(sq);
+  });
+  el.appendChild(grid);
+  if (arrows.length){
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox","0 0 8 8"); svg.setAttribute("class","arrows"); svg.setAttribute("aria-hidden","true");
+    const xy = i => { let f = i%8, r = Math.floor(i/8); if (orient === "black"){ f = 7-f; r = 7-r; } return [f+0.5, 7-r+0.5]; };
+    arrows.forEach(a => {
+      const col = a.color === "green" ? "rgba(29,122,82,.9)" : "rgba(184,50,39,.85)";
+      const [x1,y1] = xy(a.from), [x2,y2] = xy(a.to);
+      const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy), ux = dx/len, uy = dy/len, px = -uy, py = ux;
+      const tx = x2 - ux*0.12, ty = y2 - uy*0.12, bx = tx - ux*0.42, by = ty - uy*0.42;
+      const l = document.createElementNS(ns,"line");
+      l.setAttribute("x1",x1+ux*0.08); l.setAttribute("y1",y1+uy*0.08); l.setAttribute("x2",bx); l.setAttribute("y2",by);
+      l.setAttribute("stroke",col); l.setAttribute("stroke-width","0.17"); l.setAttribute("stroke-linecap","round");
+      const p = document.createElementNS(ns,"polygon");
+      p.setAttribute("points", [tx,ty, bx+px*0.24,by+py*0.24, bx-px*0.24,by-py*0.24].map(n => n.toFixed(3)).join(" ")); p.setAttribute("fill",col);
+      svg.appendChild(l); svg.appendChild(p);
+    });
+    el.appendChild(svg);
+  }
+}
+
+/* ---------- toast / tabs ---------- */
+let tt; function toast(msg){ const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("on"), 2400); }
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showView(t.dataset.view)));
+document.getElementById("addBtn").addEventListener("click", () => showView("import"));
+function showView(v){
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.view === v)));
+  document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.id === "view-" + v));
+  if (v === "retest") startRetest();
+  if (v === "patterns") renderPatterns();
+  if (v === "log"){ renderList(); renderDetail(); }
+  if (v === "import") engine.start();
+}
+
+/* ---------- LOG ---------- */
+let current = entries[0].id;
+const fCause = document.getElementById("fCause");
+CAUSES.forEach(c => { const o = document.createElement("option"); o.value = c; o.textContent = c; fCause.appendChild(o); });
+["fSource","fStatus","fCause"].forEach(id => document.getElementById(id).addEventListener("change", renderList));
+function pillFor(e){
+  if (e.status === "new") return '<span class="pill p-new">New</span>';
+  if (isDue(e)) return '<span class="pill p-due">Due</span>';
+  return e.status === "solved" ? '<span class="pill p-solved">Solved</span>' : '<span class="pill p-missed">Missed</span>';
+}
+const srcTag = e => '<span class="src s-' + e.source + '">' + SRC[e.source] + '</span>';
+function filtered(){
+  const src = document.getElementById("fSource").value, st = document.getElementById("fStatus").value, c = fCause.value;
+  return entries.filter(e => (!src || e.source === src)
+    && (!st || (st === "due" ? isDue(e) && e.status !== "new" : e.status === st))
+    && (!c || e.causes.includes(c) || (!e.causes.length && e.autoCauses.includes(c))))
+    .sort((a,b) => (b.addedAt || 0) - (a.addedAt || 0) || b.date.localeCompare(a.date));
+}
+function renderList(){
+  const ul = document.getElementById("list"); ul.innerHTML = "";
+  const items = filtered();
+  if (!items.length){ ul.innerHTML = '<li class="empty">No blunders match these filters.</li>'; return; }
+  items.forEach(e => {
+    const li = document.createElement("li");
+    const tcPart = e.speed ? e.speed + " " + e.tc : (e.tc || "No time control");
+    li.innerHTML = '<button class="item" aria-current="' + (e.id === current) + '"><span class="pill p-blunder">??</span><span class="mv">' + moveLabel(e) + esc(e.played.san) + '</span>' + pillFor(e) +
+      '<span class="sub">' + srcTag(e) + ' vs ' + esc(e.opponent || "Unknown") + ' · ' + esc(tcPart) + ' · ' + fmtDate(e.date) + '</span></button>';
+    li.firstChild.addEventListener("click", () => { current = e.id; ply = null; renderList(); renderDetail(); });
+    ul.appendChild(li);
+  });
+}
+let ply = null, showBest = false;
+function positions(e){
+  let b = fenToBoard(e.startFen); const out = [{b, last:null}];
+  e.movesUci.forEach(u => { b = applyUci(b, u); out.push({b, last:u}); });
+  out.push({b: applyUci(b, e.played.uci), last: e.played.uci, after:true});
+  return out;
+}
+const ICON = {
+  first:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
+  prev:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
+  next:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
+  blunder:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>'
+};
+function renderDetail(){
+  const e = entries.find(x => x.id === current) || entries[0]; if (!e) return; current = e.id;
+  const el = document.getElementById("detail");
+  const pos = positions(e); const blunderIdx = pos.length - 2;
+  if (ply === null || ply >= pos.length) ply = blunderIdx;
+  const before = myWin(e.evalBefore, e.me), after = myWin(e.evalAfter, e.me);
+  const suggested = e.autoCauses.filter(c => !e.causes.includes(c));
+  const resultTxt = ({W:"Win",D:"Draw",L:"Loss"})[e.result];
+  el.innerHTML = `
+  <div class="detail">
+    <div class="boardwrap">
+      <div class="board" id="dBoard"></div>
+      <div class="nav">
+        <div class="grp">
+          <button class="icon" id="nFirst" aria-label="Start of game">${ICON.first}</button>
+          <button class="icon" id="nPrev" aria-label="Previous move">${ICON.prev}</button>
+          <button class="icon" id="nNext" aria-label="Next move">${ICON.next}</button>
+          <button class="icon" id="nBl" aria-label="Jump to the blunder position">${ICON.blunder}</button>
+        </div>
+        <span class="navlabel" id="navLabel"></span>
+      </div>
+      <label class="toggle"><input type="checkbox" id="tBest" ${showBest ? "checked" : ""}> Show best move on the board</label>
+      <div class="legend"><span><i style="background:rgba(196,48,38,.6)"></i>Your move</span><span><i style="background:rgba(29,122,82,.6)"></i>Best move</span></div>
+    </div>
+    <div>
+      <div class="head"><div>
+        <h2>${moveLabel(e)}<span class="bad">${esc(e.played.san)}??</span></h2>
+        <div class="meta">${e.me === "white" ? "White" : "Black"} vs ${esc(e.opponent || "Unknown")}${e.oppRating ? " (" + e.oppRating + ")" : ""} · ${esc(e.opening || "Opening not recorded")} · ${fmtDate(e.date)}</div>
+      </div></div>
+      <div class="moves">
+        <div class="mvbox bad"><div class="k">I played</div><div class="v">${esc(e.played.san)}</div><div class="line">Refutation: ${esc(e.refutation || "—")}</div></div>
+        <div class="mvbox good"><div class="k">Best was</div><div class="v">${esc(e.best.san)}</div><div class="line">${esc(e.bestLine)}</div></div>
+      </div>
+      <div class="evalrow">
+        <div class="evalbar"><span>Eval ${fmtEval(e.evalBefore)} → <b style="color:var(--red)">${fmtEval(e.evalAfter)}</b></span>
+          <div class="bar" role="img" aria-label="Your winning chances fell from ${Math.round(before)}% to ${Math.round(after)}%"><div class="before" style="width:${before}%"></div><div class="after" style="width:${after}%"></div></div>
+          <span>${Math.round(before)}% → ${Math.round(after)}%</span></div>
+        <div class="small">Your winning chances (engine). Eval shown from White's side, like on Lichess.</div>
+      </div>
+      <div class="grid">
+        <div class="cell"><div class="k">Source</div><div class="v">${esc(e.siteLabel || SRC[e.source])}</div></div>
+        <div class="cell"><div class="k">Time control</div><div class="v">${e.tc ? esc((e.speed ? e.speed + " " : "") + e.tc) : na(null)}</div></div>
+        <div class="cell"><div class="k">Result</div><div class="v">${na(resultTxt)}</div></div>
+        <div class="cell"><div class="k">Ratings</div><div class="v">Me ${na(e.myRating)} · Opp ${na(e.oppRating)}</div></div>
+        <div class="cell"><div class="k">Clock left</div><div class="v">${fmtClock(e.clockLeft)}</div></div>
+        <div class="cell"><div class="k">Time on move</div><div class="v">${e.timeSpent == null ? na(null) : Math.round(e.timeSpent) + "s"}</div></div>
+      </div>
+      ${e.clockLeft == null && e.source !== "fen" ? '<p class="small" style="margin:6px 0 0">No clock times in this PGN, so time-based causes aren\'t suggested.</p>' : ""}
+      <div class="sec"><h3>Why it happened</h3><div class="chips" id="chips"></div>
+        ${suggested.length ? '<p class="small" style="margin:6px 0 0">Dashed chips are suggested from the clock and the engine line. Tap to confirm.</p>' : ""}</div>
+      <div class="sec"><label class="lbl" for="tThink">What I was thinking</label>
+        <textarea id="tThink" placeholder="Write it while the game is fresh. Only you know this part.">${esc(e.thinking)}</textarea></div>
+      <div class="sec"><label class="lbl" for="tLesson">Lesson — the rule I'll follow next time</label>
+        <textarea id="tLesson" placeholder="One rule you can check during a game.">${esc(e.lesson)}</textarea>
+        <div class="saved" id="savedMsg" aria-live="polite"></div></div>
+      <div class="sec rtrow">${pillFor(e)}
+        <span class="small">Re-tested ${e.retests}× · next re-test ${e.due <= TODAY ? "<b>today</b>" : fmtDate(e.due)}</span>
+        <button class="btn" id="rtOne">Re-test this one now</button></div>
+    </div>
+  </div>`;
+  drawDetailBoard(e, pos);
+  const chips = document.getElementById("chips");
+  CAUSES.forEach(c => {
+    const on = e.causes.includes(c), sug = !on && e.autoCauses.includes(c);
+    const b = document.createElement("button"); b.className = "chip" + (sug ? " sugg" : ""); b.setAttribute("aria-pressed", String(on));
+    b.innerHTML = esc(c) + (sug ? ' <span class="auto">auto</span>' : "");
+    b.addEventListener("click", () => { e.causes = on ? e.causes.filter(x => x !== c) : e.causes.concat(c); persist(); renderDetail(); renderList(); });
+    chips.appendChild(b);
+  });
+  const nav = d => () => { ply = Math.max(0, Math.min(pos.length-1, d === "first" ? 0 : d === "bl" ? blunderIdx : ply + d)); drawDetailBoard(e, pos); };
+  document.getElementById("nFirst").onclick = nav("first"); document.getElementById("nPrev").onclick = nav(-1);
+  document.getElementById("nNext").onclick = nav(1); document.getElementById("nBl").onclick = nav("bl");
+  document.getElementById("tBest").onchange = ev => { showBest = ev.target.checked; drawDetailBoard(e, pos); };
+  let st;
+  ["tThink","tLesson"].forEach(id => document.getElementById(id).addEventListener("input", ev => {
+    e[id === "tThink" ? "thinking" : "lesson"] = ev.target.value; clearTimeout(st);
+    st = setTimeout(() => { persist(); const m = document.getElementById("savedMsg"); if (m){ m.textContent = "Saved"; setTimeout(() => { if (m) m.textContent = ""; }, 1200); } }, 400);
+  }));
+  document.getElementById("rtOne").onclick = () => { rtQueue = [e.id]; rtIndex = 0; rtKeepQueue = true; showView("retest"); };
+}
+function drawDetailBoard(e, pos){
+  const blunderIdx = pos.length - 2, p = pos[ply], hl = {}, arrows = [];
+  if (ply === blunderIdx){
+    const f = sqIdx(e.played.uci.slice(0,2)), t = sqIdx(e.played.uci.slice(2,4)); hl[f] = "played"; hl[t] = "played"; arrows.push({from:f,to:t,color:"red"});
+    if (showBest){ const bf = sqIdx(e.best.uci.slice(0,2)), bt = sqIdx(e.best.uci.slice(2,4)); hl[bf] = "best"; hl[bt] = "best"; arrows.push({from:bf,to:bt,color:"green"}); }
+  } else if (p.last){ const f = sqIdx(p.last.slice(0,2)), t = sqIdx(p.last.slice(2,4)); hl[f] = p.after ? "played" : "sel"; hl[t] = p.after ? "played" : "sel"; }
+  renderBoard(document.getElementById("dBoard"), p.b, e.me, {hl, arrows});
+  document.getElementById("navLabel").textContent = ply === blunderIdx ? "Position before your blunder" : p.after ? "After " + e.played.san + "??" : ply === 0 ? "Start position" : "Move " + ply + " of the game";
+}
+
+/* ---------- RETEST ---------- */
+let rtQueue = [], rtIndex = 0, rtSel = null, rtDone = false, rtKeepQueue = false, rtBoard = null, rtHl = {}, rtArrows = [];
+function startRetest(){
+  if (!rtKeepQueue){ rtQueue = entries.filter(isDue).sort((a,b) => a.due.localeCompare(b.due)).map(e => e.id); rtIndex = 0; }
+  rtKeepQueue = false; renderRetest();
+}
+function renderRetest(){
+  const box = document.getElementById("rt");
+  if (rtIndex >= rtQueue.length){
+    const nextDue = entries.map(e => e.due).filter(d => d > TODAY).sort()[0];
+    box.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px 10px"><h2 style="font-size:22px">Nothing due right now</h2>
+      <p class="small" style="font-size:14px;margin:8px 0 16px">${rtQueue.length ? "Session done. " : ""}Next re-test: ${nextDue ? fmtDate(nextDue) : "—"}.</p>
+      <button class="btn primary" id="rtAll">Practise all ${entries.length} anyway</button></div>`;
+    document.getElementById("rtAll").onclick = () => { rtQueue = entries.map(e => e.id); rtIndex = 0; renderRetest(); };
+    return;
+  }
+  const e = entries.find(x => x.id === rtQueue[rtIndex]);
+  rtSel = null; rtDone = false; rtBoard = fenToBoard(e.fen); rtHl = {}; rtArrows = [];
+  box.innerHTML = `
+    <div><div class="board" id="rtBoard"></div><p class="small" style="margin-top:8px">Tap a piece, then tap where it should go.</p></div>
+    <div class="prompt">
+      <span class="small">Puzzle ${rtIndex+1} of ${rtQueue.length} · ${SRC[e.source]} game vs ${esc(e.opponent || "Unknown")}, ${fmtDate(e.date)}</span>
+      <h2 style="margin-top:6px">${e.me === "white" ? "White" : "Black"} to move — find the best move</h2>
+      <p class="q">Move ${e.moveNo}. In the game you went wrong here. Take your time and check your opponent's threats first.</p>
+      <div class="rt-actions"><button class="btn ghost" id="rtHint">Show a hint</button><button class="btn ghost" id="rtGive">I don't know — show me</button></div>
+      <div class="feedback" id="fb" aria-live="polite"></div>
+      <p class="queue">${rtQueue.length - rtIndex - 1} more in this session.</p>
+    </div>`;
+  drawRt(e);
+  document.getElementById("rtHint").onclick = () => { rtHl = {[sqIdx(e.best.uci.slice(0,2))]:"sel"}; drawRt(e); toast("Hint: the best move starts from the highlighted square"); };
+  document.getElementById("rtGive").onclick = () => finish(e, false, null);
+}
+function drawRt(e){ renderBoard(document.getElementById("rtBoard"), rtBoard, e.me, {hl: rtHl, arrows: rtArrows, onClick: i => rtClick(e, i)}); }
+function rtClick(e, i){
+  if (rtDone) return;
+  const pc = rtBoard[i], mine = pc && (isWhitePc(pc) === (e.me === "white"));
+  if (rtSel === null || mine){ if (mine){ rtSel = i; rtHl = {[i]:"sel"}; drawRt(e); } return; }
+  let uci = sqName(rtSel) + sqName(i);
+  if (rtBoard[rtSel].toLowerCase() === "p" && (Math.floor(i/8) === 7 || Math.floor(i/8) === 0)) uci += "q";
+  const ok = e.accept.some(a => a.uci.slice(0,4) === uci.slice(0,4));
+  rtBoard = applyUci(rtBoard, uci); finish(e, ok, uci);
+}
+function finish(e, ok, uci){
+  rtDone = true;
+  const bf = sqIdx(e.best.uci.slice(0,2)), bt = sqIdx(e.best.uci.slice(2,4));
+  rtHl = {};
+  if (uci){ const f = sqIdx(uci.slice(0,2)), t = sqIdx(uci.slice(2,4)); rtHl = {[f]: ok ? "ok" : "bad", [t]: ok ? "ok" : "bad"}; }
+  if (!ok){ rtArrows = [{from:bf,to:bt,color:"green"}]; if (!uci) rtHl = {[bf]:"best",[bt]:"best"}; }
+  drawRt(e);
+  e.retests += 1; e.history.push({date: TODAY, ok});
+  if (ok){ e.streak = (e.streak || 0) + 1; e.status = "solved"; e.due = iso(addDays(today, INTERVALS[Math.min(e.streak-1, INTERVALS.length-1)])); }
+  else { e.streak = 0; e.status = "missed"; e.due = iso(addDays(today, 1)); }
+  persist(); updateBadge(); renderList();
+  const playedSan = uci ? (e.accept.find(a => a.uci.slice(0,4) === uci.slice(0,4)) || {}).san : null;
+  const fb = document.getElementById("fb");
+  fb.className = "feedback on " + (ok ? "ok" : "no");
+  fb.innerHTML = ok
+    ? `<h3>Solved — ${esc(playedSan)}${playedSan !== e.best.san ? " (engine's top choice: " + esc(e.best.san) + ")" : ""}</h3><p style="margin:0">In the game you played <b>${esc(e.played.san)}??</b>. Next re-test in ${INTERVALS[Math.min(e.streak-1, INTERVALS.length-1)]} day(s).</p>`
+    : `<h3>Missed — best was ${esc(e.best.san)}</h3><p style="margin:0">${esc(e.bestLine)}. In the game you played <b>${esc(e.played.san)}??</b>${e.refutation ? " (" + esc(e.refutation) + ")" : ""}. It comes back tomorrow.</p>`;
+  fb.innerHTML += e.lesson ? `<div class="lesson"><b>Your rule:</b> ${esc(e.lesson)}</div>` : `<div class="lesson small">No lesson written for this one yet. Add it in the Log tab.</div>`;
+  fb.innerHTML += `<div class="rt-actions"><button class="btn primary" id="rtNext">${rtIndex + 1 < rtQueue.length ? "Next puzzle" : "Finish"}</button></div>`;
+  document.getElementById("rtNext").onclick = () => { rtIndex++; renderRetest(); };
+  document.getElementById("rtHint").disabled = true; document.getElementById("rtGive").disabled = true;
+}
+
+/* ---------- PATTERNS ---------- */
+function renderPatterns(){
+  const box = document.getElementById("patterns");
+  const confirmed = {}, suggested = {};
+  entries.forEach(e => { e.causes.forEach(c => confirmed[c] = (confirmed[c]||0)+1); if (!e.causes.length) e.autoCauses.forEach(c => suggested[c] = (suggested[c]||0)+1); });
+  const rows = CAUSES.map(c => ({c, n:(confirmed[c]||0), s:(suggested[c]||0)})).filter(r => r.n + r.s).sort((a,b) => (b.n+b.s)-(a.n+a.s));
+  const max = Math.max(1, ...rows.map(r => r.n + r.s));
+  const tries = entries.reduce((a,e) => a + e.retests, 0);
+  const solved = entries.filter(e => e.status === "solved").length, withRetest = entries.filter(e => e.status !== "new").length;
+  const timed = entries.filter(e => e.timeSpent != null), fast = timed.filter(e => e.timeSpent <= 3).length, lowClock = timed.filter(e => e.clockLeft < 30).length;
+  const bySpeed = {}; entries.forEach(e => { const k = e.speed || "Unknown"; bySpeed[k] = (bySpeed[k]||0)+1; });
+  const bySrc = {}; entries.forEach(e => bySrc[e.source] = (bySrc[e.source]||0)+1);
+  const top = rows[0];
+  box.innerHTML = `
+  <div class="tiles">
+    <div class="panel tile"><div class="k">Blunders logged</div><div class="v">${entries.length}</div><div class="s">${Object.entries(bySrc).map(([k,v]) => v + " " + SRC[k]).join(" · ")}</div></div>
+    <div class="panel tile"><div class="k">Due for re-test</div><div class="v">${entries.filter(isDue).length}</div><div class="s">${tries} re-tests done so far</div></div>
+    <div class="panel tile"><div class="k">Currently solved</div><div class="v">${withRetest ? Math.round(100*solved/withRetest) : 0}%</div><div class="s">${solved} of ${withRetest} re-tested positions</div></div>
+    <div class="panel tile"><div class="k">Played in ≤3 seconds</div><div class="v">${fast} of ${timed.length}</div><div class="s">Games with clock data · ${lowClock} under 30s left</div></div>
+  </div>
+  <div class="two">
+    <div class="panel card"><h3>What causes your blunders</h3>
+      <p class="small">Solid = causes you confirmed. Striped = auto-suggested on entries you haven't reviewed yet.</p>
+      ${rows.map(r => `<div class="hbar"><span>${esc(r.c)}</span><div class="track" role="img" aria-label="${r.n} confirmed, ${r.s} suggested"><div class="c" style="width:${100*r.n/max}%"></div><div class="s" style="width:${100*r.s/max}%"></div></div><span class="n">${r.n + r.s}</span></div>`).join("")}
+      ${top ? `<div class="insight"><b>Biggest leak: ${esc(top.c)}.</b> ${top.c === "Missed their threat" ? "Before every move, ask what your opponent's last move threatens: checks, captures, threats." : top.c === "Moved too fast" ? "Most of these moves took 3 seconds or less. Do one blunder check before you move." : "Focus your next re-test sessions on these positions."}</div>` : ""}
+    </div>
+    <div class="panel card"><h3>By time control</h3><p class="small">Where the blunders happen.</p>
+      ${Object.entries(bySpeed).map(([k,v]) => `<div class="hbar" style="grid-template-columns:80px 1fr 28px"><span>${k}</span><div class="track"><div class="c" style="width:${100*v/entries.length}%"></div></div><span class="n">${v}</span></div>`).join("")}
+      <h3 style="margin-top:18px">Re-test history</h3>
+      ${entries.filter(e => e.status !== "new").map(e => `<div class="hbar" style="grid-template-columns:1fr auto"><span>${moveLabel(e)}${esc(e.played.san)}?? <span class="small">vs ${esc(e.opponent || "Unknown")}</span></span>${pillFor(e)}</div>`).join("") || '<p class="small">No re-tests yet.</p>'}
+    </div>
+  </div>`;
+}
+function updateBadge(){ document.getElementById("dueBadge").textContent = entries.filter(isDue).length; }
+
+/* ================= ENGINE ================= */
+const engine = {
+  w: null, state: "idle", waiters: [], buf: null, startP: null,
+  setStatus(txt, cls){ const el = document.getElementById("engineStatus"); el.className = "engine " + (cls || ""); el.lastElementChild.textContent = txt; },
+  start(){
+    if (this.startP) return this.startP;
+    this.setStatus("Engine: loading Stockfish 17.1…");
+    this.startP = new Promise((resolve) => {
+      let done = false;
+      const fail = (why) => { if (done) return; done = true; this.state = "fail"; this.setStatus("Engine unavailable in this preview" + (why ? " (" + why + ")" : ""), "fail"); resolve(false); updateAnalyseBtn(); };
+      const timer = setTimeout(() => fail("timed out"), 20000);
+      try { this.w = new Worker("./stockfish.js"); } catch(err){ clearTimeout(timer); fail("worker blocked"); return; }
+      this.w.onerror = () => { clearTimeout(timer); fail("failed to start"); };
+      this.w.onmessage = ev => this.onLine(String(ev.data));
+      this.readyCb = () => { if (done) return; done = true; clearTimeout(timer); this.state = "ready"; this.setStatus("Engine: Stockfish 17.1 ready", "ready"); resolve(true); updateAnalyseBtn(); };
+      this.w.postMessage("uci");
+    });
+    return this.startP;
+  },
+  onLine(line){
+    if (line === "uciok"){ this.w.postMessage("setoption name Hash value 32"); this.w.postMessage("isready"); return; }
+    if (line === "readyok"){ if (this.readyCb){ const cb = this.readyCb; this.readyCb = null; cb(); } const w = this.waiters.shift(); if (w && w.kind === "ready") w.resolve(); return; }
+    if (!this.buf) return;
+    if (line.startsWith("info") && line.includes(" pv ")){
+      const mp = Number((line.match(/ multipv (\d+)/) || [0,1])[1]);
+      const sc = line.match(/ score (cp|mate) (-?\d+)/); if (!sc) return;
+      const pv = line.split(" pv ")[1].trim().split(/\s+/);
+      this.buf.lines[mp] = { score: sc[1] === "cp" ? {cp: Number(sc[2])} : {mate: Number(sc[2])}, pv };
+    } else if (line.startsWith("bestmove")){
+      const b = this.buf; this.buf = null; b.best = line.split(" ")[1]; b.resolve(b);
+    }
+  },
+  analyse(fen, depth, multipv = 1){
+    return new Promise(resolve => {
+      this.buf = { lines: {}, resolve };
+      this.w.postMessage("setoption name MultiPV value " + multipv);
+      this.w.postMessage("position fen " + fen);
+      this.w.postMessage("go depth " + depth);
+    }).then(b => {
+      const white = fen.split(" ")[1] === "w";
+      const lines = Object.keys(b.lines).sort((a,c) => a-c).map(k => { const l = b.lines[k]; const s = "mate" in l.score ? {mate: white ? l.score.mate : -l.score.mate} : {cp: white ? l.score.cp : -l.score.cp}; return { score: s, pv: l.pv }; });
+      return { best: b.best, lines };
+    });
+  }
+};
+
+/* ---------- SAN helpers ---------- */
+function uciToMove(c, u){ return c.move({from:u.slice(0,2), to:u.slice(2,4), promotion: u[4] || undefined}); }
+function pvSan(fen, pv, n = 6){
+  const c = new Chess(fen); const out = [];
+  for (let i = 0; i < Math.min(n, pv.length); i++){
+    const white = c.turn() === "w", num = c.moveNumber();
+    let m; try { m = uciToMove(c, pv[i]); } catch(err){ break; }
+    out.push((white ? num + ". " : (i === 0 ? num + "... " : "")) + m.san);
+  }
+  return out.join(" ");
+}
+const sanOf = (fen, u) => { try { return uciToMove(new Chess(fen), u).san; } catch(err){ return u; } };
+const VAL = {p:1,n:3,b:3,r:5,q:9,k:0};
+function material(fen, color){ let s = 0; for (const ch of fen.split(" ")[0]) if (/[pnbrqk]/i.test(ch) && ((ch === ch.toUpperCase()) === (color === "w"))) s += VAL[ch.toLowerCase()]; return s; }
+function terminalEval(fen){
+  const c = new Chess(fen);
+  if (c.isCheckmate()) return {mate: c.turn() === "w" ? -0 - 1 : 1, terminal: true};
+  if (c.isDraw() || c.isStalemate()) return {cp: 0, terminal: true};
+  return null;
+}
+
+/* ================= IMPORT ================= */
+const namesEl = document.getElementById("names");
+namesEl.value = store.names || "rashed_demo, Rashed";
+namesEl.addEventListener("change", () => { persist(); queue.forEach(q => { if (!q.sideChosen) q.me = detectSide(q.headers); }); renderQueue(); });
+let queue = [];
+
+function splitGames(text){
+  const t = text.replace(/\r\n?/g, "\n").trim(); if (!t) return [];
+  const parts = t.split(/\n\s*\n(?=\[)/);
+  // join header block with its movetext (header and moves are separated by a blank line)
+  const games = []; let cur = "";
+  parts.forEach(p => { if (/^\s*\[\w+\s+"/.test(p) && cur && /\d\.|\*|1-0|0-1|1\/2/.test(cur.replace(/\[[^\]]*\]/g, ""))) { games.push(cur); cur = p; } else cur = cur ? cur + "\n\n" + p : p; });
+  if (cur) games.push(cur);
+  return games;
+}
+const norm = s => String(s || "").trim().toLowerCase();
+function detectSide(h){
+  const names = namesEl.value.split(",").map(norm).filter(Boolean);
+  if (names.includes(norm(h.White))) return "white";
+  if (names.includes(norm(h.Black))) return "black";
+  return null;
+}
+function hash(s){ let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function sourceOf(h){
+  const site = norm(h.Site) + " " + norm(h.Event);
+  if (site.includes("lichess")) return {source:"lichess", label:"Lichess"};
+  if (site.includes("chess.com")) return {source:"chesscom", label:"Chess.com"};
+  if (h.Site && !/^https?:|\.(com|org|net)\b/.test(norm(h.Site))) return {source:"otb", label:"Over the board · " + h.Site};
+  return {source:"pgn", label:"PGN file"};
+}
+function parseTC(tc){
+  if (!tc || tc === "-" || tc === "?") return null;
+  const m = String(tc).match(/^(\d+)(?:\+(\d+))?/); if (!m) return null;
+  const base = Number(m[1]), inc = Number(m[2] || 0), est = base + 40*inc;
+  const speed = est < 180 ? "Bullet" : est < 480 ? "Blitz" : est < 1500 ? "Rapid" : "Classical";
+  const mins = base % 60 === 0 ? String(base/60) : (base/60).toFixed(1).replace(/\.0$/, "");
+  return {base, inc, speed, label: mins + "+" + inc};
+}
+function addToQueue(text){
+  const err = document.getElementById("pgnErr"); err.textContent = "";
+  const games = splitGames(text);
+  if (!games.length){ err.textContent = "Paste a PGN first."; return; }
+  let added = 0, bad = 0;
+  games.forEach(g => {
+    const c = new Chess();
+    try { c.loadPgn(g); } catch(ex){ bad++; return; }
+    const h = c.getHeaders(); const moves = c.history({verbose:true});
+    if (!moves.length){ bad++; return; }
+    const fp = hash([h.White, h.Black, h.Date, moves.slice(0,30).map(m => m.san).join(" ")].join("|"));
+    const dup = fingerprints.has(fp) || queue.some(q => q.fp === fp && q.status !== "dup");
+    const comments = {}; (c.getComments() || []).forEach(x => comments[x.fen] = x.comment);
+    queue.push({ id: "q" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), pgn: g, headers: h, moves, comments, fp,
+      me: detectSide(h), sideChosen: false, status: dup ? "dup" : "ready", progress: 0, found: [] });
+    added++;
+  });
+  if (bad) err.textContent = bad + (bad === 1 ? " game" : " games") + " couldn't be read (check the moves are legal and in standard notation).";
+  if (added) toast(added + (added === 1 ? " game" : " games") + " added to the queue");
+  renderQueue(); engine.start();
+}
+function renderQueue(){
+  const ul = document.getElementById("queue");
+  if (!queue.length){ ul.innerHTML = '<li class="empty">No games queued yet. Paste a PGN or load the sample.</li>'; updateAnalyseBtn(); return; }
+  ul.innerHTML = "";
+  queue.forEach(q => {
+    const h = q.headers, src = sourceOf(h), tc = parseTC(h.TimeControl), hasClk = Object.values(q.comments).some(c => /%clk/.test(c));
+    const date = (h.Date || "").replace(/\?+/g, "").replace(/\.+$/, "") || "date unknown";
+    const pill = q.status === "dup" ? '<span class="pill p-dup">Already imported — skipped</span>'
+      : q.status === "run" ? '<span class="pill p-run">Analysing ' + Math.round(q.progress*100) + '%</span>'
+      : q.status === "done" ? '<span class="pill p-done">Done</span>'
+      : q.status === "err" ? '<span class="pill p-err">Error</span>'
+      : !q.me ? '<span class="pill p-need">Choose your side</span>' : '<span class="pill p-ready">Ready</span>';
+    const li = document.createElement("li"); li.className = "qrow";
+    li.innerHTML = `<div class="t"><span>${esc(h.White || "?")} vs ${esc(h.Black || "?")}</span>${pill}</div>
+      <div class="m">${esc(src.label)} · ${esc(date)} · ${Math.ceil(q.moves.length/2)} moves · ${tc ? esc(tc.speed + " " + tc.label) : "no time control"} · ${hasClk ? "clock times ✓" : "no clock times"}</div>`;
+    if (q.status === "ready" || (q.status !== "dup" && q.status !== "run" && q.status !== "done")){
+      const side = document.createElement("div"); side.className = "side";
+      const matched = q.me && !q.sideChosen;
+      side.innerHTML = `<span>${matched ? "You played <b>" + q.me + "</b> (name matched) · change:" : "Which side were you?"}</span>
+        <label><input type="radio" name="side-${q.id}" value="white" ${q.me === "white" ? "checked" : ""}> White</label>
+        <label><input type="radio" name="side-${q.id}" value="black" ${q.me === "black" ? "checked" : ""}> Black</label>`;
+      side.querySelectorAll("input").forEach(r => r.addEventListener("change", () => { q.me = r.value; q.sideChosen = true; renderQueue(); }));
+      li.appendChild(side);
+    }
+    if (q.status === "run"){ const p = document.createElement("div"); p.className = "prog"; p.innerHTML = '<i style="width:' + (q.progress*100) + '%"></i>'; li.appendChild(p); }
+    if (q.status === "done"){
+      const f = document.createElement("div"); f.className = "found";
+      f.innerHTML = q.found.length ? q.found.length + (q.found.length === 1 ? " blunder" : " blunders") + " found: " + q.found.map(e => `<button data-open="${e.id}">${moveLabel(e)}${esc(e.played.san)}??</button>`).join(", ")
+        : "No blunders by you in this game. Nice.";
+      f.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => { current = b.dataset.open; ply = null; showView("log"); }));
+      li.appendChild(f);
+    }
+    if (q.status === "err"){ const f = document.createElement("div"); f.className = "found"; f.textContent = q.error; li.appendChild(f); }
+    ul.appendChild(li);
+  });
+  updateAnalyseBtn();
+}
+function updateAnalyseBtn(){
+  const btn = document.getElementById("analyseBtn");
+  const ready = queue.filter(q => q.status === "ready" && q.me);
+  btn.disabled = !ready.length || engine.state !== "ready" || analysing;
+  btn.textContent = analysing ? "Analysing…" : ready.length ? "Analyse " + ready.length + (ready.length === 1 ? " game" : " games") : "Analyse games";
+}
+let analysing = false;
+document.getElementById("analyseBtn").addEventListener("click", async () => {
+  if (analysing) return; analysing = true; updateAnalyseBtn();
+  const depth = Number(document.getElementById("depth").value);
+  for (const q of queue.filter(x => x.status === "ready" && x.me)){
+    q.status = "run"; q.progress = 0; renderQueue();
+    try { q.found = await analyseGame(q, depth, p => { q.progress = p; renderQueueProgress(q); }); q.status = "done"; fingerprints.add(q.fp); }
+    catch(ex){ q.status = "err"; q.error = "Analysis failed: " + ex.message; }
+    renderQueue();
+  }
+  analysing = false; persist(); updateAnalyseBtn(); updateBadge(); renderList();
+  const total = queue.reduce((a,q) => a + (q.status === "done" ? q.found.length : 0), 0);
+  toast("Analysis finished: " + total + (total === 1 ? " blunder" : " blunders") + " added to your log");
+});
+function renderQueueProgress(q){ const now = Date.now(); if (!q._t || now - q._t > 150){ q._t = now; renderQueue(); } }
+
+async function analyseGame(q, depth, onProgress){
+  const h = q.headers, moves = q.moves, me = q.me, myColor = me === "white" ? "w" : "b";
+  const tc = parseTC(h.TimeControl), src = sourceOf(h);
+  const fens = [moves[0].before].concat(moves.map(m => m.after));
+  const evals = [];
+  for (let i = 0; i < fens.length; i++){
+    const term = terminalEval(fens[i]);
+    if (term){ evals.push({score: "mate" in term ? {mate: term.mate} : {cp: 0}, best: null, pv: []}); }
+    else { const r = await engine.analyse(fens[i], depth); evals.push({score: r.lines[0] ? r.lines[0].score : {cp:0}, best: r.best, pv: r.lines[0] ? r.lines[0].pv : []}); }
+    onProgress((i+1) / fens.length * 0.9);
+  }
+  // clocks
+  const clk = fen => { const c = q.comments[fen]; const m = c && c.match(/%clk\s+(\d+):(\d+):(\d+(?:\.\d+)?)/); return m ? Number(m[1])*3600 + Number(m[2])*60 + Number(m[3]) : null; };
+  let prevMine = tc ? tc.base : null;
+  const found = [];
+  const opp = me === "white" ? h.Black : h.White;
+  const resRaw = h.Result || "*";
+  const result = resRaw === "1/2-1/2" ? "D" : resRaw === "1-0" ? (me === "white" ? "W" : "L") : resRaw === "0-1" ? (me === "black" ? "W" : "L") : null;
+  const dateIso = (() => { const m = (h.Date || "").match(/^(\d{4})\.(\d{2})\.(\d{2})$/); return m ? m[1] + "-" + m[2] + "-" + m[3] : TODAY; })();
+  const flagged = [];
+  for (let i = 0; i < moves.length; i++){
+    const m = moves[i]; if (m.color !== myColor) continue;
+    const clockLeft = clk(m.after);
+    const spent = clockLeft != null && prevMine != null ? Math.max(0, prevMine - clockLeft + (tc ? tc.inc : 0)) : null;
+    if (clockLeft != null) prevMine = clockLeft;
+    const before = evals[i].score, after = evals[i+1].score, uci = m.from + m.to + (m.promotion || "");
+    const sign = me === "white" ? 1 : -1;
+    const swing = (win(sign*asCp(before)) - win(sign*asCp(after))) / 2;
+    if (swing >= 0.15 && evals[i].best && evals[i].best !== uci) flagged.push({i, m, uci, before, after, swing, clockLeft, spent});
+  }
+  for (let k = 0; k < flagged.length; k++){
+    const f = flagged[k], fen = fens[f.i];
+    const multi = await engine.analyse(fen, depth, 3);
+    const sign = me === "white" ? 1 : -1, bestCp = sign*asCp(multi.lines[0].score);
+    const accept = multi.lines.filter(l => bestCp - sign*asCp(l.score) <= 60).map(l => ({uci: l.pv[0], san: sanOf(fen, l.pv[0])}));
+    const bestUci = multi.best || evals[f.i].best;
+    const hints = [];
+    if (tc && f.clockLeft != null && (f.clockLeft < 0.1*tc.base || f.clockLeft < 20)) hints.push("Time trouble");
+    if (tc && f.spent != null && f.spent <= 3 && f.clockLeft > 0.3*tc.base) hints.push("Moved too fast");
+    if ("mate" in f.after && (f.after.mate < 0) === (me === "white")) hints.push("Missed their threat");
+    else {
+      // material over the refutation line
+      let c = new Chess(fens[f.i+1]); const pv = evals[f.i+1].pv.slice(0,6);
+      for (const u of pv){ try { uciToMove(c, u); } catch(ex){ break; } }
+      const d0 = material(fen, myColor) - material(fen, myColor === "w" ? "b" : "w");
+      const d1 = material(c.fen(), myColor) - material(c.fen(), myColor === "w" ? "b" : "w");
+      if (d0 - d1 >= 3) hints.push("Hung a piece");
+    }
+    found.push({
+      id: "imp-" + q.fp + "-" + f.i, imported: true, addedAt: Date.now() + k, source: src.source, siteLabel: src.label, me, opponent: opp || null,
+      oppRating: Number(me === "white" ? h.BlackElo : h.WhiteElo) || null, myRating: Number(me === "white" ? h.WhiteElo : h.BlackElo) || null,
+      tc: tc ? tc.label : null, speed: tc ? tc.speed : null, date: dateIso, result, opening: h.Opening || (h.ECO ? "ECO " + h.ECO : null),
+      startFen: moves[0].before, movesUci: moves.slice(0, f.i).map(m => m.from + m.to + (m.promotion || "")), fen, moveNo: Number(fen.split(" ")[5]),
+      played: {uci: f.uci, san: f.m.san}, best: {uci: bestUci, san: sanOf(fen, bestUci)},
+      bestLine: pvSan(fen, multi.lines[0].pv), refutation: pvSan(fens[f.i+1], evals[f.i+1].pv, 5),
+      accept: accept.length ? accept : [{uci: bestUci, san: sanOf(fen, bestUci)}], evalBefore: f.before, evalAfter: f.after,
+      judgment: "Blunder", swing: Math.round(f.swing*1000)/1000, clockLeft: f.clockLeft, timeSpent: f.spent,
+      autoCauses: hints, causes: [], thinking: "", lesson: "", status: "new", retests: 0, streak: 0, due: TODAY, history: []
+    });
+    onProgress(0.9 + 0.1*(k+1)/flagged.length);
+  }
+  found.forEach(e => { entries = entries.filter(x => x.id !== e.id); entries.push(e); });
+  return found;
+}
+
+/* PGN inputs */
+const pgnText = document.getElementById("pgnText");
+document.getElementById("sampleBtn").addEventListener("click", () => { pgnText.value = SAMPLE_PGN; });
+document.getElementById("queueBtn").addEventListener("click", () => addToQueue(pgnText.value));
+document.getElementById("pgnFile").addEventListener("change", ev => { const f = ev.target.files[0]; if (f) f.text().then(t => { pgnText.value = t; addToQueue(t); }); ev.target.value = ""; });
+const drop = document.getElementById("drop");
+["dragenter","dragover"].forEach(n => drop.addEventListener(n, ev => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(n => drop.addEventListener(n, () => drop.classList.remove("over")));
+drop.addEventListener("drop", ev => { ev.preventDefault(); const f = ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) f.text().then(t => { pgnText.value = t; addToQueue(t); }); });
+
+/* sites (simulated) */
+document.querySelectorAll("[data-sync]").forEach(b => b.addEventListener("click", () => {
+  const log = document.getElementById("syncLog"), site = b.dataset.sync; b.disabled = true;
+  const steps = [site + ": downloading new games as PGN…", site + ": 0 new games since your last sync (simulated in this demo). Use PGN import to try the real analysis."];
+  log.textContent = steps[0]; setTimeout(() => { log.textContent = steps[1]; b.disabled = false; }, 900);
+}));
+
+/* ================= FEN QUICK ENTRY ================= */
+const fenIn = document.getElementById("fenIn");
+let fenState = null;
+document.getElementById("fenSample").addEventListener("click", () => { fenIn.value = "r2qkbnr/ppp2ppp/2np4/4N3/2B1P1b1/2N5/PPPP1PPP/R1BQK2R b KQkq - 0 5"; loadFen(); });
+document.getElementById("fenLoad").addEventListener("click", loadFen);
+fenIn.addEventListener("keydown", ev => { if (ev.key === "Enter") loadFen(); });
+function loadFen(){
+  const err = document.getElementById("fenErr"); err.textContent = "";
+  let c; try { c = new Chess(fenIn.value.trim()); } catch(ex){ err.textContent = "That FEN isn't valid: " + ex.message; return; }
+  if (c.isGameOver()){ err.textContent = "The game is already over in that position."; return; }
+  fenState = { fen: c.fen(), me: c.turn() === "w" ? "white" : "black", board: fenToBoard(c.fen()), sel: null, hl: {}, arrows: [], played: null };
+  document.getElementById("fenArea").hidden = false;
+  document.getElementById("fenTip").textContent = (fenState.me === "white" ? "White" : "Black") + " to move. Tap the piece you moved, then its square.";
+  document.getElementById("fenResult").innerHTML = '<p class="small">Waiting for your move…</p>';
+  drawFen(); engine.start();
+}
+function drawFen(){ renderBoard(document.getElementById("fenBoard"), fenState.board, fenState.me, {hl: fenState.hl, arrows: fenState.arrows, onClick: fenClick}); }
+async function fenClick(i){
+  const s = fenState; if (s.played) return;
+  const pc = s.board[i], mine = pc && (isWhitePc(pc) === (s.me === "white"));
+  if (s.sel === null || mine){ if (mine){ s.sel = i; s.hl = {[i]:"sel"}; drawFen(); } return; }
+  const c = new Chess(s.fen); let m;
+  try { m = c.move({from: sqName(s.sel), to: sqName(i), promotion: "q"}); } catch(ex){ s.sel = null; s.hl = {}; drawFen(); toast("That move isn't legal here"); return; }
+  s.played = {uci: m.from + m.to + (m.promotion || ""), san: m.san}; s.after = c.fen();
+  s.board = applyUci(s.board, s.played.uci); s.hl = {[sqIdx(m.from)]:"played", [sqIdx(m.to)]:"played"}; drawFen();
+  const res = document.getElementById("fenResult");
+  const ok = await engine.start();
+  if (!ok){ res.innerHTML = '<div class="verdict mid">The engine couldn\'t start in this preview, so this move can\'t be checked here.</div>'; return; }
+  res.innerHTML = '<p class="small">Checking ' + esc(m.san) + ' with Stockfish…</p>';
+  const depth = Number(document.getElementById("depth").value) + 2;
+  const multi = await engine.analyse(s.fen, depth, 3);
+  const term = terminalEval(s.after);
+  const aft = term ? {score: "mate" in term ? {mate: term.mate} : {cp:0}, pv: []} : await engine.analyse(s.after, depth).then(r => ({score: r.lines[0].score, pv: r.lines[0].pv}));
+  const sign = s.me === "white" ? 1 : -1, before = multi.lines[0].score, after = aft.score;
+  const swing = (win(sign*asCp(before)) - win(sign*asCp(after))) / 2;
+  const bestUci = multi.best, isBest = bestUci === s.played.uci;
+  const verdict = isBest || swing < 0.05 ? ["ok","Good move","That's as good as the engine's choice."] : swing < 0.10 ? ["mid","Inaccuracy","Not a blunder, but there was better."] : swing < 0.15 ? ["mid","Mistake","A real mistake, just under the blunder line."] : ["bad","Blunder","Your winning chances dropped sharply."];
+  const bf = sqIdx(bestUci.slice(0,2)), bt = sqIdx(bestUci.slice(2,4));
+  if (!isBest){ s.arrows = [{from:bf, to:bt, color:"green"}]; s.hl[bf] = "best"; s.hl[bt] = "best"; drawFen(); }
+  const bestLabel = sanOf(s.fen, bestUci);
+  res.innerHTML = `<div class="verdict ${verdict[0]}"><b class="big">${verdict[1]}: ${esc(s.played.san)}</b>${verdict[2]}<br>Eval ${fmtEval(before)} → ${fmtEval(after)}${isBest ? "" : " · best was <b>" + esc(bestLabel) + "</b>"}</div>
+    ${isBest ? "" : `<p class="small" style="margin:8px 0 0">${esc(pvSan(s.fen, multi.lines[0].pv))}</p>`}
+    <div class="inline" style="margin-top:10px"><div class="field" style="margin:0"><label class="small" for="fenOpp">Opponent (optional)</label><input id="fenOpp" type="text"></div>
+    <div class="field" style="margin:0"><label class="small" for="fenDate">Date</label><input id="fenDate" type="date" value="${TODAY}"></div></div>
+    <div class="row"><button class="btn primary" id="fenAdd" ${isBest ? "disabled" : ""}>Add to log</button><button class="btn ghost" id="fenReset">Try another move</button></div>`;
+  document.getElementById("fenReset").onclick = () => { fenIn.value = s.fen; loadFen(); };
+  document.getElementById("fenAdd").onclick = () => {
+    const sgn = sign, bestCp = sgn*asCp(before);
+    const accept = multi.lines.filter(l => bestCp - sgn*asCp(l.score) <= 60).map(l => ({uci: l.pv[0], san: sanOf(s.fen, l.pv[0])}));
+    const id = "fen-" + hash(s.fen + s.played.uci);
+    const e = { id, imported: true, addedAt: Date.now(), source: "fen", siteLabel: "FEN entry", me: s.me, opponent: document.getElementById("fenOpp").value.trim() || null,
+      oppRating: null, myRating: null, tc: null, speed: null, date: document.getElementById("fenDate").value || TODAY, result: null, opening: null,
+      startFen: s.fen, movesUci: [], fen: s.fen, moveNo: Number(s.fen.split(" ")[5]), played: s.played, best: {uci: bestUci, san: bestLabel},
+      bestLine: pvSan(s.fen, multi.lines[0].pv), refutation: pvSan(s.after, aft.pv, 5), accept: accept.length ? accept : [{uci: bestUci, san: bestLabel}],
+      evalBefore: before, evalAfter: after, judgment: verdict[1], swing: Math.round(swing*1000)/1000, clockLeft: null, timeSpent: null,
+      autoCauses: ("mate" in after && (after.mate < 0) === (s.me === "white")) ? ["Missed their threat"] : [], causes: [], thinking: "", lesson: "", status: "new", retests: 0, streak: 0, due: TODAY, history: [] };
+    entries = entries.filter(x => x.id !== id); entries.push(e); persist(); updateBadge();
+    current = id; ply = null; toast("Added to your log"); showView("log");
+  };
+}
+
+/* ---------- boot ---------- */
+updateBadge(); renderList(); renderDetail();
+window.__app = { get entries(){ return entries; }, get rtQueue(){ return rtQueue; }, get rtIndex(){ return rtIndex; }, engine, get queue(){ return queue; } };
+</script>
+</body>
+</html>
