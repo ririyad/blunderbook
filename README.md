@@ -27,7 +27,7 @@ _Last updated: 2026-11-04_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (1/8) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (2/8) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,7 +35,7 @@ _Last updated: 2026-11-04_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.2 Models + time control.
+**Next up:** M1.3 PGN parsing.
 
 The project scaffold is in place (`uv sync`, tests, lint, types). Only `blunderbook --version`
 works so far. None of the commands below are implemented yet.
@@ -59,8 +59,11 @@ Each item is one small commit, with its tests in the same change. Every commit m
       `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker that skips when no
       Stockfish is found.
       _Done when_ `uv sync && uv run pytest` passes on an empty suite.
-- [ ] **1.2 Models + time control.** `core/models.py`, `core/timecontrol.py` (parse, speed, label).
-      _Done when_ `180+2` → blitz / `"3+2"`, `1500+10` → rapid / `"25+10"`, and `-` / `?` → none.
+- [x] **1.2 Models + time control.** `core/models.py` (shared types, `CAUSES`, `Eval` with its JSON
+      form, `TimeControl`) and `core/timecontrol.py` (parse, speed, label). Records like parsed games
+      and findings arrive with the slices that fill them in.
+      _Done when_ `180+2` → blitz / `"3+2"`, `1500+10` → classical / `"25+10"` (estimate 1900 s),
+      and `-` / `?` / daily `1/86400` → unknown.
 - [ ] **1.3 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only,
       FEN before/after each ply, `[%clk]` values, per-game errors, verbatim text.
       _Done when_ `multi_game.pgn` gives the good games plus one reported error.
