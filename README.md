@@ -74,7 +74,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
       _Done when_ `engine set <folder>` finds the program, checks it, saves it, and `show` / `clear` work.
 - [ ] **1.4 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only,
       FEN before/after each ply, `[%clk]` values, per-game errors, verbatim text. Files are read as
-      UTF-8 with a cp1252 fallback (see Open decisions).
+      UTF-8 with a cp1252 fallback that's noted in the report (CLAUDE.md §7.1).
       _Done when_ `multi_game.pgn` gives the good games plus one reported error.
 - [ ] **1.5 Identity + source.** `core/identity.py` (side detection, fingerprints), `core/source.py`.
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
@@ -126,10 +126,12 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ### M5 Import view + jobs
 
 - [ ] **5.1 Jobs.** `jobs.py`: in-process background queue, progress as positions done / total.
-- [ ] **5.2 Import API.** `/api/import/*`, `/api/fen/check`, `/api/fen/add`, `/api/settings`, and
-      `GET/PUT /api/engine` (same lookup and check as `engine show` / `engine set`).
+- [ ] **5.2 Import API.** `/api/import/*`, `/api/fen/check`, `/api/fen/add`, `/api/settings`
+      (reads and writes config.toml; the token is write-only), and `GET/PUT /api/engine` (same
+      lookup and check as `engine show` / `engine set`).
 - [ ] **5.3 Import view.** Paste / file picker / drag-and-drop, names field, per-game queue statuses,
-      side picker, depth selector, links to found blunders. The "Engine: …" line in the queue header
+      side picker, depth selector, links to found blunders. Files use the same decoding as the CLI
+      (strict UTF-8 `TextDecoder`, then `windows-1252`). The "Engine: …" line in the queue header
       shows the engine name and path, with a **Change** control (enter a path, "Check and save").
 - [ ] **5.4 FEN quick entry.** Board editor with tap-to-move, engine verdict, opponent and date, Add to log.
 
@@ -238,11 +240,14 @@ These are flagged against the spec and need your confirmation or a change.
    the answer, and the server checks every attempt.
 4. **Recorded HTTP fixtures.** Development never calls the sites, so the M6 fixtures will be
    built by hand from the documented formats and marked `TODO(verify)` until you record real ones.
-5. **config.toml vs the `settings` table.** §5 has a DB `settings` table and §10 has
-   `/api/settings`, but §6 keeps the same values (names, engine, thresholds) in config.toml.
-   Proposal: config.toml is the single source of truth, and `/api/settings` and `/api/engine`
-   read and write it. The Lichess token is write-only and never returned. The DB `settings` table
-   holds UI preferences only. To decide by M2 / M5.
-6. **PGN file encoding (affects 1.4).** Python 3.15 defaults to UTF-8 (PEP 686), but ChessBase
-   and older over-the-board PGNs are often cp1252. Proposal: read as `utf-8-sig`, fall back to
-   `cp1252`, and note the fallback in the import report.
+
+### Decided
+
+- **2026-11-04: Settings live in config.toml only.** The CLI, `/api/settings` and `/api/engine`
+  all read and write it. The Lichess token is write-only (the API only says whether one is set).
+  The DB `settings` table holds UI preferences only. (CLAUDE.md §5, §6, §10)
+- **2026-11-04: PGN encoding.** Read as `utf-8-sig`. If that fails, read as `cp1252` with bad
+  bytes replaced, and say "Read as Windows-1252" in the import report. An import never fails
+  over encoding. (CLAUDE.md §7.1)
+- **2026-11-04: Stockfish lookup and Python 3.15+.** See Usage and Requirements.
+  (CLAUDE.md §3, §6)

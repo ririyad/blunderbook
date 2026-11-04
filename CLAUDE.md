@@ -204,8 +204,11 @@ CREATE TABLE sync_state (
   last_error    TEXT
 );
 
-CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);  -- JSON values
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);  -- JSON values; UI preferences only
 ```
+
+The `settings` table holds UI preferences only (e.g. the last depth picked in the Import
+view). Every §6 setting lives in config.toml and nowhere else.
 
 FEN quick entries get a synthetic `games` row (`source='fen'`, `pgn` = a one-move PGN with
 `[SetUp "1"] [FEN "..."]`, `my_color` = side to move) so every blunder has a game.
@@ -226,6 +229,10 @@ CAUSES = [
 
 `config.toml` in `platformdirs.user_config_dir("blunderbook")`; the DB in
 `user_data_dir("blunderbook")/blunderbook.db`. Created by `blunderbook init`.
+
+**config.toml is the single source of truth for settings.** The CLI, `/api/settings` and
+`/api/engine` all read and write this file (through `config.load` / `config.save`). The DB
+never stores these values.
 
 ```toml
 my_names = ["Rashed"]                 # names/usernames used to detect my side
@@ -276,6 +283,9 @@ an error. `blunderbook engine set` checks a path before saving it.
 - A game that fails to parse goes into the import report with a reason. Never abort
   the whole file because of one bad game.
 - Keep the original PGN text verbatim in `games.pgn`.
+- Read PGN files as `utf-8-sig`. If that fails, decode as `cp1252` with undecodable bytes
+  replaced, and add "Read as Windows-1252" to the import report. Never fail an import over
+  encoding. (ChessBase and older OTB files are often cp1252.)
 
 ### 7.2 Time control (`core/timecontrol.py`)
 - Parse `"180"`, `"180+2"`, `"1500+10"`. `"-"`, `"?"`, or missing → `None`.
@@ -419,7 +429,8 @@ GET    /api/retest/queue          due entries (position, side to move, move no.)
 POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, lesson, next due
 
 GET    /api/patterns
-GET    /api/settings  | PUT /api/settings
+GET    /api/settings  | PUT /api/settings   config.toml values; the Lichess token is write-only
+                                            (GET returns only {"token_set": true|false})
 GET    /api/engine                {name, version, path, origin, problem?}  (same lookup as `engine show`)
 PUT    /api/engine                {path} -> checks like `engine set`, saves only if it works
 POST   /api/sync/{source}         start a sync job
