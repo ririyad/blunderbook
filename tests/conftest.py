@@ -10,6 +10,7 @@ from collections.abc import Callable
 from functools import cache
 from pathlib import Path
 
+import httpx
 import pytest
 
 from blunderbook import config
@@ -46,6 +47,20 @@ def db_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "data" / "blunderbook.db"
     monkeypatch.setattr(config, "db_path", lambda: path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never call Lichess or Chess.com (CLAUDE.md §8): httpx's real transport only
+    reaches this computer. Adapters get a MockTransport instead."""
+    real = httpx.HTTPTransport.handle_request
+
+    def local_only(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+        if request.url.host not in ("127.0.0.1", "localhost"):
+            raise AssertionError(f"A test tried to reach {request.url.host}")
+        return real(self, request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", local_only)
 
 
 @pytest.fixture(scope="session")

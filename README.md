@@ -33,10 +33,10 @@ _Last updated: 2026-11-05_
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
-| M6 Sync | In progress (1/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
+| M6 Sync | In progress (2/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M6.2 Lichess adapter.
+**Next up:** M6.3 Chess.com adapter.
 
 In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -400,8 +400,22 @@ Each item is one small commit, with its tests in the same change. Every commit m
       Notes at the top of `sources/lichess.py` and `sources/chesscom.py`. Still `TODO(verify)`:
       whether Lichess `since` compares with a game's start or end, whether Chess.com usernames
       are case-sensitive in URLs, and the Link and clock headers in a real Chess.com download.
-- [ ] **6.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
+- [x] **6.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
       clocks and openings, optional token (never logged), backs off on 429.
+      _Done:_ `LichessAdapter.fetch_new_pgn(since)` hands over one game at a time while the
+      download streams (`base.games_in` only cuts the text; `core.pgn` still parses it).
+      - **Request:** oldest first (`sort=dateAsc`), so a sync that stops halfway keeps its
+        progress. Standard chess only (`perfType`), `since` in milliseconds (a time with no
+        zone is UTC), and the defaults sent explicitly.
+      - **Token:** only in the `Authorization` header. It's not in the adapter's `repr`, and
+        it's replaced with `[token]` in error messages.
+      - **429:** waits 60 s (or a longer `Retry-After`) and tries again, three tries in all. A
+        `Retry-After` over 5 minutes stops the sync instead of hanging it.
+      - **Errors** are a `SyncError` with a plain message: unknown user, refused token, another
+        status, or the network. Games handed over before a broken stream stay handed over.
+      - **Tests** use `tests/fixtures/http/lichess_user_games.pgn` (hand-built,
+        `TODO(verify)`) through httpx `MockTransport`. A new autouse guard in `conftest.py`
+        makes any real request to a host other than this computer fail the test.
 - [ ] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
       Only the months from the last synced month onward are downloaded; no HTTP cache.
 - [ ] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
