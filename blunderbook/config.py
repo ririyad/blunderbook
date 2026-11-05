@@ -21,6 +21,8 @@ from typing import Any, Literal
 
 from platformdirs import user_config_dir, user_data_dir
 
+from blunderbook.core.models import Thresholds
+
 APP_NAME = "blunderbook"
 STOCKFISH_ENV = "BLUNDERBOOK_STOCKFISH"
 
@@ -51,14 +53,6 @@ def db_path() -> Path:
 
 
 # ---------------------------------------------------------------- model
-
-
-@dataclass(frozen=True, slots=True)
-class Thresholds:
-    inaccuracy: float = 0.05
-    mistake: float = 0.10
-    blunder: float = 0.15
-    accept_margin_cp: int = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,18 +117,21 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
     cc = root.table("chesscom")
     d = Config()
     dt = d.thresholds
+    thresholds = Thresholds(
+        inaccuracy=th.fraction("inaccuracy", dt.inaccuracy),
+        mistake=th.fraction("mistake", dt.mistake),
+        blunder=th.fraction("blunder", dt.blunder),
+        accept_margin_cp=th.whole("accept_margin_cp", dt.accept_margin_cp, minimum=0),
+    )
+    if not thresholds.inaccuracy <= thresholds.mistake <= thresholds.blunder:
+        raise ConfigError("thresholds must go up: inaccuracy <= mistake <= blunder")
     return Config(
         my_names=root.names("my_names", d.my_names),
         stockfish_path=root.text("stockfish_path", d.stockfish_path),
         engine_depth=root.whole("engine_depth", d.engine_depth, minimum=1),
         engine_threads=root.whole("engine_threads", d.engine_threads, minimum=1),
         engine_hash_mb=root.whole("engine_hash_mb", d.engine_hash_mb, minimum=1),
-        thresholds=Thresholds(
-            inaccuracy=th.fraction("inaccuracy", dt.inaccuracy),
-            mistake=th.fraction("mistake", dt.mistake),
-            blunder=th.fraction("blunder", dt.blunder),
-            accept_margin_cp=th.whole("accept_margin_cp", dt.accept_margin_cp, minimum=0),
-        ),
+        thresholds=thresholds,
         lichess=LichessConfig(username=li.text("username", ""), token=li.text("token", "")),
         chesscom=ChesscomConfig(username=cc.text("username", ""), contact=cc.text("contact", "")),
     )

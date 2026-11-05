@@ -82,6 +82,16 @@ def _as_int(value: object) -> int:
     return value
 
 
+@dataclass(frozen=True, slots=True)
+class Thresholds:
+    """Swing thresholds (0..1) and the re-test margin, from ``[thresholds]`` in config.toml."""
+
+    inaccuracy: float = 0.05
+    mistake: float = 0.10
+    blunder: float = 0.15  # only >= blunder is logged from imports
+    accept_margin_cp: int = 60  # re-tests accept moves within this of the best
+
+
 # ---------------------------------------------------------------- parsed PGN (core/pgn.py)
 
 RESULTS: Final = frozenset({"1-0", "0-1", "1/2-1/2", "*"})

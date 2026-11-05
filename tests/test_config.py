@@ -41,6 +41,8 @@ def test_unknown_keys_are_ignored(tmp_path: Path) -> None:
         ("stockfish_path = 3", "stockfish_path"),
         ("[thresholds]\nblunder = 1.5", "thresholds.blunder"),
         ("[thresholds]\naccept_margin_cp = -1", "thresholds.accept_margin_cp"),
+        ("[thresholds]\nmistake = 0.2", "inaccuracy <= mistake <= blunder"),
+        ("[thresholds]\ninaccuracy = 0.12", "inaccuracy <= mistake <= blunder"),
         ("lichess = 3", "[lichess]"),
         ("[lichess]\ntoken = 123", "lichess.token"),
     ],

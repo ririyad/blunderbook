@@ -27,7 +27,7 @@ _Last updated: 2026-11-05_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (5/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (6/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,12 +35,11 @@ _Last updated: 2026-11-05_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.6 Detection maths.
+**Next up:** M1.7 Engine analysis.
 
 In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
 parsing, config.toml, Stockfish setup, PGN reading with all nine §12 fixtures, side detection,
-fingerprints and source detection. The working
-commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see Usage).
+fingerprints, source detection, and the blunder maths. The working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see Usage).
 
 ---
 
@@ -87,8 +86,11 @@ Each item is one small commit, with its tests in the same change. Every commit m
       `core/source.py`: `detect_source()` gives the source, label, and the Lichess / Chess.com game
       id and URL (see Open decisions 10).
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
-- [ ] **1.6 Detection maths.** `core/detect.py`: winning chances, swing, judgment, flagging,
-      `best_line_san` and `refutation_san` formatting.
+- [x] **1.6 Detection maths.** `core/detect.py`: winning chances, swing (checked against the
+      demo's numbers for every fixture blunder), judgment, flagging, accepted re-test moves
+      (pure part of pass 2), and `best_line_san` (6 plies) / `refutation_san` (5 plies), which
+      stop at an illegal PV move. `Thresholds` moved to `core/models.py` so core never imports
+      `config`. config.toml now rejects thresholds that don't go up. See Open decisions 11.
       _Done when_ thresholds and Black-start move numbering (`5... Nxe5 6. Be2`) are tested.
 - [ ] **1.7 Engine analysis.** Builds on `probe()` in `core/engine.py`: pass 1, MultiPV 3 pass 2,
       terminal positions without the engine, scores stored from White's point of view.
@@ -303,6 +305,23 @@ These are flagged against the spec and need your confirmation or a change.
       so both forms are accepted.
     - ChessBase and some databases write `Site "INT"` or `"Internet"` for online games. The rule
       makes those "Over the board · INT". That's left as it is. Retype the header if it matters.
+11. **Detection details §7.6 doesn't spell out (done in 1.6).**
+    - **The move you blundered with is never an accepted re-test answer.** A deeper pass-2 look
+      can rate it close to the best move. Without this rule, replaying your own blunder could
+      count as solved.
+    - **Mates count as ±10000 for the accept margin too**, as they do in the winning-chance
+      maths. So when the best move mates, every mating move in the top 3 is accepted (mate in 4
+      as well as mate in 1), and a +9 move isn't.
+    - **The margin is measured from the top MultiPV line.** A move exactly
+      `accept_margin_cp` away is accepted.
+    - **Swing is never below 0.** If the engine likes your move better than its own choice, the
+      swing is 0, matching the documented range 0..1.
+    - **A position where you're already checkmated** (`mate 0`) counts as lost for whoever is to
+      move. The demo scored it as 0 (level).
+    - **Lines use `5... Nxe5` with a space after the dots**, as in §7.6. The demo wrote
+      `5...Nxe5`.
+    - **config.toml must have `inaccuracy <= mistake <= blunder`.** Otherwise loading it fails
+      with an error naming the rule.
 
 ### Decided
 
