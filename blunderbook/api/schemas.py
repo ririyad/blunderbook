@@ -116,3 +116,62 @@ class NotesIn(BaseModel):
     other_cause: str | None = None
     thinking: str | None = None
     lesson: str | None = None
+
+
+# ---------------------------------------------------------------- re-test
+
+
+class RetestItem(BaseModel):
+    """One position to re-test. It never carries the answer: no best move, accepted moves,
+    the move you played, the lines or your lesson (CLAUDE.md §10)."""
+
+    id: int
+    fen: str  # the position before your move
+    my_color: Color  # the side to move, and the way the board faces
+    move_no: int
+    legal_uci: list[str]  # every legal move, for tap-to-move
+    source: Source
+    site_label: str | None
+    opponent: str | None
+    played_on: date | None
+    due_on: date
+
+
+class RetestQueue(BaseModel):
+    items: list[RetestItem]  # oldest due date first, then the most recent game
+    total: int  # all entries, for "Practise all anyway"
+    next_due_on: date | None  # the first re-test after today, when nothing is due
+
+
+class AttemptIn(BaseModel):
+    """Your move, or ``null`` when you gave up ("I don't know — show me")."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    move_uci: str | None
+    used_hint: bool = False
+
+
+class AttemptOut(BaseModel):
+    """The answer, sent only after you tried."""
+
+    id: int
+    solved: bool
+    move_uci: str | None  # your move as recorded (a bare promotion becomes a queen)
+    move_san: str | None
+    best_uci: str
+    best_san: str
+    best_line_san: str
+    played_uci: str  # what you played in the game
+    played_san: str
+    refutation_san: str | None
+    judgment: Judgment
+    lesson: str
+    status: Status
+    streak: int
+    due_on: date
+    next_in_days: int
+
+
+class HintOut(BaseModel):
+    from_square: str  # "e2": where the best move starts

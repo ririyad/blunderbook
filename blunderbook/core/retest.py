@@ -1,13 +1,15 @@
 """Re-test scheduling (CLAUDE.md §7.8): when an entry comes back, whether a move solves it,
-and the order of the queue.
+the order of the queue, and reading the move you make on the board.
 
-Pure: the API (4.2) reads entries, calls these, and writes the result.
+Pure: the API reads entries, calls these, and writes the result.
 """
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Final
+
+import chess
 
 from blunderbook.core.models import Status
 
@@ -73,3 +75,31 @@ def queue_key(
     then a game's entries in move order."""
     by_date = (0, -played_on.toordinal()) if played_on is not None else (1, 0)
     return (due_on.toordinal(), *by_date, -game_id, ply)
+
+
+# ---------------------------------------------------------------- the board
+
+
+def legal_uci(fen: str) -> list[str]:
+    """Every legal move in the position, as UCI, for tap-to-move. A promotion is listed once
+    per piece (``e7e8q``, ``e7e8r``, ...)."""
+    return [move.uci() for move in chess.Board(fen).legal_moves]
+
+
+def read_move(fen: str, uci: str) -> chess.Move | None:
+    """The legal move ``uci`` names in the position, or None. A pawn move to the last rank
+    without a piece (``e7e8``) promotes to a queen."""
+    text = uci.strip().lower()
+    try:
+        move = chess.Move.from_uci(text)
+    except chess.InvalidMoveError:
+        return None
+    board = chess.Board(fen)
+    if move.promotion is None and not board.is_legal(move):
+        move = chess.Move(move.from_square, move.to_square, promotion=chess.QUEEN)
+    return move if board.is_legal(move) else None
+
+
+def from_square(uci: str) -> str:
+    """The hint: the square the move starts from (``e2`` for ``e2e3``)."""
+    return uci[:2]

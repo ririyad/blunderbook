@@ -1,29 +1,18 @@
 """The Log's routes (CLAUDE.md §10): list, one entry with its game, your notes, delete."""
 
-import sqlite3
-from collections.abc import Iterator
-from contextlib import closing
 from datetime import date
-from typing import Annotated, NoReturn
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Query, Response
 
-from blunderbook.core import detect, pgn, timecontrol
-from blunderbook.core.models import Color, Entry, Game, Source, Status, TimeControl
-from blunderbook.db import connection, repo
+from blunderbook.core import detect, pgn
+from blunderbook.core.models import Color, Entry, Game, Source, Status
+from blunderbook.db import repo
 
+from .common import Db, found, not_found, opponent, tc_label
 from .schemas import Cause, EntryOut, EntrySummary, GameOut, MoveOut, NotesIn
 
 router = APIRouter(prefix="/api/blunders", tags=["blunders"])
-
-
-def db(request: Request) -> Iterator[sqlite3.Connection]:
-    """One connection per request, closed when the request is done."""
-    with closing(connection.connect(request.app.state.db_path, any_thread=True)) as conn:
-        yield conn
-
-
-Db = Annotated[sqlite3.Connection, Depends(db)]
 
 
 @router.get("")
@@ -48,7 +37,7 @@ def list_blunders(
 
 @router.get("/{blunder_id}")
 def get_blunder(blunder_id: int, conn: Db) -> EntryOut:
-    return _detail(_found(repo.get_entry(conn, blunder_id), blunder_id))
+    return _detail(found(repo.get_entry(conn, blunder_id), blunder_id))
 
 
 @router.patch("/{blunder_id}")
@@ -61,38 +50,18 @@ def update_blunder(blunder_id: int, notes: NotesIn, conn: Db) -> EntryOut:
         thinking=notes.thinking,
         lesson=notes.lesson,
     )
-    return _detail(_found(entry, blunder_id))
+    return _detail(found(entry, blunder_id))
 
 
 @router.delete("/{blunder_id}", status_code=204)
 def delete_blunder(blunder_id: int, conn: Db) -> Response:
     """Delete the entry and its re-test history. Its game stays, so it isn't imported again."""
     if not repo.delete_blunder(conn, blunder_id):
-        _not_found(blunder_id)
+        not_found(blunder_id)
     return Response(status_code=204)
 
 
 # ---------------------------------------------------------------- shapes
-
-
-def _found(entry: Entry | None, blunder_id: int) -> Entry:
-    if entry is None:
-        _not_found(blunder_id)
-    return entry
-
-
-def _not_found(blunder_id: int) -> NoReturn:
-    raise HTTPException(status_code=404, detail=f"No entry #{blunder_id}.")
-
-
-def _opponent(game: Game) -> str | None:
-    return game.black if game.my_color == "white" else game.white
-
-
-def _tc_label(game: Game) -> str | None:
-    if game.tc_base_s is None or game.tc_inc_s is None:
-        return None
-    return timecontrol.label(TimeControl(game.tc_base_s, game.tc_inc_s))
 
 
 def _summary(entry: Entry) -> EntrySummary:
@@ -106,10 +75,10 @@ def _summary(entry: Entry) -> EntrySummary:
         judgment=b.judgment,
         status=b.status,
         due_on=b.due_on,
-        opponent=_opponent(g),
+        opponent=opponent(g),
         played_on=g.played_on,
         speed=g.speed,
-        tc_label=_tc_label(g),
+        tc_label=tc_label(g),
     )
 
 
@@ -137,11 +106,11 @@ def _game(game: Game) -> GameOut:
         white_elo=game.white_elo,
         black_elo=game.black_elo,
         my_color=game.my_color,
-        opponent=_opponent(game),
+        opponent=opponent(game),
         result=game.result,
         played_on=game.played_on,
         time_control=game.time_control,
-        tc_label=_tc_label(game),
+        tc_label=tc_label(game),
         speed=game.speed,
         opening=game.opening,
         eco=game.eco,

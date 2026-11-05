@@ -307,6 +307,18 @@ class Entry:
     game: Game
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Attempt:
+    """One re-test try (a row in ``retest_attempts``)."""
+
+    id: int
+    blunder_id: int
+    attempted_at: datetime
+    move_uci: str | None  # None when you gave up
+    solved: bool
+    used_hint: bool
+
+
 @dataclass(frozen=True, slots=True)
 class SavedIds:
     """The ids a saved game and its entries got, entries in the order they were given."""

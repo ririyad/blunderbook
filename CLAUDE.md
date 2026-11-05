@@ -104,6 +104,7 @@ blunderbook/
 │   │   └── chesscom.py
 │   ├── api/
 │   │   ├── app.py             # FastAPI app factory, static files mount
+│   │   ├── common.py          # per-request DB connection, 404, labels shared by the routes
 │   │   ├── routes_blunders.py
 │   │   ├── routes_retest.py
 │   │   ├── routes_patterns.py
@@ -518,7 +519,8 @@ GET    /api/blunders/{id}                             full entry + game metadata
 PATCH  /api/blunders/{id}                             {causes?, other_cause?, thinking?, lesson?}
 DELETE /api/blunders/{id}
 
-GET    /api/retest/queue          due entries (position, side to move, move no., legal moves)
+GET    /api/retest/queue?all=     {items, total, next_due_on}: due entries (position, side to
+                                  move, move no., legal moves); all=1 gives every entry
 POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, lesson, next due
 GET    /api/retest/{id}/hint      the from-square only
 

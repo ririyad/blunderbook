@@ -17,7 +17,7 @@ from starlette.types import Scope
 from blunderbook import __version__
 from blunderbook.db.connection import StorageError
 
-from . import routes_blunders
+from . import routes_blunders, routes_retest
 
 WEB = Path(__file__).parent.parent / "web"
 
@@ -67,6 +67,7 @@ def create_app(db_path: Path) -> FastAPI:
     app.state.db_path = db_path
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(LOCAL_HOSTS))
     app.include_router(routes_blunders.router)
+    app.include_router(routes_retest.router)
     app.mount("/", _Web(directory=WEB, html=True), name="web")  # last: /api comes first
 
     @app.exception_handler(StorageError)

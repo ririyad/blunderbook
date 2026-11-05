@@ -125,3 +125,57 @@ def test_same_date_falls_back_to_the_newest_game_then_move_order() -> None:
     }
     order = sorted(items, key=items.__getitem__)
     assert order == ["game 7, ply 12", "game 7, ply 30", "game 4, ply 20"]
+
+
+# ---------------------------------------------------------------- the board
+
+ELEPHANT = "r1bqkb1r/pppn1ppp/5n2/3p2B1/3P4/2N5/PP2PPPP/R2QKBNR w KQkq - 0 6"
+PROMOTE = "8/4P1k1/8/8/8/8/6K1/8 w - - 0 60"  # White's e-pawn can promote
+PROMOTE_BLACK = "8/6k1/8/8/8/8/1p4K1/8 b - - 0 60"
+
+
+def test_legal_moves_are_every_legal_move() -> None:
+    moves = retest.legal_uci(ELEPHANT)
+    assert "e2e3" in moves and "c3d5" in moves
+    assert "e2e5" not in moves
+    assert len(moves) == len(set(moves))
+
+
+def test_each_promotion_piece_is_listed() -> None:
+    assert {"e7e8q", "e7e8r", "e7e8b", "e7e8n"} <= set(retest.legal_uci(PROMOTE))
+
+
+@pytest.mark.parametrize(
+    ("fen", "text", "uci"),
+    [
+        (ELEPHANT, "e2e3", "e2e3"),
+        (ELEPHANT, " C3D5 ", "c3d5"),
+        (PROMOTE, "e7e8", "e7e8q"),  # promotes to a queen by default
+        (PROMOTE, "e7e8n", "e7e8n"),
+        (PROMOTE_BLACK, "b2b1", "b2b1q"),
+    ],
+)
+def test_reading_a_legal_move(fen: str, text: str, uci: str) -> None:
+    move = retest.read_move(fen, text)
+    assert move is not None and move.uci() == uci
+
+
+@pytest.mark.parametrize(
+    ("fen", "text"),
+    [
+        (ELEPHANT, "e2e5"),  # not legal
+        (ELEPHANT, "e7e5"),  # the other side's pawn
+        (ELEPHANT, "e2e3q"),  # not a promotion
+        (ELEPHANT, "Nxd5"),  # SAN isn't UCI
+        (ELEPHANT, "0000"),  # null move
+        (ELEPHANT, ""),
+        (PROMOTE, "e7e8k"),
+    ],
+)
+def test_reading_anything_else_gives_none(fen: str, text: str) -> None:
+    assert retest.read_move(fen, text) is None
+
+
+def test_the_hint_is_the_from_square() -> None:
+    assert retest.from_square("e2e3") == "e2"
+    assert retest.from_square("e7e8q") == "e7"

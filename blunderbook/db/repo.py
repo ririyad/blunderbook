@@ -4,7 +4,7 @@ Every value is a query parameter. Column lists are built from the constant tuple
 never from input. Writes that belong together share one ``transaction()``.
 
 Timestamps are stored as ISO-8601 UTC (``2026-11-05T09:30:00+00:00``), dates you see as
-local ``YYYY-MM-DD``. Re-test attempts, sync state and Patterns arrive with M4 and M5.
+local ``YYYY-MM-DD``. Sync state and Patterns arrive with M4 and M5.
 """
 
 import json
@@ -13,9 +13,11 @@ from collections.abc import Collection, Iterable
 from datetime import UTC, date, datetime
 from typing import Any, cast
 
+from blunderbook.core import retest
 from blunderbook.core.models import (
     CAUSES,
     AnalysisStatus,
+    Attempt,
     Blunder,
     Color,
     Entry,
@@ -306,6 +308,78 @@ def update_notes(
             f"UPDATE blunders SET {assignments} WHERE id = :id", {**changes, "id": blunder_id}
         )
     return get_entry(conn, blunder_id)
+
+
+def record_attempt(
+    conn: sqlite3.Connection,
+    blunder_id: int,
+    *,
+    move_uci: str | None,
+    used_hint: bool,
+    today: date,
+    now: datetime | None = None,
+) -> tuple[Entry, Attempt] | None:
+    """Record a re-test try and reschedule the entry, in one transaction (CLAUDE.md §7.8).
+    ``move_uci`` is a legal move in the entry's position, or None when you gave up. Whether
+    it solves the entry is decided here, from the stored accepted moves. Returns the
+    rescheduled entry and the attempt, or None when there's no such entry."""
+    stamp = _timestamp(_moment(now))
+    with transaction(conn):
+        row = conn.execute(
+            "SELECT accept_uci, streak FROM blunders WHERE id = ?", (blunder_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        solved = retest.is_solved(move_uci, json.loads(row["accept_uci"]))
+        schedule = retest.after_attempt(row["streak"], solved, today)
+        attempt_id = conn.execute(
+            "INSERT INTO retest_attempts (blunder_id, attempted_at, move_uci, solved, used_hint)"
+            " VALUES (?, ?, ?, ?, ?) RETURNING id",
+            (blunder_id, stamp, move_uci, int(solved), int(used_hint)),
+        ).fetchone()[0]
+        conn.execute(
+            "UPDATE blunders SET status = ?, streak = ?, due_on = ?, updated_at = ? WHERE id = ?",
+            (schedule.status, schedule.streak, schedule.due_on.isoformat(), stamp, blunder_id),
+        )
+        entry = get_entry(conn, blunder_id)
+    assert entry is not None
+    attempt = Attempt(
+        id=attempt_id,
+        blunder_id=blunder_id,
+        attempted_at=datetime.fromisoformat(stamp),
+        move_uci=move_uci,
+        solved=solved,
+        used_hint=used_hint,
+    )
+    return entry, attempt
+
+
+def list_attempts(conn: sqlite3.Connection, blunder_id: int) -> list[Attempt]:
+    """An entry's re-test tries, oldest first."""
+    rows = conn.execute(
+        "SELECT id, blunder_id, attempted_at, move_uci, solved, used_hint"
+        " FROM retest_attempts WHERE blunder_id = ? ORDER BY attempted_at, id",
+        (blunder_id,),
+    )
+    return [
+        Attempt(
+            id=r["id"],
+            blunder_id=r["blunder_id"],
+            attempted_at=datetime.fromisoformat(r["attempted_at"]),
+            move_uci=r["move_uci"],
+            solved=bool(r["solved"]),
+            used_hint=bool(r["used_hint"]),
+        )
+        for r in rows
+    ]
+
+
+def next_due_after(conn: sqlite3.Connection, day: date) -> date | None:
+    """The first re-test date after ``day``, or None when nothing is scheduled later."""
+    row = conn.execute(
+        "SELECT min(due_on) FROM blunders WHERE due_on > ?", (day.isoformat(),)
+    ).fetchone()
+    return _date_or_none(row[0])
 
 
 def delete_blunder(conn: sqlite3.Connection, blunder_id: int) -> bool:
