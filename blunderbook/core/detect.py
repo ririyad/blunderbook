@@ -62,6 +62,13 @@ def swing(before: Eval, after: Eval, mover: Color) -> float:
     return max(0.0, (w_before - w_after) / 2)
 
 
+def chances(score: Eval, turn: Color, me: Color) -> float:
+    """``me``'s winning chances in a scored position, as the Log's eval bar shows them: from
+    0 (lost) to 1 (won), 0.5 is level. That's ``(1 + w) / 2`` from ``me``'s side, so a move's
+    swing is the drop in this number. ``turn`` is the side to move in that position."""
+    return (1 + winning_chances(_sign(me) * maths_cp(score, turn))) / 2
+
+
 def judgment(swing: float, thresholds: Thresholds) -> Judgment | None:
     """``blunder`` / ``mistake`` / ``inaccuracy`` by threshold, or None below all three."""
     if swing >= thresholds.blunder:

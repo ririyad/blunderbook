@@ -8,6 +8,7 @@ from blunderbook.core.detect import (
     MATE_CP,
     accepted_moves,
     best_line_san,
+    chances,
     is_flagged,
     judgment,
     line_san,
@@ -122,6 +123,33 @@ def test_already_lost_positions_dont_swing() -> None:
 
 def test_throwing_away_a_mate_is_a_blunder() -> None:
     assert swing(mate(2), cp(0), "white") == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------- the Log's eval bar
+
+
+def test_chances_are_from_my_side() -> None:
+    assert chances(cp(0), "white", "white") == 0.5
+    assert chances(cp(0), "black", "black") == 0.5
+    assert chances(cp(36), "white", "white") == pytest.approx(0.5331, abs=1e-4)
+    assert chances(cp(36), "white", "black") == pytest.approx(1 - 0.5331, abs=1e-4)
+    assert chances(mate(1), "black", "white") == pytest.approx(1)
+    assert chances(mate(1), "black", "black") == pytest.approx(0)
+
+
+def test_chances_after_mate_zero() -> None:
+    assert chances(mate(0), "black", "white") == pytest.approx(1)  # I mated Black
+    assert chances(mate(0), "white", "white") == pytest.approx(0)  # I'm checkmated
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "mover"),
+    [(cp(36), cp(-409), "white"), (cp(-32), mate(1), "black"), (cp(3), mate(-1), "white")],
+)
+def test_swing_is_the_drop_in_chances(before: Eval, after: Eval, mover: Color) -> None:
+    them: Color = "black" if mover == "white" else "white"
+    drop = chances(before, mover, mover) - chances(after, them, mover)
+    assert drop == pytest.approx(swing(before, after, mover))
 
 
 # ---------------------------------------------------------------- judgment and flagging

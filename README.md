@@ -30,21 +30,21 @@ _Last updated: 2026-11-05_
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
+| M3 API + Log view | In progress (1/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M3.1 API.
+**Next up:** M3.2 Web shell.
 
-In place so far: all of M1 and M2. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1 and M2, and M3.1. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
 the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
 position you have no PGN of. The database is backed up once a day before `import` and `fen`,
 and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
-checks it and the backups. There's no way to read or annotate the saved entries yet: that's
-the web page in M3. All nine §12
-fixtures flag their expected blunder under `uv run pytest -m engine`.
+checks it and the backups. The JSON API for the Log (list, one entry with its game, notes,
+delete) is built and tested, but there's no web page or `serve` command yet (3.2–3.4). All
+nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -227,8 +227,27 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ### M3 API + Log view
 
-- [ ] **3.1 API.** App factory, pydantic schemas, `GET/PATCH/DELETE /api/blunders`. Detail includes
+- [x] **3.1 API.** App factory, pydantic schemas, `GET/PATCH/DELETE /api/blunders`. Detail includes
       the FEN for each ply, for the step controls. Tested with `TestClient` and a temp DB.
+      - **`api/app.py`:** `create_app(db_path)`. Each request opens its own connection. A
+        database that can't be opened is a 503 with the reason. Only `Host: 127.0.0.1` or
+        `localhost` is answered, and the `/docs` pages (CDN scripts) are off.
+      - **List:** `GET /api/blunders?source=&status=&cause=&due=1`, newest first. Each item has
+        your move (`6. Nxd5`), judgment, status, due date, opponent, date and `3+2` time
+        control. `status` can be repeated. Unknown filter values are a 422.
+      - **Entry:** `GET /api/blunders/{id}`: the machine's part, your notes, the schedule, and
+        your winning chances before and after (`core/detect.chances`, so the swing is their
+        difference). The game comes with its metadata and the whole mainline, each move with
+        the FEN after it, read again from the stored PGN.
+      - **Notes:** `PATCH` with any of `causes`, `other_cause`, `thinking`, `lesson`. A field
+        that's left out or `null` stays. Text is kept exactly, and causes are kept once each in
+        the fixed order. An unknown cause or any other field (say `best_uci`) is a 422, and
+        nothing changes.
+      - **Delete:** `DELETE` answers 204. The game stays, so it isn't imported again.
+      - **Checked by hand** with Stockfish 19 and a real uvicorn server on a scratch database:
+        list, entry (18 moves, chances 0.52 → 0.10), notes, cause filter and delete over HTTP.
+        Another `Host` got a 400. After the delete, importing the same file again still
+        skipped the game.
 - [ ] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router
       (`#log`, `#retest`, `#patterns`), `board.js` ported from the demo's `renderBoard`. No
       `chess.js` and no other frontend dependencies.
@@ -370,7 +389,8 @@ Chess.com. Sync tests use files in `tests/fixtures/http/`.
 
 python-chess 1.11.2 uses asyncio APIs that Python 3.16 will remove. That's harmless on 3.15,
 and the warnings are filtered in `pyproject.toml`. Check for a newer python-chess before
-moving to 3.16.
+moving to 3.16. Starlette's TestClient warns that it prefers `httpx2`. `httpx`, already a
+dependency, still works, so that warning is filtered too.
 
 ## Open decisions
 
@@ -408,6 +428,16 @@ None open.
       variable in it is an error.
     - `doctor` warns (old backup, missing folder) without failing. Only problems exit 1.
     - `init` won't use the database's own folder for backups.
+- **2026-11-05: The Log's API (slice 3.1).**
+  - The server works out your winning chances for the eval bar, so the maths lives in one
+    place.
+  - The step controls get the whole game, not only the moves up to the blunder.
+  - The Log's entry doesn't include the accepted re-test moves.
+  - PATCH leaves out-or-`null` fields alone, and `other_cause: ""` clears it.
+  - The API answers only `Host: 127.0.0.1` / `localhost` (no login, so this stops DNS
+    rebinding). `/docs` is off because it loads scripts from a CDN.
+  - The demo's "Re-tested N×" count arrives with the re-test attempts in M4.
+  - (CLAUDE.md §10)
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
   repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),

@@ -135,12 +135,16 @@ def has_rows(conn: sqlite3.Connection) -> bool:
 # ---------------------------------------------------------------- connections
 
 
-def connect(path: Path, *, mode: Mode = "rw") -> sqlite3.Connection:
+def connect(path: Path, *, mode: Mode = "rw", any_thread: bool = False) -> sqlite3.Connection:
     """Open ``path`` with foreign keys on and rows as ``sqlite3.Row``. Never creates the file
-    unless ``mode`` is ``"rwc"``. Doesn't migrate: see ``open_db``."""
+    unless ``mode`` is ``"rwc"``. Doesn't migrate: see ``open_db``.
+
+    ``any_thread`` lets another thread use the connection, one thread at a time. The API
+    needs it: FastAPI may open, use and close a request's connection on different worker
+    threads."""
     uri = f"{path.resolve().as_uri()}?mode={mode}"
     try:
-        conn = sqlite3.connect(uri, uri=True, autocommit=True)
+        conn = sqlite3.connect(uri, uri=True, autocommit=True, check_same_thread=not any_thread)
     except sqlite3.Error as exc:
         raise _open_error(path, exc) from exc
     try:

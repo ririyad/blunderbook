@@ -525,6 +525,23 @@ no routes for them in v1.
 
 The list is newest first (one game's entries in move order). `cause=` matches entries where
 the cause is confirmed, or where nothing is confirmed yet and it's suggested, as in the demo.
+`status=` can be repeated (`status=solved&status=missed`), and `due=1` means due today or
+earlier.
+
+The detail's `game.moves` is the whole mainline, read again from the stored PGN, each move with
+the FEN after it. The entry carries your winning chances before and after your move
+(`chances_before` / `chances_after`, 0..1, `(1 + w) / 2` from your side, so their difference
+is the swing). The page doesn't redo the maths. It leaves out `accept_uci`, which the Log
+doesn't use.
+
+PATCH changes only the fields sent. A field that's left out or `null` stays as it is, and
+`other_cause: ""` clears it. An unknown cause, or any other field, is a 422 and nothing
+changes. It answers with the whole entry.
+
+Only requests whose `Host` is `127.0.0.1` or `localhost` are answered, so a page that points
+its own domain name at 127.0.0.1 (DNS rebinding) gets nothing. The `/docs` pages are off:
+they load scripts from a CDN. Each request opens its own connection
+(`connection.connect(any_thread=True)`).
 
 Re-test queue responses must **not** include `best_uci`, `accept_uci`, the played move or
 the lesson. Each item does carry its legal moves (`legal_uci`) for tap-to-move: they don't

@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 
@@ -297,3 +298,19 @@ def test_transaction_needs_autocommit() -> None:
     legacy = sqlite3.connect(":memory:")  # Python's legacy transaction mode
     with closing(legacy), pytest.raises(ValueError, match="autocommit"):
         connection.migrate(legacy)
+
+
+def test_any_thread_lets_another_thread_use_the_connection(db_file: Path) -> None:
+    """The API needs it: FastAPI may open, use and close a request's connection on
+    different worker threads."""
+    with closing(connection.open_db(db_file, create=True)):
+        pass
+    query = "SELECT count(*) FROM games"
+    with (
+        closing(connection.connect(db_file, any_thread=True)) as shared,
+        closing(connection.connect(db_file)) as plain,
+        ThreadPoolExecutor(1) as pool,
+    ):
+        assert pool.submit(lambda: shared.execute(query).fetchone()[0]).result() == 0
+        with pytest.raises(sqlite3.ProgrammingError):
+            pool.submit(lambda: plain.execute(query)).result()
