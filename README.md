@@ -27,7 +27,7 @@ _Last updated: 2026-11-05_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (8/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,13 +35,13 @@ _Last updated: 2026-11-05_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.9 Importer + CLI.
+**Next up:** M2.1 Connection + migrations.
 
-In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
-parsing, config.toml, Stockfish setup, PGN reading with all nine §12 fixtures, side detection,
-fingerprints, source detection, the blunder maths, engine analysis (both passes), and
-suggested causes. The working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see
-Usage).
+In place so far: all of M1. The core reads PGN, detects your side, the source and duplicates,
+analyses each game with Stockfish (both passes), and suggests causes. `blunderbook init`,
+`doctor`, `import` and `engine show|set|clear` work (see Usage). `import` prints the full
+report, but nothing is saved until M2 adds the database. All nine §12 fixtures flag their
+expected blunder under `uv run pytest -m engine`.
 
 ---
 
@@ -109,10 +109,19 @@ Each item is one small commit, with its tests in the same change. Every commit m
       `back_rank` "Time trouble" and `scholars_mate` "Missed their threat" (also against real
       Stockfish). See Open decisions 5 and 13.
       _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
-- [ ] **1.9 Importer + CLI.** `importer.py`, CLI `init` (asks for your names and the Stockfish path,
-      Enter = PATH, checked like `engine set`), `doctor` (includes the `engine show` report) and
-      `import` (prints the report and doesn't save it yet). `--stockfish` option on `import` and
-      `doctor`. Engine tests for the nine §12 fixtures (the files arrived in 1.4).
+- [x] **1.9 Importer + CLI.** `importer.py`: `prepare()` queues each game as ready, needs side,
+      duplicate (already known, or repeated in the same file) or error. `analyse()` adds the
+      engine findings and suggested causes. `summary()` prints the §9 line. CLI commands:
+      - `init` asks for your names and the Stockfish path (Enter = PATH; a bad path is asked
+        again).
+      - `doctor` checks config, names, Stockfish, analysis settings and the DB (not used yet),
+        and exits 1 on a problem.
+      - `import` prints the report: each game, its blunders with best line, refutation, swing,
+        clock and suggested causes, then the summary. It saves nothing yet. It takes `--side`,
+        `--depth` and `--stockfish`. `doctor` takes `--stockfish` too.
+
+      The nine §12 fixtures run through the whole pipeline at depth 12 with one thread (about
+      9 s). See Open decisions 14.
       _Done when_ every fixture flags its expected move under `uv run pytest -m engine`.
 
 ### M2 Storage
@@ -224,9 +233,9 @@ uses the next one.
 | Command | Does | Status |
 |---|---|---|
 | `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
-| `blunderbook init` | Create config (and the DB from M2), ask for your names and Stockfish | Planned (1.9 / M2) |
-| `blunderbook doctor [--stockfish PATH]` | Check Stockfish, DB migrations and config | Planned (1.9) |
-| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file | Planned (1.9 report / M2 saved) |
+| `blunderbook init` | Create config (and the DB from M2), ask for your names and Stockfish | Done (1.9; DB in M2) |
+| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and (from M2) the DB | Done (1.9) |
+| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and print the report | Done (1.9; saved from M2) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` | Planned (M3 / M7) |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
@@ -267,7 +276,7 @@ These are flagged against the spec and need your confirmation or a change.
 
 1. **M1/M2 boundary.** §13 puts `init` and `import` in M1, but the database is M2. The plan:
    in M1, `init` writes only the config and `import` prints its report without saving. M2 adds
-   the DB and persistence.
+   the DB and persistence. _Built this way in 1.9._
 2. **HTTP cache table.** Chess.com months are cached "by URL/ETag", but §5 has no table for
    that. The proposal is a `0002_http_cache.sql` migration in M6.
 3. **Positions and legal moves from the API.** §3 limits `chess.js` to the board editor and FEN
@@ -362,6 +371,23 @@ These are flagged against the spec and need your confirmation or a change.
       appear alongside either. `back_rank` gets both "Missed their threat" and "Time trouble".
     - **Both time rules need a `TimeControl` header,** as §7.7 says. Clocks with no time control
       still give "clock left", but no time causes.
+14. **Import details (done in 1.9).**
+    - **The same game twice in one file:** the second is a duplicate, "Same game as game 1 —
+      skipped". Games already in the DB (from M2) are "Already imported — skipped".
+    - **`--side` never overrides a name match.** It only fills games where your names match
+      neither player, or both.
+    - **Exit codes.** `import` exits 1 only when it can't run: the file can't be read, it holds
+      no games, there's no Stockfish while some game is ready, or the engine fails. In that last
+      case the games done so far are reported first. A report with needs-side games or errors
+      exits 0. `doctor` exits 1 when it finds a problem.
+    - **Engine tests use depth 12 and one thread,** so results don't depend on the machine.
+      Where §12 names the best move, the test checks it's an accepted re-test answer rather than
+      the engine's first choice. At depth 12, Stockfish 19 ranks 5. Bxf7+ first in the
+      Blackburne Shilling game, with O-O also accepted.
+    - **Some fixtures have extra real blunders.** At depth 16, Stockfish also flags 4. Nxe5 in
+      `blackburne_shilling` and 4... g6 in `legal_trap`. The tests require the §12 move, not
+      only that move.
+    - **Not in `init` yet:** the Lichess and Chess.com usernames (M6) and the backup folder (2.5).
 
 ### Decided
 

@@ -5,13 +5,17 @@ engine (1.3) · init, doctor, import (1.9) · fen (M2) · serve (M3) · sync (M6
 """
 
 import os
-from dataclasses import replace
+import sys
+from dataclasses import dataclass, replace
+from enum import StrEnum
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 import typer
 
-from blunderbook import __version__, config
-from blunderbook.core import engine
+from blunderbook import __version__, config, importer
+from blunderbook.core import engine, pgn
+from blunderbook.core.models import Color
 
 app = typer.Typer(
     name="blunderbook",
@@ -54,18 +58,14 @@ def main(
 @engine_app.command("show")
 def engine_show() -> None:
     """Show which Stockfish is used, and where that setting comes from."""
-    cfg = _load_config()
-    location = config.locate_stockfish(config=cfg, config_dir=config.config_path().parent)
-    if location.path is None or location.origin is None:
-        _fail(location.problem or config.NOT_FOUND)
-    try:
-        info = engine.probe([str(location.path)])
-    except engine.EngineError as exc:
-        _fail(f"Can't use {location.path}: {exc}")
-    typer.echo(info.name)
-    typer.echo(f"Path  {location.path}")
-    typer.echo(f"From  {config.ORIGIN_LABELS[location.origin]}")
-    _version_notes(info)
+    found = _find_engine(None, _load_config())
+    if found.problem is not None:
+        _fail(found.problem)
+    assert found.info is not None and found.path is not None and found.origin is not None
+    typer.echo(found.info.name)
+    typer.echo(f"Path  {found.path}")
+    typer.echo(f"From  {config.ORIGIN_LABELS[found.origin]}")
+    _version_notes(found.info)
 
 
 @engine_app.command("set")
@@ -104,7 +104,326 @@ def engine_clear() -> None:
     _env_override_note()
 
 
+# ---------------------------------------------------------------- init
+
+
+@app.command()
+def init() -> None:
+    """Set up config.toml: your names and where Stockfish is."""
+    path = config.config_path()
+    cfg = _load_config()
+    if path.exists():
+        typer.echo(f"Updating {path}. Press Enter to keep a value.")
+    else:
+        typer.echo(f"Creating {path}.")
+
+    typer.echo("\nYour names and usernames tell Blunderbook which side you played.")
+    raw_names = typer.prompt(
+        "Names, separated by commas",
+        default=", ".join(cfg.my_names),
+        show_default=bool(cfg.my_names),
+    )
+    names = tuple(dict.fromkeys(n.strip() for n in raw_names.split(",") if n.strip()))
+    if not names:
+        typer.echo("No names set. Every game will ask which side you played.")
+
+    typer.echo("\nStockfish: the program, or the folder you unzipped it to.")
+    stockfish_path = _ask_stockfish(cfg.stockfish_path)
+
+    saved = config.save(replace(cfg, my_names=names, stockfish_path=stockfish_path))
+    typer.echo(f"\nSaved to {saved}")
+    typer.echo("Next: blunderbook import FILE.pgn")
+
+
+def _ask_stockfish(current: str) -> str:
+    """Ask until the answer is a working Stockfish, or Enter (look on PATH)."""
+    while True:
+        raw = typer.prompt(
+            "Stockfish path (Enter = look on PATH)",
+            default=current,
+            show_default=bool(current),
+        ).strip()
+        if not raw:
+            on_path = config.locate_stockfish(config=config.Config(), env={})
+            if on_path.path is None:
+                typer.echo(
+                    "No Stockfish on PATH yet. Install Stockfish 17 or newer, then run\n"
+                    "  blunderbook engine set PATH"
+                )
+            else:
+                _report_engine(on_path.path)
+            _env_override_note()
+            return ""
+        current = ""  # a failed answer isn't offered again as the default
+        try:
+            program = config.resolve_engine_path(raw)
+        except config.EnginePathError as exc:
+            typer.echo(f"{exc}\nTry again, or press Enter to look on PATH.")
+            continue
+        try:
+            info = engine.probe([str(program)])
+        except engine.EngineError as exc:
+            typer.echo(f"Can't use {program}: {exc}\nTry again, or press Enter to look on PATH.")
+            continue
+        typer.echo(f"Found {info.name} at\n  {program}")
+        _version_notes(info)
+        _env_override_note()
+        return str(program)
+
+
+def _report_engine(path: Path) -> None:
+    try:
+        info = engine.probe([str(path)])
+    except engine.EngineError as exc:
+        typer.echo(f"Found {path} on PATH, but can't use it: {exc}")
+    else:
+        typer.echo(f"Found {info.name} on PATH at\n  {path}")
+        _version_notes(info)
+
+
+# ---------------------------------------------------------------- doctor
+
+_LABEL = 11  # column width for doctor's labels
+
+
+@app.command()
+def doctor(
+    stockfish: Annotated[
+        str | None,
+        typer.Option("--stockfish", help="Check this Stockfish instead of the configured one."),
+    ] = None,
+) -> None:
+    """Check config.toml, Stockfish and (from M2) the database."""
+    problems = 0
+    path = config.config_path()
+    try:
+        cfg = config.load(path)
+    except config.ConfigError as exc:
+        message = str(exc)  # often "Problem in <path>: ..." already
+        _row("Config", message if message.startswith("Problem") else f"Problem: {message}")
+        problems += 1
+        cfg = config.Config()
+    else:
+        _row("Config", str(path) if path.exists() else "not created yet. Run blunderbook init.")
+
+    if cfg.my_names:
+        _row("Names", ", ".join(cfg.my_names))
+    else:
+        _row("Names", "none set. Every game will ask which side you played.")
+
+    found = _find_engine(stockfish, cfg)
+    if found.problem is not None:
+        _row("Stockfish", f"Problem: {found.problem}")
+        problems += 1
+    else:
+        assert found.info is not None and found.origin is not None
+        _row("Stockfish", found.info.name)
+        _row("", str(found.path))
+        _row("", f"from {config.ORIGIN_LABELS[found.origin]}")
+        _version_notes(found.info, indent=" " * _LABEL)
+    _row(
+        "Analysis",
+        f"depth {cfg.engine_depth} \N{MIDDLE DOT} {_plural(cfg.engine_threads, 'thread')} "
+        f"\N{MIDDLE DOT} {cfg.engine_hash_mb} MB hash",
+    )
+    _row("Database", "not used yet (storage arrives in M2)")
+
+    typer.echo("")
+    if problems:
+        _fail(f"{_plural(problems, 'problem')} found.")
+    typer.echo("No problems found.")
+
+
+def _row(label: str, text: str) -> None:
+    indented = text.replace("\n", "\n" + " " * _LABEL)
+    typer.echo(f"{label:<{_LABEL}}{indented}")
+
+
+# ---------------------------------------------------------------- import
+
+
+class _Side(StrEnum):
+    white = "white"
+    black = "black"
+
+    @property
+    def color(self) -> Color:
+        return "white" if self is _Side.white else "black"
+
+
+@app.command("import")
+def import_(
+    path: Annotated[Path, typer.Argument(help="A PGN file with one or more games.")],
+    side: Annotated[
+        _Side | None,
+        typer.Option(help="Your side, for games where your names don't match a player."),
+    ] = None,
+    depth: Annotated[
+        int | None,
+        typer.Option(min=1, help="Search depth per position. Default: engine_depth."),
+    ] = None,
+    stockfish: Annotated[
+        str | None,
+        typer.Option("--stockfish", help="Use this Stockfish for this import."),
+    ] = None,
+) -> None:
+    """Import a PGN file: find your blunders with Stockfish and print the report."""
+    cfg = _load_config()
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        _fail(f"Can't read {path}: {exc.strerror or exc}")
+    decoded = pgn.decode(data)
+    if decoded.encoding == "cp1252":
+        typer.echo("Read as Windows-1252 (the file isn't UTF-8).")
+    my_side: Color | None = None if side is None else side.color
+    queue = importer.prepare(decoded.text, _all_names(cfg), side=my_side)
+    if not queue:
+        _fail(f"No games found in {path}.")
+
+    ready = [q for q in queue if q.status == "ready"]
+    analysed: dict[int, importer.AnalysedGame] = {}
+    if ready:
+        found = _find_engine(stockfish, cfg, probe=False)
+        if found.problem is not None:
+            _fail(f"Can't analyse: {found.problem}")
+        assert found.path is not None
+        use_depth = depth or cfg.engine_depth
+        try:
+            with engine.Engine.open(
+                [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
+            ) as sf:
+                typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
+                _version_notes(sf.info)
+                for k, queued in enumerate(ready, start=1):
+                    progress = _Progress(f"Game {queued.number} ({k} of {len(ready)})")
+                    analysed[queued.number] = importer.analyse(
+                        queued, sf, depth=use_depth, thresholds=cfg.thresholds, progress=progress
+                    )
+                    progress.done()
+        except engine.EngineError as exc:
+            _print_report(queue, analysed)
+            _fail(f"Analysis stopped: {exc}")
+
+    _print_report(queue, analysed)
+
+
+def _all_names(cfg: config.Config) -> list[str]:
+    return [*cfg.my_names, cfg.lichess.username, cfg.chesscom.username]
+
+
+def _print_report(
+    queue: tuple[importer.QueuedGame, ...], analysed: dict[int, importer.AnalysedGame]
+) -> None:
+    for queued in queue:
+        typer.echo("")
+        typer.echo(_game_heading(queued))
+        for warning in queued.warnings:
+            typer.echo(f"  Note: {warning}")
+        if queued.status in ("error", "duplicate"):
+            typer.echo(f"  {queued.reason}")
+        elif queued.status == "needs_side":
+            typer.echo("  Which side were you? Run again with --side white or --side black,")
+            typer.echo("  or add your name to my_names in config.toml.")
+        elif queued.number in analysed:
+            _print_blunders(analysed[queued.number])
+        else:
+            typer.echo("  Not analysed.")
+    typer.echo("")
+    typer.echo(importer.summary(queue, analysed.values(), "found"))
+    if analysed:
+        typer.echo("Nothing was saved: storage arrives in M2.")
+
+
+def _game_heading(queued: importer.QueuedGame) -> str:
+    parts = [f"Game {queued.number}", queued.players]
+    if queued.date:
+        parts.append(queued.date)
+    if queued.source is not None:
+        parts.append(queued.source.label)
+    if queued.side is not None:
+        chosen = " (from --side)" if queued.side_from == "option" else ""
+        parts.append(f"you played {queued.side.capitalize()}{chosen}")
+    return " \N{MIDDLE DOT} ".join(parts)
+
+
+def _print_blunders(result: importer.AnalysedGame) -> None:
+    if not result.blunders:
+        typer.echo("  No blunders found.")
+        return
+    game = result.queued.game
+    assert game is not None
+    if not game.has_clocks:
+        typer.echo("  No clock times in this PGN.")
+    for blunder in result.blunders:
+        f, h = blunder.finding, blunder.hints
+        typer.echo(f"  {f.ply.label}??  Best was {f.best_san}: {f.best_line_san}")
+        if f.refutation_san:
+            typer.echo(f"      Refutation: {f.refutation_san}")
+        details = [f"Swing {f.swing:.2f}"]
+        if h.clock_left_s is not None:
+            details.append(f"{_seconds(h.clock_left_s)} left")
+        if h.time_spent_s is not None:
+            details.append(f"{_seconds(h.time_spent_s)} on the move")
+        typer.echo("      " + " \N{MIDDLE DOT} ".join(details))
+        if h.causes:
+            typer.echo(f"      Suggested: {', '.join(h.causes)}")
+
+
+def _seconds(value: float) -> str:
+    whole = int(value)
+    if whole >= 60:
+        return f"{whole // 60}:{whole % 60:02d}"
+    return f"{value:g} s"
+
+
+class _Progress:
+    """Positions done / total, redrawn on one line when the output is a terminal."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.live = sys.stderr.isatty()
+
+    def __call__(self, done: int, total: int) -> None:
+        if self.live:
+            sys.stderr.write(f"\r{self.label}: {100 * done // total}%")
+            sys.stderr.flush()
+
+    def done(self) -> None:
+        if self.live:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
+
+
 # ---------------------------------------------------------------- helpers
+
+
+@dataclass(frozen=True, slots=True)
+class _FoundEngine:
+    path: Path | None = None
+    origin: config.Origin | None = None
+    info: engine.EngineInfo | None = None
+    problem: str | None = None
+
+
+def _find_engine(flag: str | None, cfg: config.Config, *, probe: bool = True) -> _FoundEngine:
+    """Locate Stockfish (same lookup everywhere) and, with ``probe``, check it runs."""
+    location = config.locate_stockfish(flag, cfg, config_dir=config.config_path().parent)
+    if location.path is None or location.origin is None:
+        return _FoundEngine(problem=location.problem or config.NOT_FOUND)
+    if not probe:
+        return _FoundEngine(location.path, location.origin)
+    try:
+        info = engine.probe([str(location.path)])
+    except engine.EngineError as exc:
+        return _FoundEngine(
+            location.path, location.origin, problem=f"Can't use {location.path}: {exc}"
+        )
+    return _FoundEngine(location.path, location.origin, info)
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
 def _load_config() -> config.Config:
@@ -119,14 +438,16 @@ def _fail(message: str) -> NoReturn:
     raise typer.Exit(1)
 
 
-def _version_notes(info: engine.EngineInfo) -> None:
+def _version_notes(info: engine.EngineInfo, indent: str = "") -> None:
     if info.outdated:
         typer.echo(
-            f"Note: Blunderbook expects Stockfish {engine.MIN_STOCKFISH_MAJOR} or newer. "
-            "Older versions can judge positions differently."
+            f"{indent}Note: Blunderbook expects Stockfish {engine.MIN_STOCKFISH_MAJOR} or "
+            "newer. Older versions can judge positions differently."
         )
     elif info.dev_build:
-        typer.echo("Note: this looks like a development build, so its version can't be checked.")
+        typer.echo(
+            f"{indent}Note: this looks like a development build, so its version can't be checked."
+        )
 
 
 def _env_override_note() -> None:
