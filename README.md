@@ -30,22 +30,21 @@ _Last updated: 2026-11-05_
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | In progress (2/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
+| M3 API + Log view | In progress (3/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M3.3 Log view.
+**Next up:** M3.4 `serve`.
 
-In place so far: all of M1 and M2, and M3.1–3.2. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1 and M2, and M3.1–3.3. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
 the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
 position you have no PGN of. The database is backed up once a day before `import` and `fen`,
 and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
-checks it and the backups. The JSON API for the Log (list, one entry with its game, notes,
-delete) and the web page's shell (header, tabs, Re-test badge, board renderer) are built. The
-views themselves and the `serve` command come next (3.3–3.4). All nine §12 fixtures flag
-their expected blunder under `uv run pytest -m engine`.
+checks it and the backups. The web page's Log view is built: browse your entries, step
+through the game, confirm causes and write your notes. There's no `serve` command to open it
+yet (3.4). All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -277,9 +276,43 @@ Each item is one small commit, with its tests in the same change. Every commit m
       - **Checked by hand** with headless Chrome against a scratch database: the header, the
         tabs and a badge of 1. Boards from both sides with the Elephant's red and green arrows,
         and 64 labelled buttons. The shell at 390 px.
-- [ ] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
+- [x] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
       Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes. The
       empty state says "Import a PGN with `blunderbook import FILE.pgn`". No "Add games" button.
+      - **List:** newest first. Each row has its mark (`??` / `?` / `?!`), status pill, source
+        tag, opponent, time control and date. Filters:
+        - source;
+        - status ("Due for re-test" means due and re-tested before, as in the demo);
+        - cause.
+      - **Detail:** opens on the position before your move.
+        - The board has a red arrow for your move and the best move in green (toggle).
+        - The step controls go through the whole game, with labels like "After 6... Nxd5".
+        - Then I played / Best was, the eval bar (your winning chances from the API), the
+          details grid and the "No clock times" note.
+      - **Your part:** cause chips, with suggestions dashed and tagged AUTO. Confirming
+        "Other" shows a box for what it was. Then the "What I was thinking" and "Lesson"
+        boxes, the re-test status, and "Delete this entry", which asks first.
+      - **Saving:** text after a 400 ms pause, causes at once, one save at a time.
+        - Unsaved text goes out before you switch entries, and when the page closes.
+        - A failed save says so in red and tries again when you type.
+        - `#log/12` opens entry 12, and picking an entry updates it.
+      - **Modules:**
+        - `views/log.js` is the view.
+        - `format.js` holds pure helpers: evals, clocks, dates, Win / Draw / Loss.
+        - `causes.js` is the fixed list, and a test checks it against `CAUSES`.
+      - **Tests:** `test_web.py` checks that every field `log.js` reads exists in the API's
+        schemas, that every `/api` path it calls exists, and that no HTML in the scripts uses
+        `onclick=`.
+      - **Checked by hand** in headless Chrome, driven over the DevTools protocol, with seven
+        real Stockfish entries:
+        - Lichess, PGN, OTB and a FEN-entry inaccuracy, from both sides.
+        - Stepping to the end of the game, and the best-move arrow.
+        - Confirming causes and "Other"; notes saved, including when you switch entries
+          before the pause; still there after a reload.
+        - Every filter, and delete with the badge going 7 → 6.
+        - A failed save shows its message.
+        - A note holding `</textarea><script>` stayed plain text.
+        - No sideways scroll at 390 px.
 - [ ] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
       _Done when_ you can browse and annotate imported blunders.
 
@@ -472,6 +505,17 @@ None open.
     PGN or a note can't run as code. Views never use inline scripts or `onclick=`.
   - `.js` is always sent as `text/javascript`, whatever the Windows registry says.
   - (CLAUDE.md §4, §11)
+- **2026-11-05: The Log view (slice 3.3).** Where it differs from the demo:
+  - The step controls go through the whole game, not only up to your move. Positions are
+    labelled "After 4. Bg5" rather than "Move 7 of the game".
+  - Each entry shows its own mark (`??`, `?`, `?!`), since FEN entries can be mistakes or
+    inaccuracies.
+  - "Delete this entry", which asks first: the API has it, and the page is the only place to
+    use it.
+  - A text box for "Other" (`other_cause`).
+  - Dates show the year when it isn't this year.
+  - "Re-test this one now" and "Re-tested N×" come with M4.
+  - (CLAUDE.md §11, §12)
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
   repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),

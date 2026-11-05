@@ -8,8 +8,11 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from blunderbook.api.app import CONTENT_SECURITY_POLICY, WEB, create_app
+from blunderbook.api.schemas import EntryOut, EntrySummary, GameOut, MoveOut
+from blunderbook.core.models import CAUSES
 
 URL = "http://127.0.0.1"
 WEB_FILES = sorted(p for p in WEB.rglob("*") if p.is_file())
@@ -124,3 +127,59 @@ def test_other_hosts_get_no_page(db_file: Path) -> None:
     with TestClient(create_app(db_file), base_url="http://evil.example") as other:
         assert other.get("/").status_code == 400
         assert other.get("/js/app.js").status_code == 400
+
+
+# ---------------------------------------------------------------- the Log view (3.3)
+
+LOG_JS = WEB / "js" / "views" / "log.js"
+
+
+def test_cause_list_matches_the_core() -> None:
+    """The page's chips and filter use the same fixed list, in the same order (§5)."""
+    text = (WEB / "js" / "causes.js").read_text("utf-8")
+    body = text[text.index("[") : text.index("]")]
+    assert tuple(re.findall(r'"([^"]+)"', body)) == CAUSES
+
+
+def fields_read(pattern: str) -> set[str]:
+    return set(re.findall(pattern, LOG_JS.read_text("utf-8")))
+
+
+@pytest.mark.parametrize(
+    ("pattern", "model"),
+    [
+        (r"\b(?:e|entry)\.(\w+)", EntryOut),
+        (r"\b(?:g|e\.game)\.(\w+)", GameOut),
+        (r"\bitem\.(\w+)", EntrySummary),
+        (r"\bm\.(\w+)", MoveOut),
+    ],
+    ids=["entry", "game", "summary", "move"],
+)
+def test_log_reads_only_fields_the_api_sends(pattern: str, model: type[BaseModel]) -> None:
+    """There's no JavaScript test runner, so this catches a misspelt field (a blank cell)."""
+    used = fields_read(pattern)
+    assert used, "the pattern found nothing"
+    assert used <= set(model.model_fields), used - set(model.model_fields)
+
+
+def test_page_calls_only_routes_that_exist(db_file: Path) -> None:
+    routes = set(create_app(db_file).openapi()["paths"])  # "/api/blunders/{blunder_id}", ...
+    for path in JS_FILES:
+        for called in re.findall(r"""["'`](/api/[a-z/]+)""", path.read_text("utf-8")):
+            assert called.rstrip("/") in routes or called.rstrip("/") + "/{blunder_id}" in routes, (
+                served(path),
+                called,
+            )
+
+
+def test_no_inline_handlers_in_scripts() -> None:
+    """HTML built in JavaScript can't use onclick= either: the CSP blocks it."""
+    for path in JS_FILES:
+        assert not re.search(r"<[^>]*\son[a-z]+\s*=", path.read_text("utf-8")), served(path)
+
+
+def test_log_empty_state_points_to_the_cli() -> None:
+    text = LOG_JS.read_text("utf-8")
+    assert "Import a PGN with <code>blunderbook import FILE.pgn</code>." in text
+    assert "Add games" not in text
+    assert "No blunders match these filters." in text  # the demo's copy

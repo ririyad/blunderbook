@@ -114,6 +114,8 @@ blunderbook/
 │       ├── js/app.js          # router (hash-based: #log, #retest, #patterns)
 │       ├── js/api.js          # fetch helper: JSON in and out, the server's error message
 │       ├── js/ui.js           # esc(), toast, the error line
+│       ├── js/format.js       # pure display helpers: evals, clocks, dates, results
+│       ├── js/causes.js       # the fixed cause list (a test checks it against CAUSES)
 │       ├── js/board.js        # board renderer (ported from the demo)
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
@@ -582,6 +584,15 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   textareas with autosave (debounced PATCH, "Saved" message), and the re-test status.
   Step controls use the per-ply FENs from the API. The empty state says "Import a PGN with
   `blunderbook import FILE.pgn`".
+  - The step controls go through the whole game. The panel opens on the position before your
+    move.
+  - Each entry shows its own mark: `??`, `?` or `?!`.
+  - Confirming "Other" shows a text box for `other_cause`.
+  - "Delete this entry" asks first. The game stays, so the entry won't come back on import.
+  - Saving: text saves after a 400 ms pause in typing, causes at once, one save at a time in
+    order. Unsaved text is sent before you switch entries, and when the page closes
+    (`keepalive`). A failed save says so in red and keeps the text for the next try.
+  - Picking an entry sets `#log/<id>` with `replaceState`, so it doesn't add to the history.
 - **Re-test:** board facing my side, "White/Black to move — find the best move", tap a piece
   then tap a square (only the legal moves from the API), "Show a hint" (from-square), "I don't
   know — show me". The result panel shows solved or missed, the best line, what I played in
@@ -637,6 +648,16 @@ Design language (from the demo and the paper template):
   hint rules (with a stubbed engine), patterns aggregation.
 - API tests with FastAPI `TestClient` and a temp DB. Assert that the re-test queue never
   leaks the answer.
+- The page has no JavaScript test runner. `tests/test_web.py` checks its files without
+  running them:
+  - every `import` resolves;
+  - every field a view reads is in the API's schemas;
+  - every `/api` path it calls exists;
+  - the JS cause list matches `CAUSES`;
+  - no inline scripts or `on…=` handlers.
+
+  Check views by hand in a browser. When checking JS syntax with Node, check `.mjs` copies:
+  Node may not parse a `.js` file as a module.
 - Sync adapter tests use recorded HTTP fixtures (httpx `MockTransport`).
 
 ---
