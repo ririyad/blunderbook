@@ -31,22 +31,22 @@ _Last updated: 2026-11-05_
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
-| M4 Re-test + Patterns | In progress (2/4) | Scheduling, attempts, hints, both views |
+| M4 Re-test + Patterns | In progress (3/4) | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M4.3 Patterns.
+**Next up:** M4.4 Re-test and Patterns views.
 
-In place so far: all of M1, M2 and M3, and M4.1–4.2. `blunderbook import` reads a PGN file, finds your
-blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
-the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
-position you have no PGN of. The database is backed up once a day before `import` and `fen`,
-and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
-checks it and the backups. `blunderbook serve` opens the web page on this computer: browse
-your entries, step through the game, confirm causes and write your notes. The re-test API
-serves the due positions, checks your moves and reschedules them; the Re-test and Patterns
-pages arrive with the rest of M4. All nine §12 fixtures flag their expected blunder under
-`uv run pytest -m engine`.
+In place so far: all of M1, M2 and M3, and M4.1–4.3. `blunderbook import` reads a PGN file,
+finds your blunders with Stockfish (both passes), suggests causes, and saves each game and its
+entries to the database. Importing the same file again adds nothing. `blunderbook fen` logs a
+single position you have no PGN of. The database is backed up once a day before `import` and
+`fen`, and `blunderbook backup` / `restore` work by hand. `init` creates the database and
+`doctor` checks it and the backups. `blunderbook serve` opens the web page on this computer:
+browse your entries, step through the game, confirm causes and write your notes. The re-test
+API serves the due positions, checks your moves and reschedules them, and `/api/patterns`
+counts causes and re-tests; the Re-test and Patterns pages arrive in 4.4. All nine §12 fixtures
+flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -354,8 +354,11 @@ Each item is one small commit, with its tests in the same change. Every commit m
       entry for "Practise all anyway". An attempt must be a legal move (a bare `e7e8` promotes to
       a queen); it's recorded in `retest_attempts` and rescheduled in one transaction, then the
       answer comes back. Shared route helpers moved to `api/common.py`.
-- [ ] **4.3 Patterns.** `core/patterns.py` (confirmed vs suggested counts, tiles, by speed/source,
+- [x] **4.3 Patterns.** `core/patterns.py` (confirmed vs suggested counts, tiles, by speed/source,
       biggest leak) and `GET /api/patterns`.
+      Causes come back in the fixed cause order (CLAUDE.md §5), not sorted by count as the demo
+      does; a tied biggest leak goes to the earlier cause. The response also has the re-test
+      history (re-tested entries, most recent first, with their number of tries).
 - [ ] **4.4 Views.** Re-test (tap to move, hint, "I don't know", result panel, empty state) and
       Patterns (tiles, solid/striped bars, insight line).
 

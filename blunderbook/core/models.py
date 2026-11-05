@@ -320,6 +320,14 @@ class Attempt:
 
 
 @dataclass(frozen=True, slots=True)
+class AttemptStats:
+    """How often an entry was re-tested, and when last."""
+
+    count: int
+    last_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class SavedIds:
     """The ids a saved game and its entries got, entries in the order they were given."""
 

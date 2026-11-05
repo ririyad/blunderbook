@@ -175,3 +175,55 @@ class AttemptOut(BaseModel):
 
 class HintOut(BaseModel):
     from_square: str  # "e2": where the best move starts
+
+
+# ---------------------------------------------------------------- patterns
+
+
+class CauseCountOut(BaseModel):
+    cause: str
+    confirmed: int  # solid bar: entries where you confirmed it
+    suggested: int  # striped bar: suggested on entries with nothing confirmed yet
+
+
+class SourceCountOut(BaseModel):
+    source: Source
+    count: int
+
+
+class SpeedCountOut(BaseModel):
+    speed: Speed | None  # null: the time control is unknown
+    count: int
+
+
+class RetestedOut(BaseModel):
+    id: int
+    move_no: int
+    my_color: Color
+    played_san: str
+    judgment: Judgment
+    opponent: str | None
+    status: Status
+    due_on: date
+    attempts: int
+    last_attempted_at: datetime
+
+
+class PatternsOut(BaseModel):
+    """The Patterns page (CLAUDE.md §7.9)."""
+
+    total: int
+    by_source: list[SourceCountOut]  # sources with entries, in a fixed order
+    due: int  # due today or earlier, new ones included
+    retests_done: int
+    retested: int  # entries re-tested at least once
+    solved: int  # of those, currently solved
+    solved_pct: int | None  # null before the first re-test
+    timed: int  # entries with the time spent on the move
+    fast: int  # of those, played in 3 s or less
+    with_clock: int  # entries with the clock left
+    low_clock: int  # of those, under 30 s left
+    causes: list[CauseCountOut]  # causes that occur, in the fixed cause order
+    biggest_leak: str | None
+    by_speed: list[SpeedCountOut]  # fastest first, unknown last
+    history: list[RetestedOut]  # most recently re-tested first

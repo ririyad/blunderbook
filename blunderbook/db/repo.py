@@ -4,7 +4,7 @@ Every value is a query parameter. Column lists are built from the constant tuple
 never from input. Writes that belong together share one ``transaction()``.
 
 Timestamps are stored as ISO-8601 UTC (``2026-11-05T09:30:00+00:00``), dates you see as
-local ``YYYY-MM-DD``. Sync state and Patterns arrive with M4 and M5.
+local ``YYYY-MM-DD``. Sync state arrives with M5.
 """
 
 import json
@@ -18,6 +18,7 @@ from blunderbook.core.models import (
     CAUSES,
     AnalysisStatus,
     Attempt,
+    AttemptStats,
     Blunder,
     Color,
     Entry,
@@ -372,6 +373,17 @@ def list_attempts(conn: sqlite3.Connection, blunder_id: int) -> list[Attempt]:
         )
         for r in rows
     ]
+
+
+def attempt_stats(conn: sqlite3.Connection) -> dict[int, AttemptStats]:
+    """Each re-tested entry's number of tries and the time of the last, by entry id."""
+    rows = conn.execute(
+        "SELECT blunder_id, count(*) AS n, max(attempted_at) AS last_at"
+        " FROM retest_attempts GROUP BY blunder_id"
+    )
+    return {
+        r["blunder_id"]: AttemptStats(r["n"], datetime.fromisoformat(r["last_at"])) for r in rows
+    }
 
 
 def next_due_after(conn: sqlite3.Connection, day: date) -> date | None:
