@@ -23,7 +23,8 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
    "What I was thinking" or "Lesson", and never confirms a cause on the user's behalf.
 3. **Local-first and private.** All data lives in one SQLite file on the user's machine.
    No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, and
-   only when the user runs a sync.
+   only when the user runs a sync. Backups are local files too: the app never uploads them.
+   For an off-site copy, the user points the backup folder at a folder their cloud drive syncs.
 4. **Degrade gracefully.** Missing headers, ratings or clock times are normal (OTB games,
    typed-up score sheets). Show "—", skip the features that need the missing data, never fail
    the import.
@@ -82,7 +83,8 @@ blunderbook/
 │   ├── db/
 │   │   ├── connection.py      # sqlite3 connection, PRAGMAs, migration runner
 │   │   ├── migrations/        # 0001_init.sql, 0002_....sql (forward-only)
-│   │   └── repo.py            # all SQL lives here; returns dataclasses
+│   │   ├── backup.py          # VACUUM INTO snapshots, rotation, restore (see §6 [backup])
+│   │   └── repo.py            # all data SQL lives here; returns dataclasses
 │   ├── core/                  # pure logic, no I/O except the engine wrapper
 │   │   ├── pgn.py             # split multi-game text, parse headers/moves/clocks
 │   │   ├── timecontrol.py     # parse TimeControl, classify speed
@@ -133,6 +135,9 @@ or analysis code: the backend replaces those.
 
 All timestamps are ISO-8601 UTC strings. Dates the user sees (game date, due date) are
 local `YYYY-MM-DD`. Use `PRAGMA foreign_keys = ON` and `journal_mode = WAL`.
+`PRAGMA user_version` holds the number of the last applied migration. Opening a database
+with a higher number than the app knows fails with a plain message ("made by a newer
+Blunderbook"). It never runs against it.
 
 ```sql
 CREATE TABLE games (
@@ -254,6 +259,11 @@ token = ""                            # optional personal token; never commit, n
 [chesscom]
 username = ""
 contact = ""                          # used in the User-Agent header Chess.com asks for
+
+[backup]
+dir = ""                              # empty = <data folder>/backups; may be a synced folder
+keep = 14                             # newest backups kept (1 or more)
+auto = true                           # back up once a day before commands that change data
 ```
 
 Never print the Lichess token, never write it to the DB, and redact it from error messages.
@@ -269,6 +279,28 @@ quotes, `~` and env vars. A relative `stockfish_path` is relative to the config 
 folder is searched, plus one level down, for a single `stockfish*` program (the unzipped
 release). The program must identify as Stockfish over UCI. Older than 17 gives a warning, not
 an error. `blunderbook engine set` checks a path before saving it.
+
+**Backups** (`db/backup.py`):
+- **Snapshot.** Use `VACUUM INTO`, never a file copy: with WAL, recent changes can sit in
+  `-wal`. Write the snapshot to a temp file in the data folder and pass `PRAGMA
+  integrity_check`. Then copy it into the backup folder as
+  `blunderbook-YYYY-MM-DD_HHMMSSZ[-reason].db.partial` (UTC) and rename it to `.db`. Close
+  every connection (`contextlib.closing`).
+- **Rotation.** Delete only files whose names match that generated pattern, oldest first,
+  beyond `keep`. Never touch other files in the folder. Rotate only after the new backup
+  succeeded.
+- **Automatic.** If `auto` is on, back up before a command that changes data (`serve` start,
+  `import`, `fen`, `sync`) when the newest backup is over 24 h old. Read that age from the file
+  names. A failed automatic backup prints one warning and never blocks the command. Always back
+  up before migrating a database that has data (`-pre-migrate`).
+- **Restore.** Check the file's integrity and that its `user_version` isn't newer than the app.
+  Back up the current DB (`-pre-restore`). Then copy the file in with SQLite's backup API
+  (`Connection.backup`), never by replacing the file (a stale `-wal` would corrupt it), and
+  migrate.
+- **What's not included.** Backups hold the DB only. config.toml (and the token) is never
+  backed up. On a new computer, run `init`, then `restore`.
+- **Folder.** The live DB never goes in a synced folder; only backups do. `backup.dir` accepts
+  quotes, `~` and env vars, like `stockfish_path`.
 
 ---
 
@@ -391,8 +423,8 @@ They return **PGN text only**. The importer does everything else.
 
 | Command | Does |
 |---|---|
-| `init` | Create config and DB, ask for names and the Stockfish path (Enter = PATH), check Stockfish. |
-| `doctor [--stockfish PATH]` | Check Stockfish path and version, DB migrations, config sanity. |
+| `init` | Create config and DB, ask for names, the Stockfish path (Enter = PATH) and the backup folder (suggests `%OneDrive%\Blunderbook` when set; Enter = local default), check Stockfish. |
+| `doctor [--stockfish PATH]` | Check Stockfish path and version, DB integrity and schema version, last backup (warns after 7 days or if the folder is missing), config sanity. Reports only; changes nothing. |
 | `engine show` | Which Stockfish is used, its version, and where the setting came from. |
 | `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
 | `engine clear` | Set `stockfish_path = ""` (look on PATH again). |
@@ -401,6 +433,8 @@ They return **PGN text only**. The importer does everything else.
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
+| `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
+| `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. Asks to confirm and that the web app is stopped. |
 
 Every command prints a short, readable summary, e.g.
 `2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.
@@ -519,8 +553,9 @@ Design language (from the demo and the paper template):
 
 1. **Core:** repo scaffold, config, `core/` modules, engine wrapper, `importer.py`, CLI
    `init/doctor/import`. Done when all §12 fixtures give the expected blunders.
-2. **Storage:** migrations, `repo.py`, dedupe, `fen` command, import report. Done when
-   importing the same file twice adds nothing.
+2. **Storage:** migrations, `repo.py`, dedupe, `fen` command, import report, backup and
+   restore. Done when importing the same file twice adds nothing, and backup → change →
+   restore gives back the old data.
 3. **API + Log view:** FastAPI app, blunder routes, frontend shell plus Log view ported
    from the demo, autosave notes.
 4. **Re-test + Patterns:** scheduling, attempt and hint endpoints, both views.
@@ -543,7 +578,8 @@ default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
   "Next up", and move any resolved Open decisions out.
 - Write or update tests in the same change as the code.
 - Keep `core/` pure and typed (mypy strict). I/O belongs in `db/`, `sources/`, `api/` and `cli.py`.
-- All SQL goes in `db/repo.py`. Use parameterized queries only.
+- All data SQL goes in `db/repo.py`. Maintenance SQL (PRAGMAs, migrations, `VACUUM INTO`,
+  the backup API) lives in `db/connection.py` and `db/backup.py`. Use parameterized queries only.
 - Never call Lichess or Chess.com in tests or during development runs unless explicitly asked.
 - Don't add dependencies, frameworks or a frontend build step without asking.
 - Don't "improve" the product rules in §7 silently. If a rule looks wrong, flag it and

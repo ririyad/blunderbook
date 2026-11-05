@@ -28,7 +28,7 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | In progress (5/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
+| M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Import view + jobs | Not started | Background jobs, side selection, FEN quick entry UI |
@@ -104,13 +104,20 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ### M2 Storage
 
 - [ ] **2.1 Connection + migrations.** `db/connection.py` (WAL, foreign keys, forward-only runner),
-      `0001_init.sql` from §5. _Done when_ running migrations twice is a no-op.
+      `0001_init.sql` from §5. `PRAGMA user_version` records the last migration. A DB made by a
+      newer app is refused. _Done when_ running migrations twice is a no-op.
 - [ ] **2.2 Repository.** `db/repo.py`: all SQL lives here, parameterised, returns dataclasses.
 - [ ] **2.3 Persisting imports.** Importer saves games and blunders, dedupes by fingerprint,
       supports `--side`, and prints the summary line. `init` creates the DB.
       _Done when_ importing the same file twice adds nothing.
 - [ ] **2.4 `fen` command.** Synthetic `source='fen'` game row. Logs the move with its judgment,
       even below the blunder line. Takes `--stockfish` too.
+- [ ] **2.5 Backup + restore.** `db/backup.py` (CLAUDE.md §6 Backups), `[backup]` in config.toml,
+      `backup [--to FOLDER]` and `restore FILE` commands. A daily automatic backup runs before
+      `import` and `fen`, and a safety copy before migrations and restores. `init` asks for the
+      folder (suggests OneDrive when it's set up), and `doctor` shows the last backup.
+      _Done when_ backup → change → restore gives back the old data, a corrupt or newer-schema
+      file is refused, and rotation never deletes a file you named yourself.
 
 ### M3 API + Log view
 
@@ -120,7 +127,8 @@ Each item is one small commit, with its tests in the same change. Every commit m
       ported from the demo's `renderBoard`, vendored `chess.js` (version and licence recorded).
 - [ ] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
       Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes.
-- [ ] **3.4 `serve`.** Binds to `127.0.0.1` only. _Done when_ you can browse and annotate imported blunders.
+- [ ] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
+      _Done when_ you can browse and annotate imported blunders.
 
 ### M4 Re-test + Patterns
 
@@ -152,7 +160,8 @@ Each item is one small commit, with its tests in the same change. Every commit m
       clocks and openings, optional token (never logged), backs off on 429.
 - [ ] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent,
       past months cached by URL/ETag.
-- [ ] **6.4 Wiring.** `sync` command, `sync_state` updates, `POST /api/sync/{source}`, Sync buttons.
+- [ ] **6.4 Wiring.** `sync` command (runs the daily backup check), `sync_state` updates,
+      `POST /api/sync/{source}`, Sync buttons.
       _Done when_ a failed sync records `last_error` and leaves existing data untouched.
 
 ### M7 Print + polish
@@ -161,7 +170,9 @@ Each item is one small commit, with its tests in the same change. Every commit m
       and `print --ids / --due --out`.
 - [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
 - [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
-      ending with `blunderbook engine set <program or folder>`.
+      ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
+      section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
+      aren't in backups).
 
 **Later (not v1):** opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile PWA.
 
@@ -206,6 +217,8 @@ uses the next one.
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` | Planned (M3 / M7) |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
 | `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M7) |
+| `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Planned (2.5) |
+| `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Planned (2.5) |
 
 ## Development
 
@@ -301,3 +314,16 @@ These are flagged against the spec and need your confirmation or a change.
   over encoding. (CLAUDE.md §7.1)
 - **2026-11-04: Stockfish lookup and Python 3.15+.** See Usage and Requirements.
   (CLAUDE.md §3, §6)
+- **2026-11-05: Backups (slice 2.5).**
+  - **How a backup is made.** A verified `VACUUM INTO` snapshot, never a plain file copy, which
+    could miss changes still in the WAL. It's written locally first, then copied into the
+    backup folder and renamed, so a sync client never sees a half-written file. The last 14 are
+    kept.
+  - **When.** Automatically once a day before commands that change data, and always before a
+    migration or a restore.
+  - **Where.** By default a local `backups` folder. Point `backup.dir` at a synced folder (for
+    example OneDrive) for an off-site copy. The live DB never goes there.
+  - **Restore** uses SQLite's backup API, so there are no `-wal`/`-shm` files to clean up.
+  - **What's not in it.** Backups don't include config.toml or the token. There's no `.dump`
+    text copy.
+  - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
