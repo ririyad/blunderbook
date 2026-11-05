@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blunderbook</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Blunderbook</h1><span>Your mistake library, built from any game you play</span></div>
+    <nav class="tabs" aria-label="Sections">
+      <a class="tab" href="#log" data-view="log">Log</a>
+      <a class="tab" href="#retest" data-view="retest">Re-test <span class="badge" id="dueBadge" hidden></span></a>
+      <a class="tab" href="#patterns" data-view="patterns">Patterns</a>
+    </nav>
+  </header>
+  <p class="err" id="appError" role="alert" hidden></p>
+
+  <section class="view" id="view-log" aria-label="Log"></section>
+  <section class="view" id="view-retest" aria-label="Re-test"></section>
+  <section class="view" id="view-patterns" aria-label="Patterns"></section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

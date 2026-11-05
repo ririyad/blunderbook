@@ -30,21 +30,22 @@ _Last updated: 2026-11-05_
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | In progress (1/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
+| M3 API + Log view | In progress (2/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M3.2 Web shell.
+**Next up:** M3.3 Log view.
 
-In place so far: all of M1 and M2, and M3.1. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1 and M2, and M3.1–3.2. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
 the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
 position you have no PGN of. The database is backed up once a day before `import` and `fen`,
 and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
 checks it and the backups. The JSON API for the Log (list, one entry with its game, notes,
-delete) is built and tested, but there's no web page or `serve` command yet (3.2–3.4). All
-nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
+delete) and the web page's shell (header, tabs, Re-test badge, board renderer) are built. The
+views themselves and the `serve` command come next (3.3–3.4). All nine §12 fixtures flag
+their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -248,9 +249,34 @@ Each item is one small commit, with its tests in the same change. Every commit m
         list, entry (18 moves, chances 0.52 → 0.10), notes, cause filter and delete over HTTP.
         Another `Host` got a 400. After the delete, importing the same file again still
         skipped the game.
-- [ ] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router
+- [x] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router
       (`#log`, `#retest`, `#patterns`), `board.js` ported from the demo's `renderBoard`. No
       `chess.js` and no other frontend dependencies.
+      - **Page:** the demo's header and its CSS, without the Import view, "+ Add games", sync
+        and the demo note. The tabs are links. The Re-test badge counts entries due today or
+        earlier (new ones too) and is hidden at 0. A problem reaching the API shows as one red
+        line above the views. The three views are placeholders for now.
+      - **`js/`:**
+        - `app.js` is the router. `#log/12` gives the view `12`, and an unknown route goes to
+          the Log.
+        - `api.js` does fetch and JSON, and passes on the server's message.
+        - `ui.js` has `esc()`, the toast and the error line.
+        - `board.js` draws a FEN from either side, with highlights, red and green arrows, and
+          buttons labelled "e4 white pawn" when it's interactive.
+      - **Served by the app:** `web/` at `/`, after the API routes, with a Content-Security-
+        Policy that allows only the page's own files, plus `no-cache` and `nosniff`. `.js` is
+        always sent as `text/javascript`. The wheel includes `web/`.
+      - **Tests** (`test_web.py`):
+        - every file is served with its type and the headers;
+        - nothing loads from another site;
+        - no inline scripts;
+        - every `import` names a file that exists;
+        - the §11 palette is in the CSS;
+        - `/api` still comes first;
+        - other hosts get a 400.
+      - **Checked by hand** with headless Chrome against a scratch database: the header, the
+        tabs and a badge of 1. Boards from both sides with the Elephant's red and green arrows,
+        and 64 labelled buttons. The shell at 390 px.
 - [ ] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
       Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes. The
       empty state says "Import a PGN with `blunderbook import FILE.pgn`". No "Add games" button.
@@ -438,6 +464,14 @@ None open.
     rebinding). `/docs` is off because it loads scripts from a CDN.
   - The demo's "Re-tested N×" count arrives with the re-test attempts in M4.
   - (CLAUDE.md §10)
+- **2026-11-05: The page shell (slice 3.2).**
+  - The brand reads "Blunderbook".
+  - The tabs are links (`aria-current`), not `role="tab"` buttons: they change the address.
+  - The badge is hidden at 0 rather than showing a red 0.
+  - A strict Content-Security-Policy: the page only runs its own script files, so text in a
+    PGN or a note can't run as code. Views never use inline scripts or `onclick=`.
+  - `.js` is always sent as `text/javascript`, whatever the Windows registry says.
+  - (CLAUDE.md §4, §11)
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
   repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),

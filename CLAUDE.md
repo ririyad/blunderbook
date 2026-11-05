@@ -112,6 +112,8 @@ blunderbook/
 │       ├── index.html
 │       ├── css/app.css
 │       ├── js/app.js          # router (hash-based: #log, #retest, #patterns)
+│       ├── js/api.js          # fetch helper: JSON in and out, the server's error message
+│       ├── js/ui.js           # esc(), toast, the error line
 │       ├── js/board.js        # board renderer (ported from the demo)
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
@@ -555,6 +557,21 @@ every attempt.
 Views (hash routes): `#log`, `#retest`, `#patterns`. Header: brand and tabs, with a
 due-count badge on Re-test. Games are added on the CLI (`blunderbook import`), so there is no
 Import view or add button in v1.
+
+The shell:
+- Tabs are links (`<a href="#log">`, `aria-current="page"` on the open one).
+- A route can carry more after a slash (`#log/12`), which goes to the view. An unknown route
+  goes to `#log`.
+- The badge counts entries due today or earlier, new ones included, and is hidden at 0.
+- Each view is a module in `js/views/` with `show(root, rest)`. After a change, a view
+  dispatches `entries-changed`, and the badge updates.
+
+The page is served with a Content-Security-Policy that allows only its own files
+(`default-src 'self'`, `script-src 'self'`). So: no inline `<script>`, no `onclick=`
+attributes, and nothing from a CDN. Inline `style` attributes are allowed. Text from the API
+or the user goes through `esc()` before it goes into HTML. Files are sent with
+`Cache-Control: no-cache`, and `.js` as `text/javascript` (some Windows registries say
+`text/plain`, and browsers then refuse the module).
 
 - **Log:** filter bar (source, status, cause) and list. Detail panel has the board with
   red arrow and highlight for my move, an optional green arrow for the best move, step
