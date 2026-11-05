@@ -29,20 +29,20 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | In progress (1/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
+| M2 Storage | In progress (2/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M2.2 Repository.
+**Next up:** M2.3 Persisting imports.
 
-In place so far: all of M1, and the database (2.1). The core reads PGN, detects your side, the
-source and duplicates, analyses each game with Stockfish (both passes), and suggests causes.
-`blunderbook init`, `doctor`, `import` and `engine show|set|clear` work (see Usage). `init`
-creates the database and `doctor` checks it. `import` prints the full report, but saves
-nothing until 2.3. All nine §12 fixtures flag their expected blunder under
-`uv run pytest -m engine`.
+In place so far: all of M1, the database (2.1) and the repository (2.2). The core reads PGN,
+detects your side, the source and duplicates, analyses each game with Stockfish (both passes),
+and suggests causes. `blunderbook init`, `doctor`, `import` and `engine show|set|clear` work
+(see Usage). `init` creates the database and `doctor` checks it. `import` prints the full
+report, but saves nothing until 2.3 connects it to the repository. All nine §12 fixtures flag
+their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -146,7 +146,23 @@ Each item is one small commit, with its tests in the same change. Every commit m
       integrity without creating or upgrading it. Tests never touch your real DB: each one gets
       its own path.
       _Done when_ running migrations twice is a no-op.
-- [ ] **2.2 Repository.** `db/repo.py`: all SQL lives here, parameterised, returns dataclasses.
+- [x] **2.2 Repository.** `db/repo.py` holds all data SQL, with every value a parameter.
+      Records in `core/models.py`: `NewGame` / `NewBlunder` (what an import writes), `Game` /
+      `Blunder` (plus ids, your notes, the re-test schedule, timestamps) and `Entry` (a blunder
+      with its game).
+      - `add_game()` saves a game and its blunders in one transaction. A known fingerprint
+        writes nothing. Games with no blunders are saved too, so they're skipped next time.
+        New entries are due today.
+      - `list_entries()` is the Log: newest first, filtered by source, status, cause
+        (confirmed, or suggested while none is confirmed) and due date.
+      - `update_notes()` changes only the fields given, keeps your text exactly, and stores
+        causes once each in the fixed order. `delete_blunder()` keeps the game, so the entry
+        doesn't come back on the next import.
+      - Also `known_fingerprints()`, `get_game()`, `get_entry()`. Re-test, sync and Patterns
+        queries arrive with M4 and M5.
+
+      _Done when_ games and entries round-trip unchanged, and the filters, notes and deletes
+      are tested against a real database.
 - [ ] **2.3 Persisting imports.** Importer saves games and blunders, dedupes by fingerprint,
       supports `--side`, and prints the summary line.
       _Done when_ importing the same file twice adds nothing.

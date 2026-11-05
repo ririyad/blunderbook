@@ -1,11 +1,12 @@
 """Shared types for the core.
 
 Records are added by the slice whose code fills them in: parsed games (1.4), analysis
-findings (1.6+), stored blunders (M2).
+findings (1.6+), stored games and blunders (2.2).
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Final, Literal
 
 Color = Literal["white", "black"]
@@ -13,6 +14,7 @@ Source = Literal["lichess", "chesscom", "pgn", "otb", "fen"]
 Speed = Literal["bullet", "blitz", "rapid", "classical"]
 Judgment = Literal["blunder", "mistake", "inaccuracy"]
 Status = Literal["new", "solved", "missed"]
+AnalysisStatus = Literal["pending", "running", "done", "error"]
 
 # Fixed order everywhere: UI chips, print page, Patterns (CLAUDE.md §5).
 CAUSES: Final[tuple[str, ...]] = (
@@ -214,3 +216,92 @@ class SourceInfo:
     label: str  # "Lichess", "Chess.com", "Over the board · Dhaka Chess Club", "PGN file"
     game_id: str | None = None  # "abcd1234" (Lichess), "live/140512345678" (Chess.com)
     url: str | None = None  # canonical game URL when game_id is known
+
+
+# ---------------------------------------------------------------- stored (db/repo.py)
+# The New* records are what an import writes. The stored records add what the database
+# keeps on top: ids, your notes, the re-test schedule and timestamps (CLAUDE.md §5).
+# Dates you see are local; timestamps are UTC.
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewGame:
+    """One analysed game, ready to save. Unknown headers are None."""
+
+    fingerprint: str
+    source: Source
+    my_color: Color
+    start_fen: str
+    pgn: str  # the game's own text, verbatim
+    engine_name: str  # e.g. "Stockfish 17.1"
+    engine_depth: int
+    site_label: str | None = None
+    external_id: str | None = None  # site game id when known
+    white: str | None = None
+    black: str | None = None
+    white_elo: int | None = None
+    black_elo: int | None = None
+    result: str | None = None
+    played_on: date | None = None
+    time_control: str | None = None  # raw header, e.g. "180+2"
+    tc_base_s: int | None = None
+    tc_inc_s: int | None = None
+    speed: Speed | None = None
+    opening: str | None = None
+    eco: str | None = None
+    has_clocks: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Game(NewGame):
+    id: int
+    analysis_status: AnalysisStatus
+    imported_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewBlunder:
+    """Everything the machine fills in for one entry (CLAUDE.md §7.6, §7.7)."""
+
+    ply: int  # 0-based index of my move in the game
+    move_no: int
+    fen_before: str
+    played_uci: str
+    played_san: str
+    best_uci: str
+    best_san: str
+    best_line_san: str
+    accept_uci: tuple[str, ...]
+    eval_before: Eval
+    eval_after: Eval
+    swing: float
+    judgment: Judgment
+    refutation_san: str | None = None
+    clock_left_s: float | None = None
+    time_spent_s: float | None = None
+    auto_causes: tuple[str, ...] = ()  # suggestions only, in CAUSES order
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Blunder(NewBlunder):
+    """One entry: the machine's part, your notes, and its re-test schedule."""
+
+    id: int
+    game_id: int
+    causes: tuple[str, ...]  # confirmed by you, in CAUSES order
+    other_cause: str | None
+    thinking: str
+    lesson: str
+    status: Status
+    streak: int
+    due_on: date
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class Entry:
+    """A blunder with the game it came from, as the Log shows it."""
+
+    blunder: Blunder
+    game: Game

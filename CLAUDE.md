@@ -348,6 +348,10 @@ an error. `blunderbook engine set` checks a path before saving it.
 - An already-known fingerprint is reported as "Already imported — skipped". The same game
   twice in one file: the second is "Same game as game N — skipped". Importing the same file
   twice must add nothing.
+- Every analysed game is saved, even with no blunders, so it's skipped next time. Deleting an
+  entry keeps its game, so a deleted blunder doesn't come back on the next import. Games that
+  need a side, games that fail to parse, and a game whose analysis stopped are not saved, so
+  importing them again works.
 
 ### 7.5 Source detection (`core/source.py`)
 - `Site` or `Event` contains `lichess` → `lichess`; contains `chess.com` → `chesscom`.
@@ -505,6 +509,9 @@ GET    /api/patterns
 
 Imports, FEN entries, settings, the engine path and syncs go through the CLI only. There are
 no routes for them in v1.
+
+The list is newest first (one game's entries in move order). `cause=` matches entries where
+the cause is confirmed, or where nothing is confirmed yet and it's suggested, as in the demo.
 
 Re-test queue responses must **not** include `best_uci`, `accept_uci`, the played move or
 the lesson. Each item does carry its legal moves (`legal_uci`) for tap-to-move: they don't
