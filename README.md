@@ -27,7 +27,7 @@ _Last updated: 2026-11-05_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (7/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (8/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,12 +35,12 @@ _Last updated: 2026-11-05_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.8 Suggested causes.
+**Next up:** M1.9 Importer + CLI.
 
 In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
 parsing, config.toml, Stockfish setup, PGN reading with all nine §12 fixtures, side detection,
-fingerprints, source detection, the blunder maths, and engine analysis (both passes). The
-working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see
+fingerprints, source detection, the blunder maths, engine analysis (both passes), and
+suggested causes. The working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see
 Usage).
 
 ---
@@ -102,8 +102,13 @@ Each item is one small commit, with its tests in the same change. Every commit m
       `Engine`. Tests use a scripted analyser and the fake UCI engine, which now plays legal
       moves and can crash on demand. Two tests run against real Stockfish. See Open decisions 12.
       _Done when_ the engine always closes, even on errors.
-- [ ] **1.8 Suggested causes.** `core/hints.py`: time trouble, moved too fast, missed their threat,
-      hung a piece. _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
+- [x] **1.8 Suggested causes.** `core/hints.py`: `suggest()` returns the suggested causes (in
+      the fixed cause order) plus the clock left and time spent, ready for `clock_left_s` /
+      `time_spent_s`. Rules: time trouble, moved too fast, missed their threat, and hung a piece
+      (6 plies of the refutation). The §12 fixtures give their expected hints, including
+      `back_rank` "Time trouble" and `scholars_mate` "Missed their threat" (also against real
+      Stockfish). See Open decisions 5 and 13.
+      _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
 - [ ] **1.9 Importer + CLI.** `importer.py`, CLI `init` (asks for your names and the Stockfish path,
       Enter = PATH, checked like `engine set`), `doctor` (includes the `engine show` report) and
       `import` (prints the report and doesn't save it yet). `--stockfish` option on `import` and
@@ -275,7 +280,8 @@ These are flagged against the spec and need your confirmation or a change.
    my first move's time is `base − clock + inc`. That's wrong when the game starts midway.
    `back_rank.pgn` starts at move 32 with 9 s left, which gives 180 − 9 + 2 = 173 s. Proposal:
    for games with a `FEN` header, that first move's time is unknown, so "Moved too fast" skips
-   it. "Time trouble" still works, because it only needs the clock.
+   it. "Time trouble" still works, because it only needs the clock. _Built this way in 1.8
+   (any game not from the standard start). Say if you want the §7.7 formula instead._
 6. **Variants and null moves are rejected (done in 1.4).** Chess960, Atomic and other variants,
    unknown variants, and null moves (`--`) become problems with a plain reason, such as
    "Chess960 isn't supported, only standard chess." Stockfish can analyse Chess960
@@ -344,6 +350,18 @@ These are flagged against the spec and need your confirmation or a change.
     - **No time limit per position.** The analysis stops at a depth only, so an engine that
       hangs would hang the import. Proposal: M5's job queue gets a Cancel button, which closes
       the engine.
+13. **Suggested-cause details §7.7 doesn't spell out (done in 1.8).**
+    - **Clocks that don't add up give no time spent.** If previous − now + increment is
+      negative (for example the opponent gave you time on Lichess), the time spent is unknown
+      rather than 0. That keeps "Moved too fast" from firing on bad data.
+    - **"Hung a piece" compares with the position before your move.** It plays out up to 6
+      plies of the refutation, so a capture you made with the blunder counts in your favour.
+      The Elephant trap (6. Nxd5??) gets no suggestion: it loses a piece for a pawn, a net 2,
+      under the 3-point line. You pick the cause yourself.
+    - **"Missed their threat" wins over "Hung a piece"**, as §7.7 says. The time rules can
+      appear alongside either. `back_rank` gets both "Missed their threat" and "Time trouble".
+    - **Both time rules need a `TimeControl` header,** as §7.7 says. Clocks with no time control
+      still give "clock left", but no time causes.
 
 ### Decided
 
