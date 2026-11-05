@@ -4,15 +4,16 @@ scripted engine, saving, and the summary line."""
 import re
 import sqlite3
 from collections.abc import Iterator
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import chess
 import pytest
 
 from blunderbook import importer
-from blunderbook.core.engine import Line
+from blunderbook.core.engine import EngineError, Line
 from blunderbook.core.models import Eval, Thresholds
 from blunderbook.db import connection, repo
 
@@ -365,6 +366,148 @@ def test_fen_entry_logs_a_mistake_an_import_would_skip() -> None:
     assert (game.white, game.black, game.my_color) == ("Rashed", None, "white")
     assert (game.played_on, game.time_control, game.has_clocks) == (date(2026, 11, 1), None, False)
     assert game.start_fen == BACK_RANK
+
+
+# ---------------------------------------------------------------- run
+
+
+class Failing(Scripted):
+    """Fails like a crashed engine at its ``at``-th position."""
+
+    def __init__(self, at: int) -> None:
+        super().__init__()
+        self.at = at
+
+    def lines(
+        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+    ) -> list[Line]:
+        if self.positions + 1 >= self.at:
+            raise EngineError("Stockfish stopped unexpectedly.")
+        return super().lines(board, depth, multipv, game=game)
+
+
+def run(conn: sqlite3.Connection, analyser: Scripted, **options: Any) -> importer.RunResult:
+    queue = importer.prepare(read("multi_game.pgn"), NAMES, known=repo.known_fingerprints(conn))
+    return importer.run(conn, queue, analyser, depth=8, thresholds=Thresholds(), **options)
+
+
+def test_run_saves_each_ready_game(conn: sqlite3.Connection) -> None:
+    result = run(conn, Scripted())
+    assert result.finished
+    assert sorted(result.saved) == [1, 3]
+    assert [q.status for q in result.queue] == ["ready", "error", "ready", "needs_side"]
+    again = run(conn, Scripted())
+    assert again.saved == {}
+    assert [q.status for q in again.queue] == ["duplicate", "error", "duplicate", "needs_side"]
+
+
+def test_run_marks_a_game_saved_meanwhile_as_a_duplicate(conn: sqlite3.Connection) -> None:
+    queue = importer.prepare(read("multi_game.pgn"), NAMES)  # read before the other import
+    run(conn, Scripted())
+    result = importer.run(conn, queue, Scripted(), depth=8, thresholds=Thresholds())
+    assert result.finished and result.saved == {}
+    assert [(q.status, q.reason) for q in result.queue if q.number in (1, 3)] == [
+        ("duplicate", importer.ALREADY_IMPORTED),
+        ("duplicate", importer.ALREADY_IMPORTED),
+    ]
+
+
+def test_run_reports_progress_per_game(conn: sqlite3.Connection) -> None:
+    seen: list[tuple[str, int, int, int]] = []
+    closed: list[int] = []
+
+    @contextmanager
+    def progress_for(queued: importer.QueuedGame, k: int, n: int) -> Iterator[Any]:
+        yield lambda done, total: seen.append(("pos", queued.number, done, total))
+        closed.append(queued.number)
+
+    run(conn, Scripted(), progress_for=progress_for)
+    assert closed == [1, 3]
+    for number in (1, 3):
+        mine = [(done, total) for _, n, done, total in seen if n == number]
+        assert mine[0][0] == 1
+        assert mine[-1][0] == mine[-1][1]  # it ends at 100%
+
+
+def test_run_can_stop_between_positions(conn: sqlite3.Connection) -> None:
+    analyser = Scripted()
+    first = importer.prepare(read("multi_game.pgn"), NAMES)[0]
+    assert first.game is not None
+    stop_at = len(first.game.plies) + 1 + 2  # the first game, then 2 positions of the next
+    result = run(conn, analyser, should_stop=lambda: analyser.positions >= stop_at)
+    assert result.stopped and not result.finished and result.error is None
+    assert sorted(result.saved) == [1]  # the game being analysed isn't saved
+    assert len(repo.known_fingerprints(conn)) == 1
+    # Importing the same text again finishes the rest.
+    assert sorted(run(conn, Scripted()).saved) == [3]
+
+
+def test_run_checks_before_each_game(conn: sqlite3.Connection) -> None:
+    analyser = Scripted()
+    result = run(conn, analyser, should_stop=lambda: True)
+    assert result.stopped and result.saved == {} and analyser.positions == 0
+
+
+def test_run_keeps_the_games_before_an_engine_failure(conn: sqlite3.Connection) -> None:
+    first = importer.prepare(read("multi_game.pgn"), NAMES)[0]
+    assert first.game is not None
+    result = run(conn, Failing(at=len(first.game.plies) + 3))
+    assert result.error == "Stockfish stopped unexpectedly."
+    assert not result.finished
+    assert sorted(result.saved) == [1]
+
+
+# ---------------------------------------------------------------- log_fen
+
+
+def fen_engine(best: str, before: int, after_cp: int) -> Scripted:
+    return Scripted(
+        {
+            BACK_RANK: Line(Eval(cp=before), mv(best)),
+            after(BACK_RANK, "c1c7"): Line(Eval(cp=after_cp), mv("e7c7")),
+        }
+    )
+
+
+def test_log_fen_logs_a_mistake(conn: sqlite3.Connection) -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", me="Rashed", played_on=date(2026, 11, 1))
+    assert importer.find_logged(conn, queued) is None
+    outcome = importer.log_fen(
+        conn, queued, fen_engine("b3c4", 30, -100), depth=8, thresholds=Thresholds()
+    )
+    assert outcome.result == "logged"
+    assert outcome.saved is not None and outcome.entry_id == outcome.saved.blunder_ids[0]
+    assert outcome.message == f"Logged 32. Rc7? as a mistake: entry #{outcome.entry_id}."
+
+    again = importer.find_logged(conn, queued)
+    assert again is not None
+    assert (again.result, again.entry_id) == ("already_logged", outcome.entry_id)
+    assert again.message == (
+        f"You've already logged 32. Rc7 in this position (entry #{outcome.entry_id})."
+        " Nothing was added."
+    )
+
+
+def test_log_fen_skips_stockfishs_own_choice(conn: sqlite3.Connection) -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", played_on=date(2026, 11, 1))
+    outcome = importer.log_fen(
+        conn, queued, fen_engine("c1c7", 30, -100), depth=8, thresholds=Thresholds()
+    )
+    assert outcome == importer.FenOutcome(
+        "best_move", "32. Rc7 is Stockfish's own choice here. Nothing was logged."
+    )
+    assert importer.find_logged(conn, queued) is None
+
+
+def test_log_fen_skips_a_move_under_the_inaccuracy_line(conn: sqlite3.Connection) -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", played_on=date(2026, 11, 1))
+    outcome = importer.log_fen(
+        conn, queued, fen_engine("b3c4", 30, 25), depth=8, thresholds=Thresholds()
+    )
+    assert outcome.result == "not_a_mistake"
+    assert outcome.message.startswith("32. Rc7 isn't a mistake by Stockfish's measure (swing 0.00")
+    assert outcome.message.endswith("inaccuracies start at 0.05). Nothing was logged.")
+    assert outcome.saved is None and outcome.entry_id is None
 
 
 # ---------------------------------------------------------------- summary

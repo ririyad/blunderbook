@@ -20,8 +20,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from blunderbook import __version__, config, importer
-from blunderbook.core import detect, engine, pgn
-from blunderbook.core.models import Color, Judgment, SavedIds, Totals
+from blunderbook.core import engine, pgn
+from blunderbook.core.models import Color, Totals
 from blunderbook.db import backup, connection, repo
 
 app = typer.Typer(
@@ -405,42 +405,35 @@ def import_(
         if not queue:
             _fail(f"No games found in {path}.")
 
-        ready = [q for q in queue if q.status == "ready"]
         saved: dict[int, importer.SavedGame] = {}
-        if ready:
+        if any(q.status == "ready" for q in queue):
             found = _find_engine(stockfish, cfg, probe=False)
             if found.problem is not None:
                 _fail(f"Can't analyse: {found.problem}")
             assert found.path is not None
             use_depth = depth or cfg.engine_depth
-            position = {q.number: i for i, q in enumerate(queue)}
+            error: str | None = None
             try:
                 with engine.Engine.open(
                     [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
                 ) as sf:
                     typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
                     _version_notes(sf.info)
-                    for k, queued in enumerate(ready, start=1):
-                        progress = _Progress(f"Game {queued.number} ({k} of {len(ready)})")
-                        analysed = importer.analyse(
-                            queued,
-                            sf,
-                            depth=use_depth,
-                            thresholds=cfg.thresholds,
-                            progress=progress,
-                        )
-                        progress.done()
-                        result = importer.save(conn, analysed)
-                        if result is None:  # another import saved it meanwhile
-                            queue[position[queued.number]] = replace(
-                                queued, status="duplicate", reason=importer.ALREADY_IMPORTED
-                            )
-                        else:
-                            saved[queued.number] = result
-            except engine.EngineError as exc:
+                    result = importer.run(
+                        conn,
+                        queue,
+                        sf,
+                        depth=use_depth,
+                        thresholds=cfg.thresholds,
+                        progress_for=lambda q, k, n: _Progress(f"Game {q.number} ({k} of {n})"),
+                    )
+                    queue, saved, error = list(result.queue), result.saved, result.error
+            except engine.EngineError as exc:  # it couldn't start, or failed as it closed
+                error = str(exc)
+            if error is not None:
                 _print_report(queue, saved)
                 _fail(
-                    f"Analysis stopped: {exc}\n"
+                    f"Analysis stopped: {error}\n"
                     "Import the file again to analyse the rest. Games already saved are skipped."
                 )
 
@@ -521,7 +514,7 @@ def _print_blunders(saved: importer.SavedGame) -> None:
         _print_entry(blunder, entry_id)
 
 
-_MARKS: dict[Judgment, str] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
+_MARKS = importer.MARKS
 
 
 def _print_entry(found: importer.FoundBlunder, entry_id: int) -> None:
@@ -548,11 +541,18 @@ def _seconds(value: float) -> str:
 
 
 class _Progress:
-    """Positions done / total, redrawn on one line when the output is a terminal."""
+    """Positions done / total, redrawn on one line when the output is a terminal. Used as
+    ``with _Progress(label) as report:``; the line is cleared at the end."""
 
     def __init__(self, label: str) -> None:
         self.label = label
         self.live = sys.stderr.isatty()
+
+    def __enter__(self) -> _Progress:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.done()
 
     def __call__(self, done: int, total: int) -> None:
         if self.live:
@@ -605,14 +605,13 @@ def fen(
     except importer.FenError as exc:
         _fail(str(exc))
     assert queued.game is not None and queued.fingerprint is not None and queued.side
-    label = queued.game.plies[0].label
 
     _daily_backup(cfg)
     problem = "Can't log the position: the database can't be used."
     with closing(_open_database(problem, cfg)) as conn:
-        earlier = repo.find_saved(conn, queued.fingerprint)
+        earlier = importer.find_logged(conn, queued)
         if earlier is not None:
-            typer.echo(_already_logged(label, earlier))
+            typer.echo(earlier.message)
             return
         found = _find_engine(stockfish, cfg, probe=False)
         if found.problem is not None:
@@ -624,47 +623,25 @@ def fen(
             ) as sf:
                 typer.echo(f"Analysing with {sf.name} at depth {cfg.engine_depth}.")
                 _version_notes(sf.info)
-                analysed = importer.analyse(
-                    queued,
-                    sf,
-                    depth=cfg.engine_depth,
-                    thresholds=cfg.thresholds,
-                    flag_at="inaccuracy",
+                outcome = importer.log_fen(
+                    conn, queued, sf, depth=cfg.engine_depth, thresholds=cfg.thresholds
                 )
         except engine.EngineError as exc:
             _fail(f"Analysis stopped: {exc}\nNothing was logged.")
 
-        if not analysed.blunders:
-            evals = analysed.analysis.evals
-            swing = detect.swing(evals[0], evals[1], queued.side)
-            if swing >= cfg.thresholds.inaccuracy:  # not flagged, so it was the best move
-                typer.echo(f"{label} is Stockfish's own choice here. Nothing was logged.")
-            else:
-                typer.echo(
-                    f"{label} isn't a mistake by Stockfish's measure (swing {swing:.2f}; "
-                    f"inaccuracies start at {cfg.thresholds.inaccuracy:.2f}). Nothing was logged."
-                )
-            return
-        saved = importer.save(conn, analysed)
-        if saved is None:  # logged meanwhile by another command
-            earlier = repo.find_saved(conn, queued.fingerprint)
-            assert earlier is not None
-            typer.echo(_already_logged(label, earlier))
-            return
-
-    (blunder,) = analysed.blunders
-    (entry_id,) = saved.blunder_ids
+    if outcome.saved is None or outcome.entry_id is None:
+        typer.echo(outcome.message)
+        return
+    (blunder,) = outcome.saved.analysed.blunders
     parts = [importer.FEN_LABEL, queued.players]
     if queued.date:
         parts.append(queued.date)
     parts.append(f"you played {queued.side.capitalize()}")
     typer.echo("")
     typer.echo(" \N{MIDDLE DOT} ".join(parts))
-    _print_entry(blunder, entry_id)
-    judgment = blunder.finding.judgment
-    article = "an" if judgment == "inaccuracy" else "a"
+    _print_entry(blunder, outcome.entry_id)
     typer.echo("")
-    typer.echo(f"Logged {label}{_MARKS[judgment]} as {article} {judgment}: entry #{entry_id}.")
+    typer.echo(outcome.message)
 
 
 def _date_option(value: str | None) -> date:
@@ -674,11 +651,6 @@ def _date_option(value: str | None) -> date:
         return date.fromisoformat(value.strip())
     except ValueError:
         _fail(f"--date needs a date like 2026-11-05, not {value!r}.")
-
-
-def _already_logged(label: str, earlier: SavedIds) -> str:
-    where = f" (entry #{earlier.blunder_ids[0]})" if earlier.blunder_ids else ""
-    return f"You've already logged {label} in this position{where}. Nothing was added."
 
 
 # ---------------------------------------------------------------- serve

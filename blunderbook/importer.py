@@ -12,7 +12,8 @@ the rest.
 
 import re
 import sqlite3
-from collections.abc import Container, Iterable
+from collections.abc import Callable, Container, Iterable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from typing import Literal
@@ -20,7 +21,7 @@ from typing import Literal
 import chess
 import chess.pgn
 
-from blunderbook.core import engine, hints, identity, pgn, timecontrol
+from blunderbook.core import detect, engine, hints, identity, pgn, timecontrol
 from blunderbook.core.models import (
     Color,
     Finding,
@@ -29,6 +30,7 @@ from blunderbook.core.models import (
     NewBlunder,
     NewGame,
     ParsedGame,
+    SavedIds,
     SourceInfo,
     Thresholds,
     header_value,
@@ -334,6 +336,174 @@ def new_blunder(found: FoundBlunder) -> NewBlunder:
         time_spent_s=h.time_spent_s,
         auto_causes=h.causes,
     )
+
+
+# ---------------------------------------------------------------- running an import
+
+# Given a ready game, its place among the ready games and how many there are, the progress
+# reporter for that game: ``with progress_for(game, k, n) as report: ... report(done, total)``.
+ProgressFor = Callable[[QueuedGame, int, int], AbstractContextManager[engine.Progress | None]]
+
+
+class Stopped(Exception):
+    """Raised inside :func:`run` when ``should_stop()`` says so, between positions."""
+
+
+@dataclass(frozen=True, slots=True)
+class RunResult:
+    queue: tuple[QueuedGame, ...]  # in file order; a game saved meanwhile is now a duplicate
+    saved: dict[int, SavedGame]  # by game number, each saved as soon as it was analysed
+    error: str | None = None  # why the engine stopped, ready to show
+    stopped: bool = False  # should_stop() asked to stop
+
+    @property
+    def finished(self) -> bool:
+        return self.error is None and not self.stopped
+
+
+def run(
+    conn: sqlite3.Connection,
+    queue: Sequence[QueuedGame],
+    analyser: engine.Analyser,
+    *,
+    depth: int,
+    thresholds: Thresholds,
+    progress_for: ProgressFor | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> RunResult:
+    """Analyse and save each ready game of ``queue``, one by one (CLAUDE.md §7.4, §7.6).
+
+    Each game is saved as soon as it's analysed. If the engine fails, or ``should_stop()``
+    turns true (checked after each position), the games before it stay saved, the game being
+    analysed isn't, and importing the same text again finishes the rest.
+    """
+    games = list(queue)
+    where = {q.number: i for i, q in enumerate(games)}
+    ready = [q for q in games if q.status == "ready"]
+    saved: dict[int, SavedGame] = {}
+
+    def result(error: str | None = None, stopped: bool = False) -> RunResult:
+        return RunResult(tuple(games), saved, error, stopped)
+
+    for k, queued in enumerate(ready, start=1):
+        if should_stop is not None and should_stop():
+            return result(stopped=True)
+        reporter = (progress_for or _no_progress)(queued, k, len(ready))
+        try:
+            with reporter as report:
+                analysed = analyse(
+                    queued,
+                    analyser,
+                    depth=depth,
+                    thresholds=thresholds,
+                    progress=_progress(report, should_stop),
+                )
+        except Stopped:
+            return result(stopped=True)
+        except engine.EngineError as exc:
+            return result(error=str(exc))
+        done = save(conn, analysed)
+        if done is None:  # another import saved it meanwhile
+            games[where[queued.number]] = replace(
+                queued, status="duplicate", reason=ALREADY_IMPORTED
+            )
+        else:
+            saved[queued.number] = done
+    return result()
+
+
+def _no_progress(queued: QueuedGame, k: int, n: int) -> AbstractContextManager[None]:
+    return nullcontext()
+
+
+def _progress(
+    report: engine.Progress | None, should_stop: Callable[[], bool] | None
+) -> engine.Progress | None:
+    if should_stop is None:
+        return report
+
+    def hook(done: int, total: int) -> None:
+        if report is not None:
+            report(done, total)
+        if should_stop():
+            raise Stopped
+
+    return hook
+
+
+# ---------------------------------------------------------------- FEN quick entry
+
+FenResult = Literal["logged", "already_logged", "best_move", "not_a_mistake"]
+MARKS: dict[Judgment, str] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
+
+
+@dataclass(frozen=True, slots=True)
+class FenOutcome:
+    """What happened to a FEN quick entry, with a message ready to show."""
+
+    result: FenResult
+    message: str
+    entry_id: int | None = None  # the new entry, or the one logged earlier
+    saved: SavedGame | None = None  # when logged
+
+
+def find_logged(conn: sqlite3.Connection, queued: QueuedGame) -> FenOutcome | None:
+    """The outcome when this position, move, opponent and date are already logged; checked
+    before Stockfish runs. None when it's new."""
+    assert queued.fingerprint is not None
+    earlier = repo.find_saved(conn, queued.fingerprint)
+    return None if earlier is None else _already_logged(queued, earlier)
+
+
+def log_fen(
+    conn: sqlite3.Connection,
+    queued: QueuedGame,
+    analyser: engine.Analyser,
+    *,
+    depth: int,
+    thresholds: Thresholds,
+) -> FenOutcome:
+    """Analyse a FEN quick entry (from :func:`prepare_fen`) and save it when the move costs
+    at least an inaccuracy. Stockfish's own choice, or a move under the inaccuracy line,
+    isn't logged: there'd be nothing to re-test (CLAUDE.md §9)."""
+    assert queued.game is not None and queued.side is not None
+    label = queued.game.plies[0].label
+    analysed = analyse(queued, analyser, depth=depth, thresholds=thresholds, flag_at="inaccuracy")
+    if not analysed.blunders:
+        evals = analysed.analysis.evals
+        swing = detect.swing(evals[0], evals[1], queued.side)
+        if swing >= thresholds.inaccuracy:  # not flagged, so it was the best move
+            return FenOutcome(
+                "best_move", f"{label} is Stockfish's own choice here. Nothing was logged."
+            )
+        return FenOutcome(
+            "not_a_mistake",
+            f"{label} isn't a mistake by Stockfish's measure (swing {swing:.2f}; "
+            f"inaccuracies start at {thresholds.inaccuracy:.2f}). Nothing was logged.",
+        )
+    saved = save(conn, analysed)
+    if saved is None:  # logged meanwhile by another command
+        outcome = find_logged(conn, queued)
+        assert outcome is not None
+        return outcome
+    (blunder,) = analysed.blunders
+    (entry_id,) = saved.blunder_ids
+    judgment = blunder.finding.judgment
+    article = "an" if judgment == "inaccuracy" else "a"
+    message = f"Logged {label}{MARKS[judgment]} as {article} {judgment}: entry #{entry_id}."
+    return FenOutcome("logged", message, entry_id, saved)
+
+
+def _already_logged(queued: QueuedGame, earlier: SavedIds) -> FenOutcome:
+    assert queued.game is not None
+    label = queued.game.plies[0].label
+    entry_id = earlier.blunder_ids[0] if earlier.blunder_ids else None
+    where = f" (entry #{entry_id})" if entry_id is not None else ""
+    message = f"You've already logged {label} in this position{where}. Nothing was added."
+    return FenOutcome("already_logged", message, entry_id)
+
+
+# ---------------------------------------------------------------- report
 
 
 def summary(queue: Iterable[QueuedGame], saved: Iterable[SavedGame]) -> str:
