@@ -40,6 +40,14 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
+@pytest.fixture(autouse=True)
+def db_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Every test gets its own database path, so no test ever touches your real one."""
+    path = tmp_path / "data" / "blunderbook.db"
+    monkeypatch.setattr(config, "db_path", lambda: path)
+    return path
+
+
 @pytest.fixture(scope="session")
 def stockfish_path() -> Path:
     path = _stockfish().path

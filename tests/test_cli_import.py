@@ -1,7 +1,9 @@
 """`blunderbook init`, `doctor` and `import`, against a temp config, a stubbed probe and a
 scripted engine (no Stockfish needed)."""
 
+import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from blunderbook.cli import app
 from blunderbook.core import engine
 from blunderbook.core.engine import EngineError, EngineInfo, Line
 from blunderbook.core.models import Eval
+from blunderbook.db import connection
 
 runner = CliRunner()
 WINDOWS = sys.platform == "win32"
@@ -48,6 +51,14 @@ def program(folder: Path, stem: str = "stockfish") -> Path:
     path.write_bytes(b"")
     path.chmod(0o755)
     return path
+
+
+def newer_db(path: Path) -> None:
+    """A database from a future Blunderbook (schema 99)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path, autocommit=True)) as conn:
+        conn.execute("CREATE TABLE games (id INTEGER PRIMARY KEY)")
+        conn.execute("PRAGMA user_version = 99")
 
 
 # ---------------------------------------------------------------- init
@@ -127,10 +138,38 @@ def test_init_without_names(cfg_file: Path, probes: list) -> None:
     assert config.load(cfg_file).my_names == ()
 
 
+def test_init_creates_the_database(cfg_file: Path, db_file: Path, probes: list) -> None:
+    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    assert result.exit_code == 0, result.output
+    assert f"Created the database {db_file}\nNext: blunderbook import FILE.pgn" in result.output
+    with closing(connection.connect(db_file, mode="ro")) as conn:
+        assert connection.user_version(conn) == connection.latest_version()
+
+
+def test_init_again_keeps_the_data(cfg_file: Path, db_file: Path, probes: list) -> None:
+    assert runner.invoke(app, ["init"], input="Rashed\n\n").exit_code == 0
+    with closing(connection.open_db(db_file)) as conn:
+        conn.execute("INSERT INTO sync_state (source, username) VALUES ('lichess', 'rashed')")
+    result = runner.invoke(app, ["init"], input="\n\n")
+    assert result.exit_code == 0, result.output
+    assert f"Database {db_file}\n" in result.output
+    with closing(connection.open_db(db_file)) as conn:
+        assert conn.execute("SELECT username FROM sync_state").fetchone()[0] == "rashed"
+
+
+def test_init_with_a_database_from_a_newer_app(cfg_file: Path, db_file: Path, probes: list) -> None:
+    newer_db(db_file)
+    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    assert result.exit_code == 1
+    assert "Your settings are saved, but the database isn't ready." in result.output
+    assert "made by a newer Blunderbook (schema 99;" in result.output
+    assert config.load(cfg_file).my_names == ("Rashed",)
+
+
 # ---------------------------------------------------------------- doctor
 
 
-def test_doctor_all_good(tmp_path: Path, cfg_file: Path, probes: list) -> None:
+def test_doctor_all_good(tmp_path: Path, cfg_file: Path, db_file: Path, probes: list) -> None:
     exe = program(tmp_path / "sf")
     config.save(config.Config(my_names=("Rashed",), stockfish_path=str(exe)), cfg_file)
     result = runner.invoke(app, ["doctor"])
@@ -142,7 +181,7 @@ def test_doctor_all_good(tmp_path: Path, cfg_file: Path, probes: list) -> None:
     assert f"           {exe}" in out
     assert "           from config.toml (stockfish_path)" in out
     assert f"Analysis   depth 16 {DOT} 2 threads {DOT} 128 MB hash" in out
-    assert "Database   not used yet" in out
+    assert f"Database   {db_file}\n           not created yet. Run blunderbook init." in out
     assert out.rstrip().endswith("No problems found.")
 
 
@@ -186,6 +225,52 @@ def test_doctor_engine_that_fails_its_check(
     result = runner.invoke(app, ["doctor", "--stockfish", str(exe)])
     assert result.exit_code == 1
     assert f"Stockfish  Problem: Can't use {exe}: It didn't respond" in result.output
+
+
+def test_doctor_checks_the_database(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    with closing(connection.open_db(db_file, create=True)):
+        pass
+    result = runner.invoke(app, ["doctor", "--stockfish", str(program(tmp_path / "sf"))])
+    assert result.exit_code == 0, result.output
+    latest = connection.latest_version()
+    assert f"Database   {db_file}\n           schema {latest} {DOT} integrity ok\n" in result.output
+
+
+def test_doctor_doesnt_create_or_upgrade_the_database(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    exe = str(program(tmp_path / "sf"))
+    assert runner.invoke(app, ["doctor", "--stockfish", exe]).exit_code == 0
+    assert not db_file.parent.exists()
+    db_file.parent.mkdir()
+    db_file.write_bytes(b"")  # an empty file is a database at schema 0
+    result = runner.invoke(app, ["doctor", "--stockfish", exe])
+    assert result.exit_code == 0, result.output
+    assert f"schema 0 {DOT} integrity ok" in result.output
+    assert "Note: run blunderbook init to upgrade it to schema" in result.output
+    assert db_file.read_bytes() == b""
+
+
+def test_doctor_database_from_a_newer_app(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    newer_db(db_file)
+    result = runner.invoke(app, ["doctor", "--stockfish", str(program(tmp_path / "sf"))])
+    assert result.exit_code == 1
+    assert "           Problem: The database was made by a newer Blunderbook" in result.output
+    assert "1 problem found." in result.output
+
+
+def test_doctor_file_that_isnt_a_database(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    db_file.parent.mkdir()
+    db_file.write_bytes(b"x" * 4096)
+    result = runner.invoke(app, ["doctor", "--stockfish", str(program(tmp_path / "sf"))])
+    assert result.exit_code == 1
+    assert f"           Problem: {db_file} isn't a SQLite database." in result.output
 
 
 # ---------------------------------------------------------------- import

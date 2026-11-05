@@ -1,11 +1,13 @@
 """Command-line interface.
 
 Commands arrive milestone by milestone (see the README roadmap):
-engine (1.3) · init, doctor, import (1.9) · fen (M2) · serve (M3) · sync (M6) · print (M7).
+engine (1.3) · init, doctor, import (1.9) · fen, backup, restore (M2) · serve (M3) ·
+sync (M5) · print (M6).
 """
 
 import os
 import sys
+from contextlib import closing
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
@@ -16,6 +18,7 @@ import typer
 from blunderbook import __version__, config, importer
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Color
+from blunderbook.db import connection
 
 app = typer.Typer(
     name="blunderbook",
@@ -109,7 +112,7 @@ def engine_clear() -> None:
 
 @app.command()
 def init() -> None:
-    """Set up config.toml: your names and where Stockfish is."""
+    """Set up config.toml (your names, where Stockfish is) and the database."""
     path = config.config_path()
     cfg = _load_config()
     if path.exists():
@@ -132,6 +135,15 @@ def init() -> None:
 
     saved = config.save(replace(cfg, my_names=names, stockfish_path=stockfish_path))
     typer.echo(f"\nSaved to {saved}")
+
+    db = config.db_path()
+    existed = db.exists()
+    try:
+        with closing(connection.open_db(db, create=True)):
+            pass
+    except connection.StorageError as exc:
+        _fail(f"Your settings are saved, but the database isn't ready.\n{exc}")
+    typer.echo(f"{'Database' if existed else 'Created the database'} {db}")
     typer.echo("Next: blunderbook import FILE.pgn")
 
 
@@ -193,7 +205,7 @@ def doctor(
         typer.Option("--stockfish", help="Check this Stockfish instead of the configured one."),
     ] = None,
 ) -> None:
-    """Check config.toml, Stockfish and (from M2) the database."""
+    """Check config.toml, Stockfish and the database. Changes nothing."""
     problems = 0
     path = config.config_path()
     try:
@@ -226,12 +238,33 @@ def doctor(
         f"depth {cfg.engine_depth} \N{MIDDLE DOT} {_plural(cfg.engine_threads, 'thread')} "
         f"\N{MIDDLE DOT} {cfg.engine_hash_mb} MB hash",
     )
-    _row("Database", "not used yet (storage arrives in M2)")
+    problems += _doctor_database(config.db_path())
 
     typer.echo("")
     if problems:
         _fail(f"{_plural(problems, 'problem')} found.")
     typer.echo("No problems found.")
+
+
+def _doctor_database(path: Path) -> int:
+    """Print the Database rows; return the number of problems."""
+    _row("Database", str(path))
+    if not path.exists():
+        _row("", "not created yet. Run blunderbook init.")
+        return 0
+    try:
+        result = connection.check(path)
+    except connection.StorageError as exc:
+        _row("", f"Problem: {exc}")
+        return 1
+    for problem in result.problems:
+        _row("", f"Problem: {problem}")
+    if result.problems:
+        return len(result.problems)
+    _row("", f"schema {result.version} \N{MIDDLE DOT} integrity ok")
+    if result.version < result.latest:
+        _row("", f"Note: run blunderbook init to upgrade it to schema {result.latest}.")
+    return 0
 
 
 def _row(label: str, text: str) -> None:

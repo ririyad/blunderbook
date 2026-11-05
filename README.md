@@ -29,19 +29,20 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
+| M2 Storage | In progress (1/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M2.1 Connection + migrations.
+**Next up:** M2.2 Repository.
 
-In place so far: all of M1. The core reads PGN, detects your side, the source and duplicates,
-analyses each game with Stockfish (both passes), and suggests causes. `blunderbook init`,
-`doctor`, `import` and `engine show|set|clear` work (see Usage). `import` prints the full
-report, but nothing is saved until M2 adds the database. All nine §12 fixtures flag their
-expected blunder under `uv run pytest -m engine`.
+In place so far: all of M1, and the database (2.1). The core reads PGN, detects your side, the
+source and duplicates, analyses each game with Stockfish (both passes), and suggests causes.
+`blunderbook init`, `doctor`, `import` and `engine show|set|clear` work (see Usage). `init`
+creates the database and `doctor` checks it. `import` prints the full report, but saves
+nothing until 2.3. All nine §12 fixtures flag their expected blunder under
+`uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -129,13 +130,25 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ### M2 Storage
 
-- [ ] **2.1 Connection + migrations.** `db/connection.py` (WAL, foreign keys, forward-only runner),
-      `0001_init.sql` from §5 (no `settings` table). `PRAGMA user_version` records the last
-      migration. A DB made by a newer app is refused. _Done when_ running migrations twice is a
-      no-op.
+- [x] **2.1 Connection + migrations.** `db/connection.py`:
+      - `open_db()` turns on foreign keys and WAL, then runs the forward-only migrations. Each
+        migration and its `user_version` bump share one transaction, so a failed one changes
+        nothing.
+      - It refuses a DB from a newer app, a SQLite file from another app (tables but no
+        version) and a file that isn't SQLite, without touching them. It never creates a file
+        unless asked.
+      - `check()` is read-only: schema version and `PRAGMA integrity_check`.
+      - Connections use SQLite's autocommit mode, and `transaction()` groups writes.
+
+      `0001_init.sql` is §5 (no `settings` table), plus an index on
+      `retest_attempts.blunder_id`. A test checks §5 and the migrated schema agree. `init` now
+      creates the DB (moved here from 2.3), and `doctor` shows its path, schema version and
+      integrity without creating or upgrading it. Tests never touch your real DB: each one gets
+      its own path.
+      _Done when_ running migrations twice is a no-op.
 - [ ] **2.2 Repository.** `db/repo.py`: all SQL lives here, parameterised, returns dataclasses.
 - [ ] **2.3 Persisting imports.** Importer saves games and blunders, dedupes by fingerprint,
-      supports `--side`, and prints the summary line. `init` creates the DB.
+      supports `--side`, and prints the summary line.
       _Done when_ importing the same file twice adds nothing.
 - [ ] **2.4 `fen` command.** Synthetic `source='fen'` game row. Logs the move with its judgment,
       even below the blunder line. Takes `--stockfish` too.
@@ -218,7 +231,9 @@ Full install steps arrive in M6.
 ## Usage
 
 Settings live in `config.toml` in your user config folder (on Windows,
-`%LOCALAPPDATA%\blunderbook\config.toml`). Stockfish is looked up in this order:
+`%LOCALAPPDATA%\blunderbook\config.toml`). Your games and notes live in one file,
+`blunderbook.db`, in your user data folder (on Windows, the same folder). `blunderbook doctor`
+shows both paths. Stockfish is looked up in this order:
 
 1. `--stockfish PATH` on the command
 2. the `BLUNDERBOOK_STOCKFISH` environment variable
@@ -231,8 +246,8 @@ uses the next one.
 | Command | Does | Status |
 |---|---|---|
 | `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
-| `blunderbook init` | Create config (and the DB from M2), ask for your names and Stockfish | Done (1.9; DB in M2) |
-| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and (from M2) the DB | Done (1.9) |
+| `blunderbook init` | Create config and the DB, ask for your names and Stockfish | Done (1.9, 2.1) |
+| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and the DB (changes nothing) | Done (1.9, 2.1) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and print the report | Done (1.9; saved from M2) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |

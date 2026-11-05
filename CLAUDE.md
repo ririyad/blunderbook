@@ -199,6 +199,7 @@ CREATE TABLE retest_attempts (
   solved       INTEGER NOT NULL,
   used_hint    INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX retest_attempts_blunder ON retest_attempts (blunder_id);  -- SQLite doesn't index FKs
 
 CREATE TABLE sync_state (
   source        TEXT PRIMARY KEY,             -- 'lichess' | 'chesscom'
@@ -616,6 +617,9 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 - Keep `core/` pure and typed (mypy strict). I/O belongs in `db/`, `sources/`, `api/` and `cli.py`.
 - All data SQL goes in `db/repo.py`. Maintenance SQL (PRAGMAs, migrations, `VACUUM INTO`,
   the backup API) lives in `db/connection.py` and `db/backup.py`. Use parameterized queries only.
+- Connections are opened in SQLite's autocommit mode (`connection.connect` / `open_db`). Writes
+  that belong together go in `connection.transaction(conn)`. Close connections with
+  `contextlib.closing`. Migrations never contain `BEGIN` or `COMMIT`.
 - Never call Lichess or Chess.com in tests or during development runs unless explicitly asked.
 - Don't add dependencies, frameworks or a frontend build step without asking.
 - Don't "improve" the product rules in §7 silently. If a rule looks wrong, flag it and
