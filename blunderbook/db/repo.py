@@ -28,6 +28,7 @@ from blunderbook.core.models import (
     Source,
     Speed,
     Status,
+    Totals,
 )
 from blunderbook.db.connection import transaction
 
@@ -153,6 +154,14 @@ def find_saved(conn: sqlite3.Connection, fingerprint: str) -> SavedIds | None:
         return None
     rows = conn.execute("SELECT id FROM blunders WHERE game_id = ? ORDER BY ply", (row[0],))
     return SavedIds(int(row[0]), tuple(int(r[0]) for r in rows))
+
+
+def totals(conn: sqlite3.Connection) -> Totals:
+    """Games and entries in the database. Works on any schema version from 1 on."""
+    row = conn.execute(
+        "SELECT (SELECT count(*) FROM games WHERE source <> 'fen'), (SELECT count(*) FROM blunders)"
+    ).fetchone()
+    return Totals(games=int(row[0]), entries=int(row[1]))
 
 
 def get_game(conn: sqlite3.Connection, game_id: int) -> Game | None:

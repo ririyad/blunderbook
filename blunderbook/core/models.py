@@ -313,3 +313,11 @@ class SavedIds:
 
     game_id: int
     blunder_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Totals:
+    """How much a database holds, shown before a restore."""
+
+    games: int  # imported games; a FEN entry's stand-in game doesn't count
+    entries: int

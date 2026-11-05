@@ -29,19 +29,21 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | In progress (4/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
+| M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M2.5 Backup + restore.
+**Next up:** M3.1 API.
 
-In place so far: all of M1, and M2.1–2.4. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1 and M2. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
 the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
-position you have no PGN of. `init` creates the database and `doctor` checks it. There's no
-way to read or annotate the saved entries yet: that's the web page in M3. All nine §12
+position you have no PGN of. The database is backed up once a day before `import` and `fen`,
+and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
+checks it and the backups. There's no way to read or annotate the saved entries yet: that's
+the web page in M3. All nine §12
 fixtures flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
@@ -196,12 +198,32 @@ Each item is one small commit, with its tests in the same change. Every commit m
       the blunder line, a FEN entry from the inaccuracy line. Checked with Stockfish 19: the
       back-rank `Rc7` and the Elephant `Nxd5` were logged as blunders, `h3` as an inaccuracy,
       and `e3` (the best move) was not logged.
-- [ ] **2.5 Backup + restore.** `db/backup.py` (CLAUDE.md §6 Backups), `[backup]` in config.toml,
+- [x] **2.5 Backup + restore.** `db/backup.py` (CLAUDE.md §6 Backups), `[backup]` in config.toml,
       `backup [--to FOLDER]` and `restore FILE` commands. A daily automatic backup runs before
       `import` and `fen`, and a safety copy before migrations and restores. `init` asks for the
       folder (suggests OneDrive when it's set up), and `doctor` shows the last backup.
       _Done when_ backup → change → restore gives back the old data, a corrupt or newer-schema
       file is refused, and rotation never deletes a file you named yourself.
+      - **Snapshot:** `VACUUM INTO` a temp file next to the database, `integrity_check`, copy
+        to `blunderbook-YYYY-MM-DD_HHMMSSZ[-reason].db.partial` in the backup folder, rename.
+        A test proves changes still in the `-wal` file are in the backup.
+      - **Rotation** keeps the newest `keep` files with that exact name pattern. Other files,
+        `.partial` leftovers and look-alike names are never touched.
+      - **Daily:** before `import` and `fen` (and `serve` / `sync` when they arrive), when the
+        newest backup's name is over 24 h old and the database has data. A failure is one
+        warning; the command carries on.
+      - **Before an upgrade:** `open_db(before_migrate=…)` runs when a database with data needs
+        migrating. The CLI takes a `-pre-migrate` backup there, even with `auto = false`. If
+        that backup fails, the upgrade doesn't happen.
+      - **Restore:** checks the file (SQLite, integrity, a Blunderbook schema no newer than this
+        app, not empty, not the live database), shows what the backup and your database hold,
+        and asks. Then a `-pre-restore` copy, `Connection.backup` into the live file, and
+        migrate. A bare file name is looked up in the backup folder.
+      - **Config:** `[backup] dir / keep / auto`. `dir` takes quotes, `~` and variables; an unset
+        variable (say `%OneDrive%` on a computer without it) is an error, not a stray folder.
+      - **Checked by hand** with Stockfish 19 on a scratch database: import → daily backup →
+        `backup` → import → `restore` of the first backup gave back 1 game · 1 entry, with a
+        `-pre-restore` copy of the 3 games · 5 entries.
 
 ### M3 API + Log view
 
@@ -290,15 +312,38 @@ uses the next one.
 | Command | Does | Status |
 |---|---|---|
 | `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
-| `blunderbook init` | Create config and the DB, ask for your names and Stockfish | Done (1.9, 2.1) |
-| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and the DB (changes nothing) | Done (1.9, 2.1) |
+| `blunderbook init` | Create config and the DB, ask for your names, Stockfish and the backup folder | Done (1.9, 2.1, 2.5) |
+| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the DB and the last backup (changes nothing) | Done (1.9, 2.1, 2.5) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
 | `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M6) |
-| `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Planned (2.5) |
-| `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Planned (2.5) |
+| `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Done (2.5) |
+| `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Done (2.5) |
+
+### Backups
+
+Backups are copies of `blunderbook.db`, named like `blunderbook-2026-11-05_081756Z.db` (UTC).
+By default they go to a `backups` folder next to the database. For a copy off your computer,
+use a folder your cloud drive syncs: answer `%OneDrive%\Blunderbook` when `init` asks, or set
+it in config.toml:
+
+```toml
+[backup]
+dir = '%OneDrive%\Blunderbook'   # empty = the local backups folder
+keep = 14                         # newest backups kept
+auto = true                       # once a day, before import and fen
+```
+
+- **Daily:** `import` and `fen` back up first when the newest backup is over a day old.
+- **By hand:** `blunderbook backup`, or `blunderbook backup --to E:\USB` for a one-off copy.
+- **Safety copies:** before a restore (`-pre-restore`) and before an upgrade to a newer schema
+  (`-pre-migrate`). They count towards `keep` like any other backup.
+- **Restore:** stop `blunderbook serve`, then `blunderbook restore FILE`. FILE can be a full
+  path, or just a name from the backup folder. It shows what the backup holds and asks first.
+- **What's not backed up:** config.toml (and your Lichess token). On a new computer, install,
+  run `blunderbook init`, then `blunderbook restore` the newest backup.
 
 ## Development
 
@@ -353,6 +398,16 @@ None open.
   - **Restore** uses SQLite's backup API, so there are no `-wal`/`-shm` files to clean up.
   - **What's not in it.** Backups don't include config.toml or the token. There's no `.dump`
     text copy.
+  - **Settled while building it:**
+    - The daily check skips a database with no rows, so a fresh database doesn't use a slot.
+    - If the `-pre-migrate` copy fails, the database isn't upgraded.
+    - The `-pre-restore` copy doesn't rotate, so a restore never deletes the file it reads.
+      The next backup rotates.
+    - Two backups in the same second: the second takes the next second's name.
+    - A relative `backup.dir` is relative to the config folder, like `stockfish_path`. An unset
+      variable in it is an error.
+    - `doctor` warns (old backup, missing folder) without failing. Only problems exit 1.
+    - `init` won't use the database's own folder for backups.
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
   repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),

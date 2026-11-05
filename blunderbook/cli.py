@@ -1,8 +1,8 @@
 """Command-line interface.
 
 Commands arrive milestone by milestone (see the README roadmap):
-engine (1.3) · init, doctor, import (1.9) · fen, backup, restore (M2) · serve (M3) ·
-sync (M5) · print (M6).
+engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
+serve (M3) · sync (M5) · print (M6).
 """
 
 import os
@@ -10,7 +10,7 @@ import sqlite3
 import sys
 from contextlib import closing
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -19,8 +19,8 @@ import typer
 
 from blunderbook import __version__, config, importer
 from blunderbook.core import detect, engine, pgn
-from blunderbook.core.models import Color, Judgment, SavedIds
-from blunderbook.db import connection, repo
+from blunderbook.core.models import Color, Judgment, SavedIds, Totals
+from blunderbook.db import backup, connection, repo
 
 app = typer.Typer(
     name="blunderbook",
@@ -114,7 +114,7 @@ def engine_clear() -> None:
 
 @app.command()
 def init() -> None:
-    """Set up config.toml (your names, where Stockfish is) and the database."""
+    """Set up config.toml (your names, Stockfish, the backup folder) and the database."""
     path = config.config_path()
     cfg = _load_config()
     if path.exists():
@@ -135,12 +135,20 @@ def init() -> None:
     typer.echo("\nStockfish: the program, or the folder you unzipped it to.")
     stockfish_path = _ask_stockfish(cfg.stockfish_path)
 
-    saved = config.save(replace(cfg, my_names=names, stockfish_path=stockfish_path))
+    backup_dir = _ask_backup_folder(cfg.backup.dir)
+
+    cfg = replace(
+        cfg,
+        my_names=names,
+        stockfish_path=stockfish_path,
+        backup=replace(cfg.backup, dir=backup_dir),
+    )
+    saved = config.save(cfg)
     typer.echo(f"\nSaved to {saved}")
 
     db = config.db_path()
     existed = db.exists()
-    with closing(_open_database("Your settings are saved, but the database isn't ready.")):
+    with closing(_open_database("Your settings are saved, but the database isn't ready.", cfg)):
         pass
     if existed:
         typer.echo(f"Database {db}")
@@ -181,6 +189,37 @@ def _ask_stockfish(current: str) -> str:
         _version_notes(info)
         _env_override_note()
         return str(program)
+
+
+def _ask_backup_folder(current: str) -> str:
+    """Ask until the answer is a folder that can be used, or Enter (the default folder)."""
+    typer.echo("\nBackups: daily copies of your database. Press Enter to keep them in")
+    typer.echo(f"  {config.default_backup_folder()}")
+    typer.echo("or give a folder. One your cloud drive syncs keeps a copy off this computer.")
+    if os.name == "nt" and os.environ.get("ONEDRIVE"):  # Windows names are case-blind
+        typer.echo("OneDrive is set up here, so %OneDrive%\\Blunderbook works.")
+    while True:
+        raw = typer.prompt("Backup folder", default=current, show_default=bool(current))
+        setting = config.backup_dir_setting(raw)
+        if not setting:
+            return ""
+        current = ""  # a failed answer isn't offered again as the default
+        try:
+            folder = config.backup_folder(config.Config(backup=config.BackupConfig(dir=setting)))
+        except config.ConfigError as exc:
+            typer.echo(f"{exc}\nTry again, or press Enter for the default.")
+            continue
+        if folder == config.db_path().parent:
+            typer.echo("That's the database's own folder. Pick another, or press Enter.")
+            continue
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            typer.echo(f"Can't create {folder}: {exc.strerror or exc}")
+            typer.echo("Try again, or press Enter for the default.")
+            continue
+        typer.echo(f"Backups go to {folder}")
+        return setting
 
 
 def _report_engine(path: Path) -> None:
@@ -239,11 +278,16 @@ def doctor(
         f"\N{MIDDLE DOT} {cfg.engine_hash_mb} MB hash",
     )
     problems += _doctor_database(config.db_path())
+    backup_problems, warnings = _doctor_backups(cfg)
+    problems += backup_problems
 
     typer.echo("")
     if problems:
         _fail(f"{_plural(problems, 'problem')} found.")
-    typer.echo("No problems found.")
+    if warnings:
+        typer.echo(f"No problems found. {_plural(warnings, 'warning')}.")
+    else:
+        typer.echo("No problems found.")
 
 
 def _doctor_database(path: Path) -> int:
@@ -265,6 +309,44 @@ def _doctor_database(path: Path) -> int:
     if result.version < result.latest:
         _row("", f"Note: run blunderbook init to upgrade it to schema {result.latest}.")
     return 0
+
+
+def _doctor_backups(cfg: config.Config) -> tuple[int, int]:
+    """Print the Backups rows; return the numbers of problems and warnings."""
+    try:
+        folder = config.backup_folder(cfg)
+    except config.ConfigError as exc:
+        _row("Backups", f"Problem: {exc}")
+        return 1, 0
+    _row("Backups", str(folder))
+    warnings = 0
+    if cfg.backup.dir and not folder.is_dir():
+        _row("", "Warning: this folder doesn't exist. Check [backup] dir in config.toml.")
+        warnings += 1
+    else:
+        try:
+            found = backup.list_backups(folder)
+        except backup.BackupError as exc:
+            _row("", f"Problem: {exc}")
+            return 1, 0
+        if not found:
+            has_db = config.db_path().exists()
+            _row("", "none yet. Run blunderbook backup to take one." if has_db else "none yet.")
+        else:
+            last = found[-1]
+            age = datetime.now(UTC) - last.taken_at
+            _row(
+                "",
+                f"last {_local_time(last.taken_at)} ({_ago(age)}) \N{MIDDLE DOT} "
+                f"{_plural(len(found), 'backup')} kept",
+            )
+            if age > backup.STALE_AFTER:
+                _row("", f"Warning: the last backup is {age.days} days old.")
+                _row("", "Run blunderbook backup.")
+                warnings += 1
+    if not cfg.backup.auto:
+        _row("", "Daily backups are off ([backup] auto in config.toml).")
+    return 0, warnings
 
 
 def _row(label: str, text: str) -> None:
@@ -310,7 +392,8 @@ def import_(
     if decoded.encoding == "cp1252":
         typer.echo("Read as Windows-1252 (the file isn't UTF-8).")
 
-    with closing(_open_database("Can't import: the database can't be used.")) as conn:
+    _daily_backup(cfg)
+    with closing(_open_database("Can't import: the database can't be used.", cfg)) as conn:
         my_side: Color | None = None if side is None else side.color
         queue = list(
             importer.prepare(
@@ -362,12 +445,25 @@ def import_(
         _print_report(queue, saved)
 
 
-def _open_database(problem: str) -> sqlite3.Connection:
-    """Open the database, creating it if it's missing. Close it with ``closing``."""
+def _open_database(problem: str, cfg: config.Config) -> sqlite3.Connection:
+    """Open the database, creating it if it's missing. A database with data is backed up
+    before it's upgraded. Close it with ``closing``."""
     path = config.db_path()
     existed = path.exists()
+
+    def before_migrate() -> None:
+        try:
+            snapshot = backup.take(
+                path, config.backup_folder(cfg), keep=cfg.backup.keep, reason="pre-migrate"
+            )
+        except (config.ConfigError, backup.BackupError) as exc:
+            raise connection.StorageError(
+                f"Can't back up the database before upgrading it, so it wasn't upgraded: {exc}"
+            ) from exc
+        typer.echo(f"Backed up the database before upgrading it:\n  {snapshot.backup.path}")
+
     try:
-        conn = connection.open_db(path, create=True)
+        conn = connection.open_db(path, create=True, before_migrate=before_migrate)
     except connection.StorageError as exc:
         _fail(f"{problem}\n{exc}")
     if not existed:
@@ -509,7 +605,9 @@ def fen(
     assert queued.game is not None and queued.fingerprint is not None and queued.side
     label = queued.game.plies[0].label
 
-    with closing(_open_database("Can't log the position: the database can't be used.")) as conn:
+    _daily_backup(cfg)
+    problem = "Can't log the position: the database can't be used."
+    with closing(_open_database(problem, cfg)) as conn:
         earlier = repo.find_saved(conn, queued.fingerprint)
         if earlier is not None:
             typer.echo(_already_logged(label, earlier))
@@ -581,6 +679,159 @@ def _already_logged(label: str, earlier: SavedIds) -> str:
     return f"You've already logged {label} in this position{where}. Nothing was added."
 
 
+# ---------------------------------------------------------------- backup, restore
+
+
+@app.command("backup")
+def backup_(
+    to: Annotated[
+        Path | None,
+        typer.Option("--to", metavar="FOLDER", help="Back up to this folder this time."),
+    ] = None,
+) -> None:
+    """Back up the database now. Only the newest are kept (keep in config.toml)."""
+    cfg = _load_config()
+    folder = _backup_folder(cfg) if to is None else Path(os.path.abspath(to.expanduser()))
+    try:
+        snapshot = backup.take(config.db_path(), folder, keep=cfg.backup.keep)
+    except backup.BackupError as exc:
+        _fail(str(exc))
+    typer.echo(f"Backed up the database to\n  {snapshot.backup.path}")
+    if snapshot.removed:
+        typer.echo(
+            f"Deleted {_plural(len(snapshot.removed), 'older backup')}, keeping the newest "
+            f"{cfg.backup.keep}."
+        )
+
+
+@app.command()
+def restore(
+    file: Annotated[
+        Path,
+        typer.Argument(
+            metavar="FILE",
+            help="A backup file. A file name on its own is looked up in the backup folder.",
+        ),
+    ],
+    yes: Annotated[bool, typer.Option("--yes", help="Don't ask to confirm.")] = False,
+) -> None:
+    """Replace the database with a backup, after checking it.
+
+    Your current database is backed up first, as a -pre-restore copy.
+    """
+    cfg = _load_config()
+    folder = _backup_folder(cfg)
+    path = _find_backup(file, folder)
+    db = config.db_path()
+    try:
+        backup.check_file(path)
+    except backup.BackupError as exc:
+        _fail(f"Can't restore {path}: {exc}\nNothing was changed.")
+
+    _row("Backup", str(path))
+    _row("", _describe_backup(path))
+    _row("Database", str(db))
+    _row("", _describe_database(db))
+    if not yes:
+        typer.echo("\nStop the web app (blunderbook serve) first if it's running.")
+        try:
+            go = typer.confirm("Replace your database with this backup?", default=False)
+        except typer.Abort:
+            go = False
+        if not go:
+            _fail("Nothing was changed.")
+
+    try:
+        result = backup.restore(path, db, folder)
+    except backup.BackupError as exc:
+        _fail(f"Can't restore {path}: {exc}")
+    typer.echo("")
+    if result.safety is not None:
+        typer.echo(f"Saved a copy of your database first:\n  {result.safety.path}")
+    if result.upgraded:
+        typer.echo(f"Upgraded the backup from schema {result.version} to {result.upgraded[-1]}.")
+    totals = _totals(db)
+    held = "" if totals is None else f": {_describe_totals(totals)}"
+    typer.echo(f"Restored {path.name}{held}.")
+
+
+def _daily_backup(cfg: config.Config) -> None:
+    """The automatic backup before a command that changes data. It never stops the command."""
+    if not cfg.backup.auto:
+        return
+    try:
+        snapshot = backup.auto(config.db_path(), config.backup_folder(cfg), keep=cfg.backup.keep)
+    except (config.ConfigError, backup.BackupError) as exc:
+        typer.echo(f"Warning: the daily backup didn't work: {exc}", err=True)
+        return
+    if snapshot is not None:
+        typer.echo(f"Daily backup: {snapshot.backup.path}")
+
+
+def _backup_folder(cfg: config.Config) -> Path:
+    try:
+        return config.backup_folder(cfg)
+    except config.ConfigError as exc:
+        _fail(str(exc))
+
+
+def _find_backup(file: Path, folder: Path) -> Path:
+    """``file`` as given, or a bare file name found in the backup folder."""
+    if file.exists():
+        return file
+    bare = file.name == str(file)
+    if bare and (folder / file.name).exists():
+        return folder / file.name
+    where = f", here or in the backup folder {folder}" if bare else ""
+    _fail(f"No file called {file}{where}.\nNothing was changed.")
+
+
+def _describe_backup(path: Path) -> str:
+    parts = []
+    named = backup.parse_name(path)
+    if named is not None:
+        age = datetime.now(UTC) - named.taken_at
+        parts.append(f"taken {_local_time(named.taken_at)} ({_ago(age)})")
+    totals = _totals(path)
+    if totals is not None:
+        parts.append(_describe_totals(totals))
+    return " \N{MIDDLE DOT} ".join(parts) or "a Blunderbook database"
+
+
+def _describe_database(db: Path) -> str:
+    if not db.exists():
+        return "not created yet"
+    totals = _totals(db)
+    return "can't be read" if totals is None else f"now holds {_describe_totals(totals)}"
+
+
+def _totals(path: Path) -> Totals | None:
+    try:
+        with closing(connection.connect(path, mode="ro")) as conn:
+            return repo.totals(conn)
+    except connection.StorageError, sqlite3.Error:
+        return None
+
+
+def _describe_totals(totals: Totals) -> str:
+    return f"{_plural(totals.games, 'game')} \N{MIDDLE DOT} {_plural(totals.entries, 'entry')}"
+
+
+def _local_time(moment: datetime) -> str:
+    return f"{moment.astimezone():%Y-%m-%d %H:%M}"
+
+
+def _ago(age: timedelta) -> str:
+    minutes = int(age.total_seconds() // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{_plural(minutes, 'minute')} ago"
+    if minutes < 48 * 60:
+        return f"{_plural(minutes // 60, 'hour')} ago"
+    return f"{_plural(age.days, 'day')} ago"
+
+
 # ---------------------------------------------------------------- helpers
 
 
@@ -609,7 +860,11 @@ def _find_engine(flag: str | None, cfg: config.Config, *, probe: bool = True) ->
 
 
 def _plural(n: int, word: str) -> str:
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+    if n == 1:
+        return f"{n} {word}"
+    if word.endswith("y") and word[-2:-1] not in ("a", "e", "o", "u"):
+        return f"{n} {word[:-1]}ies"
+    return f"{n} {word}s"
 
 
 def _load_config() -> config.Config:

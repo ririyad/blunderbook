@@ -9,7 +9,7 @@ Maintenance SQL only. Data SQL lives in repo.py.
 
 import re
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from importlib.resources import files
@@ -119,6 +119,19 @@ def _has_tables(conn: sqlite3.Connection) -> bool:
     return row is not None
 
 
+def has_rows(conn: sqlite3.Connection) -> bool:
+    """Whether any table holds a row, whatever the schema version."""
+    tables = conn.execute(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' "
+        "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'"
+    ).fetchall()
+    for (name,) in tables:
+        quoted = '"' + str(name).replace('"', '""') + '"'  # a name from the schema itself
+        if conn.execute(f"SELECT 1 FROM {quoted} LIMIT 1").fetchone() is not None:
+            return True
+    return False
+
+
 # ---------------------------------------------------------------- connections
 
 
@@ -140,18 +153,26 @@ def connect(path: Path, *, mode: Mode = "rw") -> sqlite3.Connection:
     return conn
 
 
-def open_db(path: Path, *, create: bool = False) -> sqlite3.Connection:
+def open_db(
+    path: Path, *, create: bool = False, before_migrate: Callable[[], object] | None = None
+) -> sqlite3.Connection:
     """Open the database for use: check it's ours and not from a newer Blunderbook, switch it
     to WAL, and bring it up to date. With ``create``, a missing file (and folder) is made.
-    Close it with ``contextlib.closing``."""
+
+    ``before_migrate`` runs when the database has data and needs upgrading, before anything
+    changes (the CLI takes a ``-pre-migrate`` backup there). If it raises, nothing is
+    migrated. Close the connection with ``contextlib.closing``."""
     if not path.exists():
         if not create:
             raise StorageError(f"No database at {path} yet. Run: blunderbook init")
         path.parent.mkdir(parents=True, exist_ok=True)
     conn = connect(path, mode="rwc" if create else "rw")
     try:
-        _check_ours(conn, user_version(conn), latest_version())
+        version, latest = user_version(conn), latest_version()
+        _check_ours(conn, version, latest)
         conn.execute("PRAGMA journal_mode = WAL")
+        if before_migrate is not None and version < latest and has_rows(conn):
+            before_migrate()
         migrate(conn)
     except sqlite3.Error as exc:
         conn.close()

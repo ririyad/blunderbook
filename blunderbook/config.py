@@ -11,6 +11,7 @@ a lower one, so you always know which engine is running.
 """
 
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -52,6 +53,39 @@ def db_path() -> Path:
     return Path(user_data_dir(APP_NAME, appauthor=False)) / "blunderbook.db"
 
 
+def default_backup_folder() -> Path:
+    return db_path().parent / "backups"
+
+
+def backup_folder(config: Config, *, config_dir: Path | None = None) -> Path:
+    """Where backups go: ``[backup] dir``, or a ``backups`` folder next to the database.
+
+    Like stockfish_path, it accepts surrounding quotes, ``~`` and environment variables,
+    and a relative path is relative to the config folder. An environment variable that
+    isn't set is an error, so a missing ``%OneDrive%`` never becomes a stray folder."""
+    text = _unquote(config.backup.dir)
+    if not text:
+        return default_backup_folder()
+    unset = _unset_variables(text)
+    if unset:
+        raise ConfigError(
+            f"backup.dir uses {unset[0]}, which isn't set on this computer ({config.backup.dir})."
+        )
+    return _absolute(text, config_dir or config_path().parent)
+
+
+def backup_dir_setting(raw: str, *, cwd: Path | None = None) -> str:
+    """The ``backup.dir`` value to save for a folder someone typed. It's kept as typed when
+    it's absolute once ``~`` and variables are expanded, so ``%OneDrive%\\Blunderbook``
+    stays portable. A relative folder is saved as its absolute path from ``cwd``."""
+    text = _unquote(raw)
+    if not text:
+        return ""
+    if Path(os.path.expandvars(os.path.expanduser(text))).is_absolute():
+        return text
+    return str(_absolute(text, cwd))
+
+
 # ---------------------------------------------------------------- model
 
 
@@ -68,6 +102,13 @@ class ChesscomConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class BackupConfig:
+    dir: str = ""  # empty = <data folder>/backups; quotes, ~ and env vars allowed
+    keep: int = 14  # newest backups kept
+    auto: bool = True  # once a day before commands that change data
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     my_names: tuple[str, ...] = ()
     stockfish_path: str = ""
@@ -77,6 +118,7 @@ class Config:
     thresholds: Thresholds = field(default_factory=Thresholds)
     lichess: LichessConfig = field(default_factory=LichessConfig)
     chesscom: ChesscomConfig = field(default_factory=ChesscomConfig)
+    backup: BackupConfig = field(default_factory=BackupConfig)
 
 
 # ---------------------------------------------------------------- load
@@ -115,6 +157,7 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
     th = root.table("thresholds")
     li = root.table("lichess")
     cc = root.table("chesscom")
+    bk = root.table("backup")
     d = Config()
     dt = d.thresholds
     thresholds = Thresholds(
@@ -134,6 +177,11 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
         thresholds=thresholds,
         lichess=LichessConfig(username=li.text("username", ""), token=li.text("token", "")),
         chesscom=ChesscomConfig(username=cc.text("username", ""), contact=cc.text("contact", "")),
+        backup=BackupConfig(
+            dir=bk.text("dir", d.backup.dir),
+            keep=bk.whole("keep", d.backup.keep, minimum=1),
+            auto=bk.flag("auto", d.backup.auto),
+        ),
     )
 
 
@@ -163,6 +211,12 @@ class _Table:
         value = self._data.get(key, default)
         if type(value) is not int or value < minimum:
             raise ConfigError(f"{self._name(key)} must be a whole number, {minimum} or more")
+        return value
+
+    def flag(self, key: str, default: bool) -> bool:
+        value = self._data.get(key, default)
+        if not isinstance(value, bool):
+            raise ConfigError(f"{self._name(key)} must be true or false")
         return value
 
     def fraction(self, key: str, default: float) -> float:
@@ -195,7 +249,7 @@ def save(config: Config, path: Path | None = None) -> Path:
 
 def render(config: Config) -> str:
     """The full config.toml text for ``config``. Comments come from this template."""
-    t, li, cc = config.thresholds, config.lichess, config.chesscom
+    t, li, cc, bk = config.thresholds, config.lichess, config.chesscom, config.backup
     lines = [
         "# Blunderbook settings.",
         "# The app rewrites this file when you change a setting, so comments you add",
@@ -230,6 +284,16 @@ def render(config: Config) -> str:
         f"username = {_toml_str(cc.username)}",
         "# Sent in the User-Agent header, as Chess.com asks. Your email works.",
         f"contact = {_toml_str(cc.contact)}",
+        "",
+        "# Database backups. Empty dir = a `backups` folder next to the database. For a",
+        "# copy off this computer, use a folder your cloud drive syncs, such as",
+        "# '%OneDrive%\\Blunderbook'. Backups hold the database only, never this file.",
+        "[backup]",
+        f"dir = {_toml_str(bk.dir)}",
+        "# How many of the newest backups to keep (1 or more).",
+        f"keep = {bk.keep}",
+        "# Back up once a day before import, fen, sync and serve.",
+        f"auto = {'true' if bk.auto else 'false'}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -325,17 +389,10 @@ def resolve_engine_path(raw: str, base: Path | None = None) -> Path:
     Accepts surrounding quotes, ``~``, environment variables, and a folder (searched,
     plus one level down).
     """
-    text = raw.strip()
-    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
-        text = text[1:-1].strip()
+    text = _unquote(raw)
     if not text:
         raise EnginePathError("The path is empty.")
-    path = Path(os.path.expandvars(os.path.expanduser(text)))
-    if not path.is_absolute():
-        path = (base or Path.cwd()) / path
-    # abspath, not resolve(): keep symlinks such as Homebrew's bin/stockfish, which
-    # survive upgrades, instead of the versioned file they point to.
-    path = Path(os.path.abspath(path))
+    path = _absolute(text, base)
     if path.is_dir():
         return _find_in_folder(path)
     if not path.exists():
@@ -343,6 +400,38 @@ def resolve_engine_path(raw: str, base: Path | None = None) -> Path:
     if not _is_program(path):
         raise EnginePathError(f"{path} isn't a program you can run.")
     return path
+
+
+def _unquote(raw: str) -> str:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    return text
+
+
+# $NAME and ${NAME} everywhere; %NAME% on Windows, where expandvars reads it too.
+_VARIABLE = re.compile(r"\$(\w+)|\$\{([^}]*)\}" + (r"|%([^%]+)%" if os.name == "nt" else ""))
+
+
+def _unset_variables(text: str) -> list[str]:
+    """The variables ``text`` uses that aren't set, as written (``%OneDrive%``)."""
+    unset = []
+    for match in _VARIABLE.finditer(text):
+        name = next(g for g in match.groups() if g is not None)
+        if not name or name not in os.environ:
+            unset.append(match.group(0))
+    return unset
+
+
+def _absolute(text: str, base: Path | None) -> Path:
+    """Expand ``~`` and environment variables, and make the path absolute against ``base``
+    (default: the current folder)."""
+    path = Path(os.path.expandvars(os.path.expanduser(text)))
+    if not path.is_absolute():
+        path = (base or Path.cwd()) / path
+    # abspath, not resolve(): keep symlinks such as Homebrew's bin/stockfish, which
+    # survive upgrades, instead of the versioned file they point to.
+    return Path(os.path.abspath(path))
 
 
 def _find_in_folder(folder: Path) -> Path:

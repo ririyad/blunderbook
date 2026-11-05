@@ -1,10 +1,12 @@
 """`blunderbook init`, `doctor`, `import` and `fen`, against a temp config, a stubbed probe
-and a scripted engine (no Stockfish needed)."""
+and a scripted engine (no Stockfish needed). Includes their backup steps: the init prompt,
+doctor's Backups row, the daily backup and the backup before an upgrade."""
 
 import sqlite3
 import sys
 from contextlib import closing
-from datetime import date
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +19,7 @@ from blunderbook.cli import app
 from blunderbook.core import engine, pgn
 from blunderbook.core.engine import EngineError, EngineInfo, Line
 from blunderbook.core.models import Eval
-from blunderbook.db import connection, repo
+from blunderbook.db import backup, connection, repo
 
 runner = CliRunner()
 WINDOWS = sys.platform == "win32"
@@ -31,6 +33,7 @@ def cfg_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(config, "config_path", lambda: path)
     monkeypatch.delenv(config.STOCKFISH_ENV, raising=False)
     monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.delenv("ONEDRIVE", raising=False)
     return path
 
 
@@ -67,7 +70,7 @@ def newer_db(path: Path) -> None:
 
 def test_init_saves_names_and_stockfish(tmp_path: Path, cfg_file: Path, probes: list) -> None:
     exe = program(tmp_path / "sf")
-    result = runner.invoke(app, ["init"], input=f" Rashed, rashed_blitz ,Rashed\n{exe}\n")
+    result = runner.invoke(app, ["init"], input=f" Rashed, rashed_blitz ,Rashed\n{exe}\n\n")
     assert result.exit_code == 0, result.output
     assert f"Creating {cfg_file}." in result.output
     assert f"Found Stockfish 17.1 at\n  {exe}" in result.output
@@ -78,7 +81,7 @@ def test_init_saves_names_and_stockfish(tmp_path: Path, cfg_file: Path, probes: 
 
 
 def test_init_enter_means_path(cfg_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
     assert result.exit_code == 0, result.output
     assert "No Stockfish on PATH yet" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -89,7 +92,7 @@ def test_init_finds_stockfish_on_path(
 ) -> None:
     exe = program(tmp_path / "bin")
     monkeypatch.setattr("shutil.which", lambda _: str(exe))
-    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Found Stockfish 17.1 on PATH at\n  {exe}" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -98,7 +101,7 @@ def test_init_finds_stockfish_on_path(
 def test_init_asks_again_after_a_bad_path(tmp_path: Path, cfg_file: Path, probes: list) -> None:
     exe = program(tmp_path / "sf")
     missing = tmp_path / "nowhere" / "stockfish.exe"
-    result = runner.invoke(app, ["init"], input=f"Rashed\n{missing}\n{exe}\n")
+    result = runner.invoke(app, ["init"], input=f"Rashed\n{missing}\n{exe}\n\n")
     assert result.exit_code == 0, result.output
     assert f"Nothing found at {missing}." in result.output
     assert "Try again, or press Enter to look on PATH." in result.output
@@ -114,7 +117,7 @@ def test_init_rejects_a_program_that_isnt_stockfish(
         raise EngineError("This is Lc0, not Stockfish. Blunderbook only uses Stockfish.")
 
     monkeypatch.setattr(engine, "probe", refuse)
-    result = runner.invoke(app, ["init"], input=f"Rashed\n{exe}\n\n")
+    result = runner.invoke(app, ["init"], input=f"Rashed\n{exe}\n\n\n")
     assert result.exit_code == 0, result.output
     assert "not Stockfish" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -125,7 +128,7 @@ def test_init_keeps_existing_values_on_enter(tmp_path: Path, cfg_file: Path, pro
     config.save(
         config.Config(my_names=("Rashed",), stockfish_path=str(exe), engine_depth=20), cfg_file
     )
-    result = runner.invoke(app, ["init"], input="\n\n")
+    result = runner.invoke(app, ["init"], input="\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Updating {cfg_file}." in result.output
     saved = config.load(cfg_file)
@@ -133,14 +136,14 @@ def test_init_keeps_existing_values_on_enter(tmp_path: Path, cfg_file: Path, pro
 
 
 def test_init_without_names(cfg_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input=" , \n\n")
+    result = runner.invoke(app, ["init"], input=" , \n\n\n")
     assert result.exit_code == 0, result.output
     assert "No names set. Every game will ask which side you played." in result.output
     assert config.load(cfg_file).my_names == ()
 
 
 def test_init_creates_the_database(cfg_file: Path, db_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Created the database {db_file}\nNext: blunderbook import FILE.pgn" in result.output
     with closing(connection.connect(db_file, mode="ro")) as conn:
@@ -148,10 +151,10 @@ def test_init_creates_the_database(cfg_file: Path, db_file: Path, probes: list) 
 
 
 def test_init_again_keeps_the_data(cfg_file: Path, db_file: Path, probes: list) -> None:
-    assert runner.invoke(app, ["init"], input="Rashed\n\n").exit_code == 0
+    assert runner.invoke(app, ["init"], input="Rashed\n\n\n").exit_code == 0
     with closing(connection.open_db(db_file)) as conn:
         conn.execute("INSERT INTO sync_state (source, username) VALUES ('lichess', 'rashed')")
-    result = runner.invoke(app, ["init"], input="\n\n")
+    result = runner.invoke(app, ["init"], input="\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Database {db_file}\n" in result.output
     with closing(connection.open_db(db_file)) as conn:
@@ -160,7 +163,7 @@ def test_init_again_keeps_the_data(cfg_file: Path, db_file: Path, probes: list) 
 
 def test_init_with_a_database_from_a_newer_app(cfg_file: Path, db_file: Path, probes: list) -> None:
     newer_db(db_file)
-    result = runner.invoke(app, ["init"], input="Rashed\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
     assert result.exit_code == 1
     assert "Your settings are saved, but the database isn't ready." in result.output
     assert "made by a newer Blunderbook (schema 99;" in result.output
@@ -654,3 +657,251 @@ def test_fen_engine_failure_logs_nothing(ready: Path, stub: StubEngine, db_file:
     assert "Analysis stopped: Stockfish stopped unexpectedly.\nNothing was logged." in result.output
     assert saved_games(db_file) == 0
     assert stub.closed
+
+
+# ---------------------------------------------------------------- backups: init
+
+
+def test_init_asks_for_the_backup_folder(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    target = tmp_path / "cloud" / "Blunderbook"
+    result = runner.invoke(app, ["init"], input=f"Rashed\n\n{target}\n")
+    assert result.exit_code == 0, result.output
+    default = db_file.parent / "backups"
+    assert f"Press Enter to keep them in\n  {default}\nor give a folder." in result.output
+    assert "OneDrive" not in result.output
+    assert f"Backups go to {target}\n" in result.output
+    assert target.is_dir()
+    assert config.load(cfg_file).backup.dir == str(target)
+
+
+def test_init_enter_keeps_backups_next_to_the_database(cfg_file: Path, probes: list) -> None:
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert "Backups go to" not in result.output
+    assert config.load(cfg_file).backup == config.BackupConfig()
+
+
+@pytest.mark.skipif(not WINDOWS, reason="%OneDrive% is a Windows variable")
+def test_init_suggests_onedrive(
+    tmp_path: Path, cfg_file: Path, probes: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OneDrive", str(tmp_path / "OneDrive"))
+    result = runner.invoke(app, ["init"], input="Rashed\n\n%OneDrive%\\Blunderbook\n")
+    assert result.exit_code == 0, result.output
+    assert "OneDrive is set up here, so %OneDrive%\\Blunderbook works." in result.output
+    assert config.load(cfg_file).backup.dir == "%OneDrive%\\Blunderbook"  # kept portable
+    assert (tmp_path / "OneDrive" / "Blunderbook").is_dir()
+
+
+def test_init_asks_again_for_a_bad_backup_folder(
+    cfg_file: Path, db_file: Path, probes: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("BB_MISSING", raising=False)
+    answers = f"Rashed\n\n$BB_MISSING/bk\n{db_file.parent}\n\n"
+    result = runner.invoke(app, ["init"], input=answers)
+    assert result.exit_code == 0, result.output
+    assert "backup.dir uses $BB_MISSING, which isn't set on this computer" in result.output
+    assert "That's the database's own folder. Pick another, or press Enter." in result.output
+    assert config.load(cfg_file).backup.dir == ""
+
+
+def test_init_keeps_the_backup_folder_on_enter(
+    tmp_path: Path, cfg_file: Path, probes: list
+) -> None:
+    target = str(tmp_path / "bk")
+    config.save(
+        config.Config(my_names=("Rashed",), backup=config.BackupConfig(dir=target)), cfg_file
+    )
+    result = runner.invoke(app, ["init"], input="\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert f"Backup folder [{target}]:" in result.output
+    assert config.load(cfg_file).backup.dir == target
+
+
+# ---------------------------------------------------------------- backups: doctor
+
+
+def doctor_with_stockfish(tmp_path: Path) -> Any:
+    return runner.invoke(app, ["doctor", "--stockfish", str(program(tmp_path / "sf"))])
+
+
+def database_with_a_backup(db_file: Path, age: timedelta) -> None:
+    with closing(connection.open_db(db_file, create=True)):
+        pass
+    backup.take(db_file, db_file.parent / "backups", keep=14, now=datetime.now(UTC) - age)
+
+
+def test_doctor_backups_none_yet(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    result = doctor_with_stockfish(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert f"Backups    {db_file.parent / 'backups'}\n           none yet.\n" in result.output
+    with closing(connection.open_db(db_file, create=True)):
+        pass
+    result = doctor_with_stockfish(tmp_path)
+    assert "           none yet. Run blunderbook backup to take one.\n" in result.output
+
+
+def test_doctor_shows_the_last_backup(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    database_with_a_backup(db_file, timedelta(hours=3, minutes=5))
+    result = doctor_with_stockfish(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert f" (3 hours ago) {DOT} 1 backup kept\n" in result.output
+    assert "Warning" not in result.output
+    assert result.output.rstrip().endswith("No problems found.")
+
+
+def test_doctor_warns_about_an_old_backup(
+    tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
+) -> None:
+    database_with_a_backup(db_file, timedelta(days=8, hours=1))
+    result = doctor_with_stockfish(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert f" (8 days ago) {DOT} 1 backup kept\n" in result.output
+    assert "           Warning: the last backup is 8 days old.\n" in result.output
+    assert result.output.rstrip().endswith("No problems found. 1 warning.")
+
+
+def test_doctor_warns_about_a_missing_folder(tmp_path: Path, cfg_file: Path, probes: list) -> None:
+    gone = tmp_path / "gone"
+    config.save(config.Config(backup=config.BackupConfig(dir=str(gone), auto=False)), cfg_file)
+    result = doctor_with_stockfish(tmp_path)
+    assert result.exit_code == 0, result.output
+    assert f"Backups    {gone}\n           Warning: this folder doesn't exist." in result.output
+    assert "Daily backups are off ([backup] auto in config.toml)." in result.output
+    assert not gone.exists()  # doctor changes nothing
+
+
+def test_doctor_backup_folder_with_an_unset_variable(
+    tmp_path: Path, cfg_file: Path, probes: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("BB_MISSING", raising=False)
+    config.save(config.Config(backup=config.BackupConfig(dir="$BB_MISSING/bk")), cfg_file)
+    result = doctor_with_stockfish(tmp_path)
+    assert result.exit_code == 1
+    assert "Backups    Problem: backup.dir uses $BB_MISSING" in result.output
+    assert "1 problem found." in result.output
+
+
+# ---------------------------------------------------------------- backups: import, fen
+
+
+def backups(db_file: Path) -> list[backup.Backup]:
+    return backup.list_backups(db_file.parent / "backups")
+
+
+def set_backup(cfg_file: Path, **changes: Any) -> None:
+    cfg = config.load(cfg_file)
+    config.save(replace(cfg, backup=replace(cfg.backup, **changes)), cfg_file)
+
+
+def import_fixture(name: str) -> Any:
+    return runner.invoke(app, ["import", str(FIXTURES / name), "--side", "white"])
+
+
+def test_import_takes_the_daily_backup_first(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    first = import_fixture("qgd_elephant.pgn")
+    assert first.exit_code == 0, first.output
+    assert "Daily backup" not in first.output  # nothing to back up yet
+    assert backups(db_file) == []
+
+    second = import_fixture("blackburne_shilling.pgn")
+    assert second.exit_code == 0, second.output
+    (made,) = backups(db_file)
+    assert f"Daily backup: {made.path}\n" in second.output
+    with closing(connection.connect(made.path, mode="ro")) as conn:
+        assert len(repo.known_fingerprints(conn)) == 1  # taken before this import
+
+    third = import_fixture("legal_trap.pgn")
+    assert third.exit_code == 0, third.output
+    assert "Daily backup" not in third.output  # one a day
+    assert len(backups(db_file)) == 1
+    assert saved_games(db_file) == 3
+
+
+def test_daily_backup_off(ready: Path, stub: StubEngine, db_file: Path, cfg_file: Path) -> None:
+    set_backup(cfg_file, auto=False)
+    assert import_fixture("qgd_elephant.pgn").exit_code == 0
+    result = import_fixture("blackburne_shilling.pgn")
+    assert result.exit_code == 0, result.output
+    assert "Daily backup" not in result.output
+    assert backups(db_file) == []
+
+
+def test_a_failed_daily_backup_doesnt_stop_the_import(
+    tmp_path: Path, ready: Path, stub: StubEngine, db_file: Path, cfg_file: Path
+) -> None:
+    blocker = tmp_path / "a file"
+    blocker.write_bytes(b"")
+    set_backup(cfg_file, dir=str(blocker / "bk"))
+    assert import_fixture("qgd_elephant.pgn").exit_code == 0
+    result = import_fixture("blackburne_shilling.pgn")
+    assert result.exit_code == 0, result.output
+    assert "Warning: the daily backup didn't work: Can't create the backup folder" in (
+        result.output
+    )
+    assert saved_games(db_file) == 2
+
+
+def test_fen_takes_the_daily_backup_first(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    assert import_fixture("qgd_elephant.pgn").exit_code == 0
+    back_rank(stub, Eval(mate=-1), "e7e1")
+    result = fen("--move", "Rc7")
+    assert result.exit_code == 0, result.output
+    (made,) = backups(db_file)
+    assert f"Daily backup: {made.path}\n" in result.output
+
+
+def two_migrations() -> tuple[connection.Migration, ...]:
+    """The real migrations plus a made-up next one."""
+    real = connection.MIGRATIONS.joinpath("0001_init.sql").read_text("utf-8")
+    return (
+        connection.Migration(1, "0001_init.sql", real),
+        connection.Migration(2, "0002_extra.sql", "CREATE TABLE extra (x INTEGER);"),
+    )
+
+
+def test_import_backs_up_before_upgrading(
+    ready: Path, stub: StubEngine, db_file: Path, cfg_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    set_backup(cfg_file, auto=False)  # the safety copy doesn't depend on daily backups
+    assert import_fixture("qgd_elephant.pgn").exit_code == 0
+    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    result = import_fixture("blackburne_shilling.pgn")
+    assert result.exit_code == 0, result.output
+    (made,) = backups(db_file)
+    assert made.reason == "pre-migrate"
+    assert f"Backed up the database before upgrading it:\n  {made.path}\n" in result.output
+    with closing(connection.connect(made.path, mode="ro")) as conn:
+        assert connection.user_version(conn) == 1
+    with closing(connection.connect(db_file, mode="ro")) as conn:
+        assert connection.user_version(conn) == 2
+
+
+def test_no_upgrade_without_the_safety_copy(
+    tmp_path: Path,
+    ready: Path,
+    stub: StubEngine,
+    db_file: Path,
+    cfg_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert import_fixture("qgd_elephant.pgn").exit_code == 0
+    blocker = tmp_path / "a file"
+    blocker.write_bytes(b"")
+    set_backup(cfg_file, dir=str(blocker / "bk"), auto=False)
+    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    result = import_fixture("blackburne_shilling.pgn")
+    assert result.exit_code == 1
+    assert (
+        "Can't import: the database can't be used.\n"
+        "Can't back up the database before upgrading it, so it wasn't upgraded: "
+        "Can't create the backup folder"
+    ) in result.output
+    with closing(connection.connect(db_file, mode="ro")) as conn:
+        assert connection.user_version(conn) == 1

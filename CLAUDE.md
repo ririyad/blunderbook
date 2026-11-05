@@ -286,21 +286,28 @@ an error. `blunderbook engine set` checks a path before saving it.
   integrity_check`. Then copy it into the backup folder as
   `blunderbook-YYYY-MM-DD_HHMMSSZ[-reason].db.partial` (UTC) and rename it to `.db`. Close
   every connection (`contextlib.closing`).
+  Two backups in the same second: the second takes the next second's name, so neither
+  replaces the other.
 - **Rotation.** Delete only files whose names match that generated pattern, oldest first,
   beyond `keep`. Never touch other files in the folder. Rotate only after the new backup
   succeeded.
 - **Automatic.** If `auto` is on, back up before a command that changes data (`serve` start,
   `import`, `fen`, `sync`) when the newest backup is over 24 h old. Read that age from the file
-  names. A failed automatic backup prints one warning and never blocks the command. Always back
-  up before migrating a database that has data (`-pre-migrate`).
-- **Restore.** Check the file's integrity and that its `user_version` isn't newer than the app.
-  Back up the current DB (`-pre-restore`). Then copy the file in with SQLite's backup API
-  (`Connection.backup`), never by replacing the file (a stale `-wal` would corrupt it), and
-  migrate.
+  names. A database with no rows isn't backed up. A failed automatic backup prints one warning
+  and never blocks the command. Always back up before migrating a database that has data
+  (`-pre-migrate`, even with `auto = false`): `connection.open_db(before_migrate=…)`. If that
+  backup fails, the database isn't migrated.
+- **Restore.** Check the file: it opens as SQLite, passes its integrity check, has a Blunderbook
+  `user_version` that isn't 0 or newer than the app, and isn't the live DB. Back up the current
+  DB (`-pre-restore`, without rotation, so a restore never deletes the file it reads; skipped
+  when the DB is missing or has no rows). If that backup fails, change nothing. Then copy the
+  file in with SQLite's backup API (`Connection.backup`), never by replacing the file (a stale
+  `-wal` would corrupt it), and migrate.
 - **What's not included.** Backups hold the DB only. config.toml (and the token) is never
   backed up. On a new computer, run `init`, then `restore`.
 - **Folder.** The live DB never goes in a synced folder; only backups do. `backup.dir` accepts
-  quotes, `~` and env vars, like `stockfish_path`.
+  quotes, `~` and env vars, like `stockfish_path`, and a relative one is relative to the config
+  folder. An env var that isn't set is a config error, never a stray `%OneDrive%` folder.
 
 ---
 
@@ -470,7 +477,7 @@ They return **PGN text only**. The importer does everything else.
 
 | Command | Does |
 |---|---|
-| `init` | Create config and DB, ask for names, the Stockfish path (Enter = PATH) and the backup folder (suggests `%OneDrive%\Blunderbook` when set; Enter = local default), check Stockfish. |
+| `init` | Create config and DB, ask for names, the Stockfish path (Enter = PATH) and the backup folder (suggests `%OneDrive%\Blunderbook` when set; Enter = local default; not the database's own folder), check Stockfish. A folder with `~` or env vars is saved as typed; a relative one as its absolute path. |
 | `doctor [--stockfish PATH]` | Check Stockfish path and version, DB integrity and schema version, last backup (warns after 7 days or if the folder is missing), config sanity. Reports only; changes nothing. |
 | `engine show` | Which Stockfish is used, its version, and where the setting came from. |
 | `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
@@ -481,7 +488,7 @@ They return **PGN text only**. The importer does everything else.
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
 | `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
-| `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. Asks to confirm and that the web app is stopped. |
+| `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
 
 Every command prints a short, readable summary, e.g.
 `2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.
@@ -490,7 +497,8 @@ Exit codes: `import` exits 1 only when it can't run (the file can't be read, it 
 games, the database can't be used, there's no Stockfish while some game is ready, or the
 engine fails; in that last case the games done so far are saved and reported first, and
 importing the file again finishes the rest). A report with needs-side games or errors exits 0.
-`doctor` exits 1 when it finds a problem.
+`doctor` exits 1 when it finds a problem. Warnings (an old backup, a missing backup folder)
+are shown but don't change the exit code.
 
 ---
 

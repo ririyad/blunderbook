@@ -89,6 +89,14 @@ def ids(entries: list) -> list[int]:
 # ---------------------------------------------------------------- games
 
 
+def test_totals(conn: sqlite3.Connection) -> None:
+    assert repo.totals(conn) == repo.Totals(games=0, entries=0)
+    repo.add_game(conn, new_game(), [new_blunder(), new_blunder(ply=12, move_no=7)], now=NOW)
+    repo.add_game(conn, new_game(fingerprint="fp-quiet"), now=NOW)
+    repo.add_game(conn, new_game(fingerprint="fp-fen", source="fen"), [new_blunder()], now=NOW)
+    assert repo.totals(conn) == repo.Totals(games=2, entries=3)  # the FEN entry's game isn't one
+
+
 def test_game_round_trip(conn: sqlite3.Connection) -> None:
     game = new_game()
     saved = repo.add_game(conn, game, now=NOW)
