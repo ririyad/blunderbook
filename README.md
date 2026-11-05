@@ -16,7 +16,8 @@ and honest about what was automated and what wasn't.
 
 The full spec is in [CLAUDE.md](CLAUDE.md). The approved UI prototype is
 [docs/reference-demo.html](docs/reference-demo.html). It's a UI reference only and won't run on
-its own, because its `chess.js` and `stockfish.js` files aren't in the repo.
+its own, because its `chess.js` and `stockfish.js` files aren't in the repo. Its Import view
+isn't part of v1: you add games with `blunderbook import`.
 
 ---
 
@@ -29,11 +30,10 @@ _Last updated: 2026-11-05_
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
+| M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
-| M5 Import view + jobs | Not started | Background jobs, side selection, FEN quick entry UI |
-| M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
-| M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
+| M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
+| M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
 **Next up:** M2.1 Connection + migrations.
 
@@ -42,6 +42,9 @@ analyses each game with Stockfish (both passes), and suggests causes. `blunderbo
 `doctor`, `import` and `engine show|set|clear` work (see Usage). `import` prints the full
 report, but nothing is saved until M2 adds the database. All nine §12 fixtures flag their
 expected blunder under `uv run pytest -m engine`.
+
+Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
+writing notes, re-testing and patterns. See Decided.
 
 ---
 
@@ -79,20 +82,20 @@ Each item is one small commit, with its tests in the same change. Every commit m
       verbatim text, plain reasons for unreadable games, and nothing logged to the console.
       `decode()` reads UTF-8, falling back to cp1252 (CLAUDE.md §7.1). `parse_date` / `parse_int`
       for headers. Read-only headers use the 3.15 `frozendict`. Text python-chess skips silently is
-      caught too (see Open decisions 7). All nine §12 fixtures are in `tests/fixtures/pgn/`, each
+      caught too (CLAUDE.md §7.1). All nine §12 fixtures are in `tests/fixtures/pgn/`, each
       checked for its blunder move, side and ply.
       _Done when_ `multi_game.pgn` gives the good games plus one reported error (`Illegal move 2. Ke3`).
 - [x] **1.5 Identity + source.** `core/identity.py`: `my_side()` (trimmed, case-insensitive exact
       match; `None` = needs side, also when both players match) and `fingerprint()` (site game id,
-      else players, date and first 30 moves, plus the start FEN; see Open decisions 8–9).
+      else players, date and first 30 moves, plus the start FEN; CLAUDE.md §7.3–7.4).
       `core/source.py`: `detect_source()` gives the source, label, and the Lichess / Chess.com game
-      id and URL (see Open decisions 10).
+      id and URL (CLAUDE.md §7.5).
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
 - [x] **1.6 Detection maths.** `core/detect.py`: winning chances, swing (checked against the
       demo's numbers for every fixture blunder), judgment, flagging, accepted re-test moves
       (pure part of pass 2), and `best_line_san` (6 plies) / `refutation_san` (5 plies), which
       stop at an illegal PV move. `Thresholds` moved to `core/models.py` so core never imports
-      `config`. config.toml now rejects thresholds that don't go up. See Open decisions 11.
+      `config`. config.toml now rejects thresholds that don't go up (CLAUDE.md §7.6).
       _Done when_ thresholds and Black-start move numbering (`5... Nxe5 6. Be2`) are tested.
 - [x] **1.7 Engine analysis.** `core/engine.py`: `Engine` (a context manager; checks it's
       Stockfish and applies Threads and Hash), `analyse_game()` (pass 1 on every position, then
@@ -100,14 +103,14 @@ Each item is one small commit, with its tests in the same change. Every commit m
       engine), and scores turned to White's point of view. Each flagged move becomes a
       `Finding` holding everything the engine fills in for a blunder entry. `probe()` now uses
       `Engine`. Tests use a scripted analyser and the fake UCI engine, which now plays legal
-      moves and can crash on demand. Two tests run against real Stockfish. See Open decisions 12.
+      moves and can crash on demand. Two tests run against real Stockfish (CLAUDE.md §7.6).
       _Done when_ the engine always closes, even on errors.
 - [x] **1.8 Suggested causes.** `core/hints.py`: `suggest()` returns the suggested causes (in
       the fixed cause order) plus the clock left and time spent, ready for `clock_left_s` /
       `time_spent_s`. Rules: time trouble, moved too fast, missed their threat, and hung a piece
       (6 plies of the refutation). The §12 fixtures give their expected hints, including
       `back_rank` "Time trouble" and `scholars_mate` "Missed their threat" (also against real
-      Stockfish). See Open decisions 5 and 13.
+      Stockfish). See CLAUDE.md §7.7.
       _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
 - [x] **1.9 Importer + CLI.** `importer.py`: `prepare()` queues each game as ready, needs side,
       duplicate (already known, or repeated in the same file) or error. `analyse()` adds the
@@ -121,14 +124,15 @@ Each item is one small commit, with its tests in the same change. Every commit m
         `--depth` and `--stockfish`. `doctor` takes `--stockfish` too.
 
       The nine §12 fixtures run through the whole pipeline at depth 12 with one thread (about
-      9 s). See Open decisions 14.
+      9 s). See CLAUDE.md §9 (exit codes) and §12.
       _Done when_ every fixture flags its expected move under `uv run pytest -m engine`.
 
 ### M2 Storage
 
 - [ ] **2.1 Connection + migrations.** `db/connection.py` (WAL, foreign keys, forward-only runner),
-      `0001_init.sql` from §5. `PRAGMA user_version` records the last migration. A DB made by a
-      newer app is refused. _Done when_ running migrations twice is a no-op.
+      `0001_init.sql` from §5 (no `settings` table). `PRAGMA user_version` records the last
+      migration. A DB made by a newer app is refused. _Done when_ running migrations twice is a
+      no-op.
 - [ ] **2.2 Repository.** `db/repo.py`: all SQL lives here, parameterised, returns dataclasses.
 - [ ] **2.3 Persisting imports.** Importer saves games and blunders, dedupes by fingerprint,
       supports `--side`, and prints the summary line. `init` creates the DB.
@@ -145,59 +149,53 @@ Each item is one small commit, with its tests in the same change. Every commit m
 ### M3 API + Log view
 
 - [ ] **3.1 API.** App factory, pydantic schemas, `GET/PATCH/DELETE /api/blunders`. Detail includes
-      the FEN for each ply (see Open decisions). Tested with `TestClient` and a temp DB.
-- [ ] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router, `board.js`
-      ported from the demo's `renderBoard`, vendored `chess.js` (version and licence recorded).
+      the FEN for each ply, for the step controls. Tested with `TestClient` and a temp DB.
+- [ ] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router
+      (`#log`, `#retest`, `#patterns`), `board.js` ported from the demo's `renderBoard`. No
+      `chess.js` and no other frontend dependencies.
 - [ ] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
-      Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes.
+      Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes. The
+      empty state says "Import a PGN with `blunderbook import FILE.pgn`". No "Add games" button.
 - [ ] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
       _Done when_ you can browse and annotate imported blunders.
 
 ### M4 Re-test + Patterns
 
 - [ ] **4.1 Scheduling.** `core/retest.py`: intervals `[1, 3, 7, 14, 30, 60]`, accept matching, queue order.
-- [ ] **4.2 Re-test API.** Queue, attempt and hint routes.
+- [ ] **4.2 Re-test API.** Queue, attempt and hint routes. Each queue item carries its legal
+      moves (`legal_uci`) for tap-to-move; the server checks every attempt.
       _Done when_ a test proves the queue never includes `best_uci`, `accept_uci`, the played move or the lesson.
 - [ ] **4.3 Patterns.** `core/patterns.py` (confirmed vs suggested counts, tiles, by speed/source,
       biggest leak) and `GET /api/patterns`.
 - [ ] **4.4 Views.** Re-test (tap to move, hint, "I don't know", result panel, empty state) and
       Patterns (tiles, solid/striped bars, insight line).
 
-### M5 Import view + jobs
+### M5 Sync (no network in tests)
 
-- [ ] **5.1 Jobs.** `jobs.py`: in-process background queue, progress as positions done / total.
-- [ ] **5.2 Import API.** `/api/import/*`, `/api/fen/check`, `/api/fen/add`, `/api/settings`
-      (reads and writes config.toml; the token is write-only), and `GET/PUT /api/engine` (same
-      lookup and check as `engine show` / `engine set`).
-- [ ] **5.3 Import view.** Paste / file picker / drag-and-drop, names field, per-game queue statuses,
-      side picker, depth selector, links to found blunders. Files use the same decoding as the CLI
-      (strict UTF-8 `TextDecoder`, then `windows-1252`). The "Engine: …" line in the queue header
-      shows the engine name and path, with a **Change** control (enter a path, "Check and save").
-- [ ] **5.4 FEN quick entry.** Board editor with tap-to-move, engine verdict, opponent and date, Add to log.
-
-### M6 Sync (no network in tests)
-
-- [ ] **6.1 API docs check.** Read the current official Lichess and Chess.com docs, then note the
+- [ ] **5.1 API docs check.** Read the current official Lichess and Chess.com docs, then note the
       endpoints and parameters at the top of each adapter.
-- [ ] **6.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
+- [ ] **5.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
       clocks and openings, optional token (never logged), backs off on 429.
-- [ ] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent,
-      past months cached by URL/ETag.
-- [ ] **6.4 Wiring.** `sync` command (runs the daily backup check), `sync_state` updates,
-      `POST /api/sync/{source}`, Sync buttons.
+- [ ] **5.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
+      Only the months from the last synced month onward are downloaded; no HTTP cache.
+- [ ] **5.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
+      updates, and `init` asks for the Lichess and Chess.com usernames. HTTP fixtures are
+      hand-built from the documented formats and marked `TODO(verify)`.
       _Done when_ a failed sync records `last_error` and leaves existing data untouched.
 
-### M7 Print + polish
+### M6 Print + polish
 
-- [ ] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
+- [ ] **6.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
       and `print --ids / --due --out`.
-- [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
-- [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
+- [ ] **6.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
+- [ ] **6.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
       ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
       section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
       aren't in backups).
 
-**Later (not v1):** opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile PWA.
+**Later (not v1):** web import (paste or drop a PGN, side picker, progress), FEN board editor in
+the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
+PWA.
 
 ---
 
@@ -215,7 +213,7 @@ Each item is one small commit, with its tests in the same change. Every commit m
   If `stockfish` is already on `PATH`, you don't need to set anything. Without Stockfish, the
   app can't analyse games and engine tests are skipped.
 
-Full install steps arrive in M7.
+Full install steps arrive in M6.
 
 ## Usage
 
@@ -237,9 +235,9 @@ uses the next one.
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and (from M2) the DB | Done (1.9) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and print the report | Done (1.9; saved from M2) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
-| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` | Planned (M3 / M7) |
-| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
-| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M7) |
+| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |
+| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
+| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M6) |
 | `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Planned (2.5) |
 | `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Planned (2.5) |
 
@@ -272,128 +270,13 @@ moving to 3.16.
 
 ## Open decisions
 
-These are flagged against the spec and need your confirmation or a change.
-
-1. **M1/M2 boundary.** §13 puts `init` and `import` in M1, but the database is M2. The plan:
-   in M1, `init` writes only the config and `import` prints its report without saving. M2 adds
-   the DB and persistence. _Built this way in 1.9._
-2. **HTTP cache table.** Chess.com months are cached "by URL/ETag", but §5 has no table for
-   that. The proposal is a `0002_http_cache.sql` migration in M6.
-3. **Positions and legal moves from the API.** §3 limits `chess.js` to the board editor and FEN
-   entry. So `GET /api/blunders/{id}` would return the FEN for each ply (for step controls), and
-   each re-test queue item would return `legal_uci` for tap-to-move. Legal moves don't give away
-   the answer, and the server checks every attempt.
-4. **Recorded HTTP fixtures.** Development never calls the sites, so the M6 fixtures will be
-   built by hand from the documented formats and marked `TODO(verify)` until you record real ones.
-5. **Time spent on the first move of a game that starts from a FEN (affects 1.8).** §7.7 says
-   my first move's time is `base − clock + inc`. That's wrong when the game starts midway.
-   `back_rank.pgn` starts at move 32 with 9 s left, which gives 180 − 9 + 2 = 173 s. Proposal:
-   for games with a `FEN` header, that first move's time is unknown, so "Moved too fast" skips
-   it. "Time trouble" still works, because it only needs the clock. _Built this way in 1.8
-   (any game not from the standard start). Say if you want the §7.7 formula instead._
-6. **Variants and null moves are rejected (done in 1.4).** Chess960, Atomic and other variants,
-   unknown variants, and null moves (`--`) become problems with a plain reason, such as
-   "Chess960 isn't supported, only standard chess." Stockfish can analyse Chess960
-   (`UCI_Chess960`), so it could be added later if you play it.
-7. **Movetext python-chess skips silently (done in 1.4; proposed addition to §7.1).** python-chess
-   ignores any token that doesn't look like SAN. So a typo in a typed-up score sheet can vanish,
-   or be misread: `♘f3` becomes the pawn move `f3`. Blunderbook now checks each game's mainline
-   text:
-   - If a token was only skipped (`Ke9`, `resigns`), the game is kept with a warning, such as
-     "Skipped unreadable text 'Ke9' at 2."
-   - If a token was misread, the game is rejected: "Couldn't read '♘f3' at 2."
-   - If an illegal move follows skipped text, the reason names it: "Illegal move 2. Nc6
-     (after unreadable text 'O-0')".
-   - Symbols such as `±` are left alone.
-8. **Both players match your names (done in 1.5).** §7.3 only covers "no match". If White and
-   Black are both yours (two of your accounts, or a training game against yourself), the game
-   also comes back as needing a side. Picking White would be a guess.
-9. **Fingerprint of a game that starts from a FEN (done in 1.5; proposed addition to §7.4).**
-   Without a site game id, the fingerprint is players | date | first 30 moves. Two typed-up
-   positions with no names or date and the same first move (say `Ra8+`) would match, and the
-   second would be skipped as "Already imported". When the game doesn't start from the standard
-   position, the start FEN is added to the fingerprint. Standard games use the §7.4 formula
-   exactly.
-10. **Source detection details (done in 1.5; proposed wording for §7.5).**
-    - "chess.com" must be a whole name. `playchess.com` (ChessBase's server) contains that text
-      but is a different site, so it counts as a PGN file.
-    - A Site with a dot but a capitalised ending, like `St.Louis`, counts as a place, so it's over
-      the board. `playchess.com` and `www.chess24.com/en` count as websites.
-    - The Lichess game id is the first 8 characters of the Site path. A 12-character player link
-      is cut to 8, and `/white` or `/black` is ignored. Pages such as `/study/...`, `/broadcast/...`
-      and `/analysis` give no id, so those games use the content fingerprint.
-    - The Chess.com id comes from `Link`, then `Site`, and keeps the game type: `live/140512345678`
-      or `daily/…`. It's marked `TODO(verify)`. I couldn't check the older `/live/game/<id>` form,
-      so both forms are accepted.
-    - ChessBase and some databases write `Site "INT"` or `"Internet"` for online games. The rule
-      makes those "Over the board · INT". That's left as it is. Retype the header if it matters.
-11. **Detection details §7.6 doesn't spell out (done in 1.6).**
-    - **The move you blundered with is never an accepted re-test answer.** A deeper pass-2 look
-      can rate it close to the best move. Without this rule, replaying your own blunder could
-      count as solved.
-    - **Mates count as ±10000 for the accept margin too**, as they do in the winning-chance
-      maths. So when the best move mates, every mating move in the top 3 is accepted (mate in 4
-      as well as mate in 1), and a +9 move isn't.
-    - **The margin is measured from the top MultiPV line.** A move exactly
-      `accept_margin_cp` away is accepted.
-    - **Swing is never below 0.** If the engine likes your move better than its own choice, the
-      swing is 0, matching the documented range 0..1.
-    - **A position where you're already checkmated** (`mate 0`) counts as lost for whoever is to
-      move. The demo scored it as 0 (level).
-    - **Lines use `5... Nxe5` with a space after the dots**, as in §7.6. The demo wrote
-      `5...Nxe5`.
-    - **config.toml must have `inaccuracy <= mistake <= blunder`.** Otherwise loading it fails
-      with an error naming the rule.
-12. **Analysis details §7.6 doesn't spell out (done in 1.7).**
-    - **"Best was" comes from pass 1.** That's the move that triggered the flag. Pass 2 only
-      decides which re-test answers are accepted. Its top line can differ slightly, and showing
-      it could make "Best was" disagree with the reason the move was flagged.
-    - **Finished positions.** Checkmate, stalemate and draws that end the game by themselves
-      (insufficient material, 75 moves, fivefold repetition) are scored without the engine.
-      Threefold repetition and the 50-move rule only matter if someone claims them, so those
-      positions still go to the engine.
-    - **Each position is sent with the game's moves**, so Stockfish sees repetitions. Each game
-      starts with `ucinewgame`.
-    - **Progress** counts positions. The total starts at N + 1 and grows by the number of
-      flagged moves once pass 1 ends.
-    - **No time limit per position.** The analysis stops at a depth only, so an engine that
-      hangs would hang the import. Proposal: M5's job queue gets a Cancel button, which closes
-      the engine.
-13. **Suggested-cause details §7.7 doesn't spell out (done in 1.8).**
-    - **Clocks that don't add up give no time spent.** If previous − now + increment is
-      negative (for example the opponent gave you time on Lichess), the time spent is unknown
-      rather than 0. That keeps "Moved too fast" from firing on bad data.
-    - **"Hung a piece" compares with the position before your move.** It plays out up to 6
-      plies of the refutation, so a capture you made with the blunder counts in your favour.
-      The Elephant trap (6. Nxd5??) gets no suggestion: it loses a piece for a pawn, a net 2,
-      under the 3-point line. You pick the cause yourself.
-    - **"Missed their threat" wins over "Hung a piece"**, as §7.7 says. The time rules can
-      appear alongside either. `back_rank` gets both "Missed their threat" and "Time trouble".
-    - **Both time rules need a `TimeControl` header,** as §7.7 says. Clocks with no time control
-      still give "clock left", but no time causes.
-14. **Import details (done in 1.9).**
-    - **The same game twice in one file:** the second is a duplicate, "Same game as game 1 —
-      skipped". Games already in the DB (from M2) are "Already imported — skipped".
-    - **`--side` never overrides a name match.** It only fills games where your names match
-      neither player, or both.
-    - **Exit codes.** `import` exits 1 only when it can't run: the file can't be read, it holds
-      no games, there's no Stockfish while some game is ready, or the engine fails. In that last
-      case the games done so far are reported first. A report with needs-side games or errors
-      exits 0. `doctor` exits 1 when it finds a problem.
-    - **Engine tests use depth 12 and one thread,** so results don't depend on the machine.
-      Where §12 names the best move, the test checks it's an accepted re-test answer rather than
-      the engine's first choice. At depth 12, Stockfish 19 ranks 5. Bxf7+ first in the
-      Blackburne Shilling game, with O-O also accepted.
-    - **Some fixtures have extra real blunders.** At depth 16, Stockfish also flags 4. Nxe5 in
-      `blackburne_shilling` and 4... g6 in `legal_trap`. The tests require the §12 move, not
-      only that move.
-    - **Not in `init` yet:** the Lichess and Chess.com usernames (M6) and the backup folder (2.5).
+None open.
 
 ### Decided
 
-- **2026-11-04: Settings live in config.toml only.** The CLI, `/api/settings` and `/api/engine`
-  all read and write it. The Lichess token is write-only (the API only says whether one is set).
-  The DB `settings` table holds UI preferences only. (CLAUDE.md §5, §6, §10)
+- **2026-11-04: Settings live in config.toml only.** The CLI reads and writes it. The DB never
+  stores settings. (On 2026-11-05 the settings and engine API routes and the DB `settings` table
+  were dropped from v1.) (CLAUDE.md §5, §6)
 - **2026-11-04: PGN encoding.** Read as `utf-8-sig`. If that fails, read as `cp1252` with bad
   bytes replaced, and say "Read as Windows-1252" in the import report. An import never fails
   over encoding. (CLAUDE.md §7.1)
@@ -412,3 +295,29 @@ These are flagged against the spec and need your confirmation or a change.
   - **What's not in it.** Backups don't include config.toml or the token. There's no `.dump`
     text copy.
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
+- **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
+  repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),
+  Re-test and Patterns. Dropped from v1: the web Import view and its background jobs, the
+  browser FEN board editor, the settings and engine pages, web Sync buttons, `chess.js`, the DB
+  `settings` table and the Chess.com HTTP cache. (CLAUDE.md §3, §4, §5, §6, §8, §10, §11, §13)
+- **2026-11-05: The 14 former open decisions.** Each built choice stays as built; each proposal
+  that added machinery was dropped. The rules are now in CLAUDE.md.
+  1. **M1/M2 boundary:** M1 prints the import report, M2 saves it.
+  2. **Chess.com cache:** none. Sync downloads only the months from the last synced month on. (§8)
+  3. **Positions from the API:** the blunder detail sends each ply's FEN, and each re-test item
+     sends its legal moves. No `chess.js`. (§10)
+  4. **HTTP fixtures:** hand-built from the documented formats, marked `TODO(verify)`. (§8)
+  5. **First move of a game from a FEN:** its time spent is unknown. (§7.7)
+  6. **Variants and null moves:** rejected with a plain reason. (§7.1)
+  7. **Unreadable movetext:** skipped text gives a warning, misread text rejects the game. (§7.1)
+  8. **Both players match your names:** needs side. (§7.3)
+  9. **Fingerprint of a FEN-start game:** the start FEN is added. (§7.4)
+  10. **Source detection:** whole-name "chess.com", place vs website, Lichess and Chess.com ids. (§7.5)
+  11. **Detection:** your blunder is never accepted, mates count ±10000 in the margin, swing is at
+      least 0, `mate 0` is lost, thresholds must go up. (§7.6)
+  12. **Analysis:** "Best was" comes from pass 1; finished positions skip the engine. No Cancel
+      button: there's no job queue, and Ctrl+C closes the engine. (§7.6)
+  13. **Suggested causes:** a negative time spent is unknown; "Hung a piece" compares with the
+      position before your move. (§7.7)
+  14. **Import:** duplicates within one file, `--side` never overrides a name match, exit codes,
+      engine tests at depth 12. (§7.3, §7.4, §9, §12)

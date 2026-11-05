@@ -62,8 +62,8 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
 - **httpx**: HTTP in sync adapters only.
 - **platformdirs**: config and data locations.
 - **pytest**, **ruff** (lint and format), **mypy** (strict on `blunderbook/core`).
-- Frontend: vanilla HTML/CSS/JS (ES modules). Vendored `chess.js` only for the board
-  editor and FEN quick entry. No other frontend dependencies.
+- Frontend: vanilla HTML/CSS/JS (ES modules). No frontend dependencies: the API sends the
+  positions and legal moves the pages need.
 
 Ask before adding any dependency that isn't on this list.
 
@@ -78,7 +78,8 @@ blunderbook/
 ├── pyproject.toml
 ├── blunderbook/
 │   ├── __init__.py
-│   ├── cli.py                 # Typer app: init, engine, import, fen, sync, serve, print, doctor
+│   ├── cli.py                 # Typer app: init, doctor, engine, import, fen, sync, serve,
+│   │                          #   print, backup, restore
 │   ├── config.py              # load/save config.toml, paths via platformdirs, Stockfish lookup
 │   ├── db/
 │   │   ├── connection.py      # sqlite3 connection, PRAGMAs, migration runner
@@ -104,18 +105,15 @@ blunderbook/
 │   ├── api/
 │   │   ├── app.py             # FastAPI app factory, static files mount
 │   │   ├── routes_blunders.py
-│   │   ├── routes_import.py
 │   │   ├── routes_retest.py
 │   │   ├── routes_patterns.py
 │   │   └── schemas.py         # pydantic request/response models
-│   ├── jobs.py                # in-process background job queue for imports
 │   └── web/                   # static frontend (no build)
 │       ├── index.html
 │       ├── css/app.css
-│       ├── js/app.js          # router (hash-based: #log, #retest, #patterns, #import)
+│       ├── js/app.js          # router (hash-based: #log, #retest, #patterns)
 │       ├── js/board.js        # board renderer (ported from the demo)
 │       ├── js/views/*.js
-│       ├── vendor/chess.js
 │       └── print.html         # A4 print layout, 2 entries per page
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -126,8 +124,9 @@ blunderbook/
 ```
 
 `docs/reference-demo.html` is the approved UI prototype (Log, Re-test, Patterns,
-Import). Port its layout, copy, interactions and board renderer. Don't copy its storage
-or analysis code: the backend replaces those.
+Import). Port the Log, Re-test and Patterns views: their layout, copy, interactions and
+board renderer. Its Import view is not part of v1 (imports run on the CLI). Don't copy its
+storage or analysis code: the backend replaces those.
 
 ---
 
@@ -208,12 +207,9 @@ CREATE TABLE sync_state (
   last_run_at   TEXT,
   last_error    TEXT
 );
-
-CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);  -- JSON values; UI preferences only
 ```
 
-The `settings` table holds UI preferences only (e.g. the last depth picked in the Import
-view). Every §6 setting lives in config.toml and nowhere else.
+There is no settings table. Every §6 setting lives in config.toml and nowhere else.
 
 FEN quick entries get a synthetic `games` row (`source='fen'`, `pgn` = a one-move PGN with
 `[SetUp "1"] [FEN "..."]`, `my_color` = side to move) so every blunder has a game.
@@ -235,8 +231,8 @@ CAUSES = [
 `config.toml` in `platformdirs.user_config_dir("blunderbook")`; the DB in
 `user_data_dir("blunderbook")/blunderbook.db`. Created by `blunderbook init`.
 
-**config.toml is the single source of truth for settings.** The CLI, `/api/settings` and
-`/api/engine` all read and write this file (through `config.load` / `config.save`). The DB
+**config.toml is the single source of truth for settings.** The CLI reads and writes this
+file (through `config.load` / `config.save`). The web app has no settings page in v1. The DB
 never stores these values.
 
 ```toml
@@ -314,6 +310,16 @@ an error. `blunderbook engine set` checks a path before saving it.
   each ply, and the `[%clk h:mm:ss(.f)]` value from each move's comment.
 - A game that fails to parse goes into the import report with a reason. Never abort
   the whole file because of one bad game.
+- Standard chess only. Variants (Chess960, Atomic, unknown ones) and null moves (`--`) are
+  rejected with a plain reason, e.g. "Chess960 isn't supported, only standard chess."
+- python-chess skips tokens that don't look like SAN, so check each game's mainline text:
+  - A token that was only skipped (`Ke9`, `resigns`) keeps the game, with a warning:
+    "Skipped unreadable text 'Ke9' at 2."
+  - A token that was misread (`♘f3` read as the pawn move `f3`) rejects the game:
+    "Couldn't read '♘f3' at 2."
+  - An illegal move after skipped text names both: "Illegal move 2. Nc6 (after unreadable
+    text 'O-0')".
+  - Symbols such as `±` are left alone.
 - Keep the original PGN text verbatim in `games.pgn`.
 - Read PGN files as `utf-8-sig`. If that fails, decode as `cp1252` with undecodable bytes
   replaced, and add "Read as Windows-1252" to the import report. Never fail an import over
@@ -328,51 +334,79 @@ an error. `blunderbook engine set` checks a path before saving it.
 ### 7.3 Side detection (`core/identity.py`)
 - Case-insensitive, trimmed match of the `White`/`Black` headers against `my_names`
   (plus the configured Lichess/Chess.com usernames).
-- No match → the game is `needs_side`. The API and UI ask "Which side were you?" before
-  analysis. Never guess.
+- No match, or both players match (two of my accounts, a game against myself) → the game is
+  `needs_side`. The import report lists it, and `import --side` fills it in. Never guess.
+- `--side` never overrides a name match. It only fills games that need a side.
 
 ### 7.4 Fingerprint / dedupe
 - If the PGN has a site game URL (`[Site "https://lichess.org/abcd1234"]`, Chess.com
   `[Link "..."]`), fingerprint = `sha1(source + ":" + game_id)`.
 - Otherwise fingerprint = `sha1(lower(white) | lower(black) | date | first 30 SAN moves)`.
-- An already-known fingerprint is reported as "Already imported — skipped". Importing the
-  same file twice must add nothing.
+  A game that doesn't start from the standard position adds its start FEN, so two typed-up
+  positions with no names or date and the same first move don't collide.
+- An already-known fingerprint is reported as "Already imported — skipped". The same game
+  twice in one file: the second is "Same game as game N — skipped". Importing the same file
+  twice must add nothing.
 
 ### 7.5 Source detection (`core/source.py`)
 - `Site` or `Event` contains `lichess` → `lichess`; contains `chess.com` → `chesscom`.
-- `Site` present and not a URL/domain → `otb`, label `"Over the board · {Site}"`.
+  "chess.com" must be a whole name: `playchess.com` (ChessBase's server) is a PGN file.
+- `Site` present and not a URL/domain → `otb`, label `"Over the board · {Site}"`. A dot with a
+  capitalised ending (`St.Louis`) is a place; `playchess.com` and `www.chess24.com/en` are
+  websites. `Site "INT"` / `"Internet"` stays "Over the board · INT".
 - Otherwise `pgn`, label `"PGN file"`.
+- Lichess game id: the first 8 characters of the Site path (a 12-character player link is cut
+  to 8; `/white` or `/black` is ignored). Pages such as `/study/...`, `/broadcast/...` and
+  `/analysis` give no id, so those games use the content fingerprint.
+- Chess.com game id: from `Link`, then `Site`, keeping the game type (`live/140512345678`,
+  `daily/…`). Both `/game/live/<id>` and the older `/live/game/<id>` are accepted.
 
 ### 7.6 Analysis and blunder detection (`core/engine.py`, `core/detect.py`)
 - **Pass 1:** analyse every position in the game once at `engine_depth`
   (positions 0..N, where position i+1 is after ply i). Cache `{score, best, pv}` per position.
-  - Terminal positions are not sent to the engine: checkmate → mate score against
-    the side to move; stalemate/draw → `cp 0`.
+  Each position is sent with the game's moves (so Stockfish sees repetitions), and each game
+  starts with `ucinewgame`. Depth is the only limit; there is no time limit per position.
+  - Terminal positions are not sent to the engine: checkmate → `mate 0` (lost for the side
+    to move); stalemate and draws that end the game by themselves (insufficient material,
+    75 moves, fivefold repetition) → `cp 0`. Threefold and the 50-move rule only count when
+    claimed, so those positions still go to the engine.
   - Convert engine scores to **White POV** before storing.
   - Mate scores map to ±10000 cp for winning-chance maths only. Store them as `{"mate": n}`.
 - For each of **my** plies i:
   `swing = (w(sign*cp(before_i)) - w(sign*cp(after_i))) / 2`, with `sign = +1` for White,
-  `−1` for Black. Flag when `swing >= thresholds.blunder` **and** the played move ≠ the
-  engine's best move.
-- **Pass 2** (flagged positions only): MultiPV 3 at the same depth.
-  `accept_uci` = moves whose mover-POV cp is within `accept_margin_cp` of the best.
-  Always include the best move.
+  `−1` for Black, and never below 0. Flag when `swing >= thresholds.blunder` **and** the
+  played move ≠ the engine's best move.
+- "Best was" (`best_uci`, `best_line_san`) comes from pass 1: the move that triggered the flag.
+- **Pass 2** (flagged positions only): MultiPV 3 at the same depth. It only decides
+  `accept_uci`: moves whose mover-POV cp is within `accept_margin_cp` of the top line
+  (inclusive; mates count as ±10000 here too). Always include the best move. Never include the
+  move I played.
 - `best_line_san`: first 6 plies of the best PV with move numbers
   (`"6. e3 Be7 7. Bd3"`, Black start `"5... Nxe5 6. Be2"`).
-  `refutation_san`: first 5 plies of the PV from the position after my move.
+  `refutation_san`: first 5 plies of the PV from the position after my move. Both stop at an
+  illegal PV move.
 - Judgment labels: `>= 0.15` blunder, `>= 0.10` mistake, `>= 0.05` inaccuracy.
-- Analysis runs in a background job. Report progress as positions done / total.
-- One engine process per job. Always close it, even on errors (context manager).
+  config.toml must have `inaccuracy <= mistake <= blunder`.
+- Analysis runs during the import. Report progress as positions done / total: the total starts
+  at N + 1 and grows by the number of flagged moves when pass 1 ends. The CLI shows it as a
+  percentage.
+- One engine process per import. Always close it, even on errors or Ctrl+C (context manager).
 
 ### 7.7 Suggested causes (`core/hints.py`)
 Suggestions only (dashed "auto" chips in the UI). The user confirms them.
 - **Time trouble:** clock left `< 10%` of base or `< 20 s`. Needs clocks and a time control.
 - **Moved too fast:** time spent `<= 3 s` while clock left `> 30%` of base. Time spent =
   my previous clock − my clock now + increment (for my first move, base − clock + inc).
-- **Missed their threat:** eval after my move is a forced mate against me.
+  - A game that doesn't start from the standard position: the first move's time is unknown
+    (the game started midway).
+  - A negative result (e.g. the opponent added time) is unknown, not 0.
+- **Missed their threat:** eval after my move is a forced mate against me. It wins over
+  "Hung a piece"; the time rules can appear alongside either.
 - **Hung a piece:** not the mate case, and my material balance drops by `>= 3` after playing
-  out up to 6 plies of the refutation PV (P=1, N=B=3, R=5, Q=9).
-- No clock data → skip the time rules silently. The UI says "No clock times in this PGN".
+  out up to 6 plies of the refutation PV (P=1, N=B=3, R=5, Q=9), compared with the position
+  before my move.
+- No clock data or no `TimeControl` → skip the time rules silently. Clocks without a time
+  control still give the clock left. The report says "No clock times in this PGN".
 
 ### 7.8 Re-test scheduling (`core/retest.py`)
 - New entries are due the day they're created.
@@ -409,13 +443,17 @@ They return **PGN text only**. The importer does everything else.
   enabled, filtered by `since`. Optional bearer token. Respect HTTP 429: back off and retry.
 - **Chess.com:** published-data API. List the monthly archives, then download each needed
   month as PGN. Requests strictly one at a time. Send a descriptive `User-Agent` that
-  includes `chesscom.contact`. Past months never change, so cache them by URL/ETag.
+  includes `chesscom.contact`. Past months never change, so download only the months from the
+  last synced month onward. No HTTP cache table.
 - Before implementing either adapter, **check the current official API docs** and note the
   exact endpoints and parameters in a comment at the top of the file. Don't rely on memory.
 - Store progress in `sync_state`. A failed sync records `last_error` and doesn't touch
   existing data.
+- Sync runs from the CLI only (`blunderbook sync`). The web app has no Sync buttons in v1.
 - Tests use recorded responses from `tests/fixtures/http/`. **Tests never call the
-  network.** (The cloud dev environment can't reach these sites anyway.)
+  network.** (The cloud dev environment can't reach these sites anyway.) Until real responses
+  are recorded, the fixtures are hand-built from the documented formats and marked
+  `TODO(verify)`.
 
 ---
 
@@ -439,6 +477,11 @@ They return **PGN text only**. The importer does everything else.
 Every command prints a short, readable summary, e.g.
 `2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.
 
+Exit codes: `import` exits 1 only when it can't run (the file can't be read, it holds no
+games, there's no Stockfish while some game is ready, or the engine fails; in that last case
+the games done so far are reported first). A report with needs-side games or errors exits 0.
+`doctor` exits 1 when it finds a problem.
+
 ---
 
 ## 10. HTTP API (JSON, `/api`)
@@ -448,38 +491,32 @@ Bind to `127.0.0.1` only. No auth (single local user).
 ```
 GET    /api/blunders?source=&status=&cause=&due=1     list (summary fields)
 GET    /api/blunders/{id}                             full entry + game metadata + move list
+                                                      + the FEN for each ply (step controls)
 PATCH  /api/blunders/{id}                             {causes?, other_cause?, thinking?, lesson?}
 DELETE /api/blunders/{id}
 
-POST   /api/import/pgn            {pgn_text}  -> {job_id, games:[{temp_id, white, black, date,
-                                                 source, has_clocks, status: ready|needs_side|duplicate|error}]}
-POST   /api/import/{job_id}/sides {temp_id: "white"|"black", ...}
-POST   /api/import/{job_id}/start {depth?}
-GET    /api/import/{job_id}       progress per game + blunders found
-POST   /api/fen/check             {fen, move_uci} -> eval before/after, best, judgment, swing
-POST   /api/fen/add               {fen, move_uci, opponent?, date?}
-
-GET    /api/retest/queue          due entries (position, side to move, move no.)
+GET    /api/retest/queue          due entries (position, side to move, move no., legal moves)
 POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, lesson, next due
+GET    /api/retest/{id}/hint      the from-square only
 
 GET    /api/patterns
-GET    /api/settings  | PUT /api/settings   config.toml values; the Lichess token is write-only
-                                            (GET returns only {"token_set": true|false})
-GET    /api/engine                {name, version, path, origin, problem?}  (same lookup as `engine show`)
-PUT    /api/engine                {path} -> checks like `engine set`, saves only if it works
-POST   /api/sync/{source}         start a sync job
 ```
 
+Imports, FEN entries, settings, the engine path and syncs go through the CLI only. There are
+no routes for them in v1.
+
 Re-test queue responses must **not** include `best_uci`, `accept_uci`, the played move or
-the lesson. The answer comes only from the attempt endpoint. A hint endpoint
-`GET /api/retest/{id}/hint` returns only the from-square.
+the lesson. Each item does carry its legal moves (`legal_uci`) for tap-to-move: they don't
+give the answer away. The answer comes only from the attempt endpoint, and the server checks
+every attempt.
 
 ---
 
 ## 11. Frontend (port the reference demo)
 
-Views (hash routes): `#log`, `#retest`, `#patterns`, `#import`. Header: brand, tabs with a
-due-count badge on Re-test, and an "+ Add games" button that opens Import.
+Views (hash routes): `#log`, `#retest`, `#patterns`. Header: brand and tabs, with a
+due-count badge on Re-test. Games are added on the CLI (`blunderbook import`), so there is no
+Import view or add button in v1.
 
 - **Log:** filter bar (source, status, cause) and list. Detail panel has the board with
   red arrow and highlight for my move, an optional green arrow for the best move, step
@@ -488,17 +525,14 @@ due-count badge on Re-test, and an "+ Add games" button that opens Import.
   metadata grid (source, time control, result, ratings, clock left, time on move), cause
   chips (auto suggestions dashed with an "AUTO" tag), "What I was thinking" and "Lesson"
   textareas with autosave (debounced PATCH, "Saved" message), and the re-test status.
+  Step controls use the per-ply FENs from the API. The empty state says "Import a PGN with
+  `blunderbook import FILE.pgn`".
 - **Re-test:** board facing my side, "White/Black to move — find the best move", tap a piece
-  then tap a square, "Show a hint" (from-square), "I don't know — show me". The result panel
-  shows solved or missed, the best line, what I played in the game, my lesson, and the next
-  due date. An empty state offers "Practise all anyway".
+  then tap a square (only the legal moves from the API), "Show a hint" (from-square), "I don't
+  know — show me". The result panel shows solved or missed, the best line, what I played in
+  the game, my lesson, and the next due date. An empty state offers "Practise all anyway".
 - **Patterns:** four tiles, cause bars (solid = confirmed, striped = suggested), by time
   control, re-test history, a one-line "biggest leak" insight.
-- **Import:** PGN paste box with file picker and drag-and-drop, "My names and usernames"
-  field, FEN quick entry (board editor with tap-to-move, engine verdict, optional opponent
-  and date, Add to log), connected sites with Sync buttons, and an import queue with
-  per-game status (Ready / Choose your side / Already imported — skipped / Analysing N% /
-  Done: N blunders with links / Error) and a depth selector.
 - **Print page** (`print.html`): A4, black and white, two entries per page, laid out like
   the original paper Blunder Log (board diagram, game info, I played / Best was, causes
   ticked, thinking, lesson, "Re-tested on ___ ☐ Solved ☐ Missed again"). Printed through the
@@ -523,8 +557,11 @@ Design language (from the demo and the paper template):
 
 - `uv run pytest` must pass before every commit. `uv run ruff check . && uv run ruff format --check .` too.
 - Tests needing Stockfish are marked `@pytest.mark.engine` and skipped when no binary is
-  found. Engine tests use a fixed depth and assert **which move gets flagged**, never exact
-  centipawn values.
+  found. Engine tests use a fixed depth (12, one thread) and assert **which move gets
+  flagged**, never exact centipawn values. Where the table names a best move, the test checks
+  it's an accepted re-test answer, not the engine's first choice. Some fixtures have extra
+  real blunders (4. Nxe5 in `blackburne_shilling`, 4... g6 in `legal_trap`); the tests
+  require the listed move, not only that move.
 - Fixtures in `tests/fixtures/pgn/` (known blunders, engine-verified during planning):
 
 | File | My side | Expected blunder | Notes |
@@ -559,14 +596,13 @@ Design language (from the demo and the paper template):
 3. **API + Log view:** FastAPI app, blunder routes, frontend shell plus Log view ported
    from the demo, autosave notes.
 4. **Re-test + Patterns:** scheduling, attempt and hint endpoints, both views.
-5. **Import view + jobs:** background jobs, progress polling, side selection, FEN quick entry UI.
-6. **Sync:** Lichess and Chess.com adapters against recorded fixtures, `sync` command and
-   Sync buttons.
-7. **Print + polish:** print page, `serve --open`, README with install steps (Stockfish on
+5. **Sync:** Lichess and Chess.com adapters against recorded fixtures, `sync` command.
+6. **Print + polish:** print page, `serve --open`, README with install steps (Stockfish on
    macOS/Windows/Linux), empty states, error messages.
 
-Future (not v1): optional "coach" explanation of a blunder via an LLM API (opt-in, off by
-default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
+Future (not v1): web import (paste or drop a PGN, side picker, progress), FEN board editor in
+the browser, settings page, optional "coach" explanation of a blunder via an LLM API (opt-in,
+off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 ---
 
