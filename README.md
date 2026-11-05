@@ -17,7 +17,7 @@ and honest about what was automated and what wasn't.
 The full spec is in [CLAUDE.md](CLAUDE.md). The approved UI prototype is
 [docs/reference-demo.html](docs/reference-demo.html). It's a UI reference only and won't run on
 its own, because its `chess.js` and `stockfish.js` files aren't in the repo. Its Import view
-isn't part of v1: you add games with `blunderbook import`.
+is ported in M5 without its in-browser analysis: the server analyses.
 
 ---
 
@@ -32,11 +32,11 @@ _Last updated: 2026-11-05_
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
-| M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
+| M5 Web import | In progress (0/3) | Shared import code, background job with progress, Import view |
+| M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
+| M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** web import, the new M5 (decided 2026-11-05). Its first commit updates this roadmap
-and CLAUDE.md, and moves Sync to M6 and Print + polish to M7.
+**Next up:** M5.1 Shared import runner.
 
 In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -49,8 +49,8 @@ position facing your side: tap a piece and a square, take a hint or give up, and
 answer, your lesson and the next date. Patterns shows your causes, time controls and re-test
 history. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
 
-Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
-writing notes, re-testing and patterns. See Decided.
+Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
+patterns, and from M5 for importing too. See Decided.
 
 ---
 
@@ -366,31 +366,43 @@ Each item is one small commit, with its tests in the same change. Every commit m
       move, the attempt answer includes the new position (`move_fen`), so the page still has no
       chess logic. History entries link to the Log. Checked in a browser, also at 390 px.
 
-### M5 Sync (no network in tests)
+### M5 Web import
 
-- [ ] **5.1 API docs check.** Read the current official Lichess and Chess.com docs, then note the
+- [ ] **5.1 Shared import runner.** Move the CLI's analyse-and-save loop into
+      `importer.run(...)` and its FEN outcome into `importer.log_fen(...)`, so the page and the
+      CLI share them. No behaviour change: the CLI tests pass unchanged.
+- [ ] **5.2 Import jobs + API.** `api/jobs.py` (one background import at a time, progress,
+      stop on shutdown) and `api/routes_import.py`: `POST /api/import` (raw PGN bytes),
+      `GET /api/import/{job_id}`, `POST /api/fen`. Origin and content-type checks, a 10 MB cap.
+      _Done when_ importing the same bytes twice adds nothing, and stopping mid-game keeps the
+      games before it.
+- [ ] **5.3 Import view.** The Import tab: paste box, choose/drop a .pgn, progress bar, the
+      report with links to new entries, and FEN quick entry. The Log's empty state points to it.
+
+### M6 Sync (no network in tests)
+
+- [ ] **6.1 API docs check.** Read the current official Lichess and Chess.com docs, then note the
       endpoints and parameters at the top of each adapter.
-- [ ] **5.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
+- [ ] **6.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
       clocks and openings, optional token (never logged), backs off on 429.
-- [ ] **5.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
+- [ ] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
       Only the months from the last synced month onward are downloaded; no HTTP cache.
-- [ ] **5.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
+- [ ] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
       updates, and `init` asks for the Lichess and Chess.com usernames. HTTP fixtures are
       hand-built from the documented formats and marked `TODO(verify)`.
       _Done when_ a failed sync records `last_error` and leaves existing data untouched.
 
-### M6 Print + polish
+### M7 Print + polish
 
-- [ ] **6.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
+- [ ] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
       and `print --ids / --due --out`.
-- [ ] **6.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
-- [ ] **6.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
+- [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
+- [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
       ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
       section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
       aren't in backups).
 
-**Later (not v1):** web import (paste or drop a PGN, side picker, progress), FEN board editor in
-the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
+**Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
 PWA.
 
 ---
@@ -409,7 +421,7 @@ PWA.
   If `stockfish` is already on `PATH`, you don't need to set anything. Without Stockfish, the
   app can't analyse games and engine tests are skipped.
 
-Full install steps arrive in M6.
+Full install steps arrive in M7.
 
 ## Usage
 
@@ -433,9 +445,9 @@ uses the next one.
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the DB and the last backup (changes nothing) | Done (1.9, 2.1, 2.5) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
-| `blunderbook serve [--port 8732]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4); re-test in M4, `--open` in 6.2 |
-| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
-| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M6) |
+| `blunderbook serve [--port 8732]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4); `--open` in 7.2 |
+| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
+| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M7) |
 | `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Done (2.5) |
 | `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Done (2.5) |
 
@@ -579,7 +591,7 @@ None open.
     error.
   - Ctrl+C exits 0.
   - No access log.
-  - `--open` stays in 6.2.
+  - `--open` stays in 7.2 (6.2 before web import became M5).
   - (CLAUDE.md §9)
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
@@ -587,6 +599,13 @@ None open.
   Re-test and Patterns. Dropped from v1: the web Import view and its background jobs, the
   browser FEN board editor, the settings and engine pages, web Sync buttons, `chess.js`, the DB
   `settings` table and the Chess.com HTTP cache. (CLAUDE.md §3, §4, §5, §6, §8, §10, §11, §13)
+  The web Import view came back the same day, below.
+- **2026-11-05: Web import in v1 (M5).** You want to paste a game straight from a site's
+  Share → PGN panel. The Import tab takes pasted text, a chosen or dropped .pgn, or a FEN and
+  your move. It runs the CLI's own import code in one background job at a time, with a
+  progress bar. Games with no name match are listed with what to do; a side picker stays for
+  later. It comes after M4, so Sync is now M6 and Print + polish M7. (CLAUDE.md §4, §9, §10,
+  §11, §13)
 - **2026-11-05: The 14 former open decisions.** Each built choice stays as built; each proposal
   that added machinery was dropped. The rules are now in CLAUDE.md.
   1. **M1/M2 boundary:** M1 prints the import report, M2 saves it.

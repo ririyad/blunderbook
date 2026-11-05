@@ -105,6 +105,8 @@ blunderbook/
 │   ├── api/
 │   │   ├── app.py             # FastAPI app factory, static files mount
 │   │   ├── common.py          # per-request DB connection, 404, labels shared by the routes
+│   │   ├── jobs.py            # the background import job (one at a time, in memory)
+│   │   ├── routes_import.py   # web import and FEN quick entry
 │   │   ├── routes_blunders.py
 │   │   ├── routes_retest.py
 │   │   ├── routes_patterns.py
@@ -129,9 +131,10 @@ blunderbook/
 ```
 
 `docs/reference-demo.html` is the approved UI prototype (Log, Re-test, Patterns,
-Import). Port the Log, Re-test and Patterns views: their layout, copy, interactions and
-board renderer. Its Import view is not part of v1 (imports run on the CLI). Don't copy its
-storage or analysis code: the backend replaces those.
+Import). Port its views: their layout, copy, interactions and board renderer. From the
+Import view, port the paste box, file choose/drop and FEN quick entry, not its in-browser
+queue or analysis: the server analyses. Don't copy its storage or analysis code: the backend
+replaces those.
 
 ---
 
@@ -490,7 +493,7 @@ They return **PGN text only**. The importer does everything else.
 | `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
 | `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
-| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` arrives in M6. |
+| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` arrives in M7. Imports started on the page run inside it. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
 | `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
@@ -526,10 +529,33 @@ POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, le
 GET    /api/retest/{id}/hint      the from-square only
 
 GET    /api/patterns
+
+POST   /api/import                the PGN as raw bytes (Content-Type: application/x-chess-pgn)
+                                  -> 202 {job_id}; 409 while another import runs
+GET    /api/import/{job_id}       status, positions done / total, one row per game, summary
+POST   /api/fen                   {fen, move, opponent?, date?} -> the entry, or why it isn't logged
 ```
 
-Imports, FEN entries, settings, the engine path and syncs go through the CLI only. There are
-no routes for them in v1.
+Settings, the engine path and syncs go through the CLI only. There are no routes for them in
+v1. Imports and FEN entries run on the CLI and on the page, through the same code
+(`importer.py`), so the same file gives the same entries either way.
+
+Web import:
+- The body is the file's bytes, so the server decodes it as §7.1 says (`utf-8-sig`, else
+  cp1252 with "Read as Windows-1252" in the report). At most 10 MB (413). No games is a 422
+  with the CLI's message.
+- One import at a time, in a background thread with its own connection and one engine. A
+  second one is a 409. Each job reads config.toml, finds Stockfish as §6 says (there's no
+  `--stockfish` here), and runs the daily backup check first; a failed backup is a warning in
+  the report. Jobs live in memory only; the last finished one is kept for its report.
+- Games that need a side are listed, with what to do: add your name to `my_names`, or save
+  the game to a file and run `blunderbook import FILE --side white|black`. There's no side
+  picker in v1.
+- Stopping `serve` stops the job between positions and closes the engine. Games saved so far
+  stay, and the game being analysed isn't saved (§7.4).
+- The import and FEN routes also refuse a request whose `Origin` isn't the page's own (403),
+  and the import route anything that isn't `application/x-chess-pgn` (415). That type needs
+  a CORS preflight, which the server never allows, so another website can't send games.
 
 The list is newest first (one game's entries in move order). `cause=` matches entries where
 the cause is confirmed, or where nothing is confirmed yet and it's suggested, as in the demo.
@@ -560,9 +586,9 @@ every attempt.
 
 ## 11. Frontend (port the reference demo)
 
-Views (hash routes): `#log`, `#retest`, `#patterns`. Header: brand and tabs, with a
-due-count badge on Re-test. Games are added on the CLI (`blunderbook import`), so there is no
-Import view or add button in v1.
+Views (hash routes): `#log`, `#retest`, `#patterns`, `#import`. Header: brand and tabs, with
+a due-count badge on Re-test. Games are added on the Import tab or on the CLI
+(`blunderbook import`).
 
 The shell:
 - Tabs are links (`<a href="#log">`, `aria-current="page"` on the open one).
@@ -586,8 +612,8 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   metadata grid (source, time control, result, ratings, clock left, time on move), cause
   chips (auto suggestions dashed with an "AUTO" tag), "What I was thinking" and "Lesson"
   textareas with autosave (debounced PATCH, "Saved" message), and the re-test status.
-  Step controls use the per-ply FENs from the API. The empty state says "Import a PGN with
-  `blunderbook import FILE.pgn`".
+  Step controls use the per-ply FENs from the API. The empty state says "Import a PGN on the
+  Import tab, or with `blunderbook import FILE.pgn`".
   - The step controls go through the whole game. The panel opens on the position before your
     move.
   - Each entry shows its own mark: `??`, `?` or `?!`.
@@ -601,6 +627,11 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   then tap a square (only the legal moves from the API), "Show a hint" (from-square), "I don't
   know — show me". The result panel shows solved or missed, the best line, what I played in
   the game, my lesson, and the next due date. An empty state offers "Practise all anyway".
+- **Import:** a paste box ("Paste PGN here, or drop a .pgn file on this box."), "Choose .pgn
+  file", drop onto the box, and "Import". While it runs: a progress bar with the percentage
+  (`aria-live`). Then the report: each game's status and reason, links to new entries
+  (`#log/<id>`), and the summary line. A "Quick entry from a FEN" card: FEN, your move (UCI or
+  SAN), opponent, date, and the outcome. After either, the view dispatches `entries-changed`.
 - **Patterns:** four tiles, cause bars (solid = confirmed, striped = suggested), by time
   control, re-test history, a one-line "biggest leak" insight.
 - **Print page** (`print.html`): A4, black and white, two entries per page, laid out like
@@ -676,12 +707,13 @@ Design language (from the demo and the paper template):
 3. **API + Log view:** FastAPI app, blunder routes, frontend shell plus Log view ported
    from the demo, autosave notes.
 4. **Re-test + Patterns:** scheduling, attempt and hint endpoints, both views.
-5. **Sync:** Lichess and Chess.com adapters against recorded fixtures, `sync` command.
-6. **Print + polish:** print page, `serve --open`, README with install steps (Stockfish on
+5. **Web import:** the CLI's import and FEN code shared, a background import job with
+   progress, and the Import view (paste, file choose/drop, FEN quick entry).
+6. **Sync:** Lichess and Chess.com adapters against recorded fixtures, `sync` command.
+7. **Print + polish:** print page, `serve --open`, README with install steps (Stockfish on
    macOS/Windows/Linux), empty states, error messages.
 
-Future (not v1): web import (paste or drop a PGN, side picker, progress), FEN board editor in
-the browser, settings page, optional "coach" explanation of a blunder via an LLM API (opt-in,
+Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, optional "coach" explanation of a blunder via an LLM API (opt-in,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 ---
