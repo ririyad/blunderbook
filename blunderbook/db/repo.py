@@ -146,6 +146,15 @@ def add_game(
     return SavedIds(game_id, blunder_ids)
 
 
+def find_saved(conn: sqlite3.Connection, fingerprint: str) -> SavedIds | None:
+    """The saved game with this fingerprint and its entry ids (in move order), or None."""
+    row = conn.execute("SELECT id FROM games WHERE fingerprint = ?", (fingerprint,)).fetchone()
+    if row is None:
+        return None
+    rows = conn.execute("SELECT id FROM blunders WHERE game_id = ? ORDER BY ply", (row[0],))
+    return SavedIds(int(row[0]), tuple(int(r[0]) for r in rows))
+
+
 def get_game(conn: sqlite3.Connection, game_id: int) -> Game | None:
     row = conn.execute(f"{_SELECT_GAME} WHERE id = ?", (game_id,)).fetchone()
     return None if row is None else _game(row)

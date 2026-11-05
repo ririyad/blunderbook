@@ -29,19 +29,20 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | In progress (3/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
+| M2 Storage | In progress (4/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M2.4 `fen` command.
+**Next up:** M2.5 Backup + restore.
 
-In place so far: all of M1, and M2.1–2.3. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1, and M2.1–2.4. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
-the database. Importing the same file again adds nothing. `init` creates the database and
-`doctor` checks it. There's no way to read or annotate the saved entries yet: that's the web
-page in M3. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
+the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
+position you have no PGN of. `init` creates the database and `doctor` checks it. There's no
+way to read or annotate the saved entries yet: that's the web page in M3. All nine §12
+fixtures flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -178,8 +179,23 @@ Each item is one small commit, with its tests in the same change. Every commit m
       Checked end to end with Stockfish 19: `back_rank.pgn` saved `32. Rc7??` as entry #1, and
       the second import skipped it.
       _Done when_ importing the same file twice adds nothing.
-- [ ] **2.4 `fen` command.** Synthetic `source='fen'` game row. Logs the move with its judgment,
-      even below the blunder line. Takes `--stockfish` too.
+- [x] **2.4 `fen` command.** `blunderbook fen "FEN" --move Rc7 [--opponent X] [--date D]`
+      logs one position, for games you have no PGN of. You're the side to move.
+      - **Input:** the move is UCI or SAN (`e7e8` promotes to a queen). The FEN must include
+        the side to move, because filling it in would be a guess. Impossible positions,
+        finished games and illegal moves get a plain reason, before anything is opened.
+      - **What's logged:** anything from an inaccuracy up, marked `??` / `?` / `?!`, with
+        the best line, refutation and suggested causes. A move under the inaccuracy line, or
+        Stockfish's own choice, isn't logged, since a re-test would have no wrong answer.
+      - **Storage:** it's saved as the §5 synthetic one-move game (`[SetUp "1"] [FEN …]`,
+        "FEN entry", your first name vs `--opponent`, today unless `--date`). The same
+        position, move, opponent and date again says "already logged (entry #N)" without
+        starting Stockfish.
+
+      The core change is `flag_at` on `analyse_game()` / `is_flagged()`: imports flag from
+      the blunder line, a FEN entry from the inaccuracy line. Checked with Stockfish 19: the
+      back-rank `Rc7` and the Elephant `Nxd5` were logged as blunders, `h3` as an inaccuracy,
+      and `e3` (the best move) was not logged.
 - [ ] **2.5 Backup + restore.** `db/backup.py` (CLAUDE.md §6 Backups), `[backup]` in config.toml,
       `backup [--to FOLDER]` and `restore FILE` commands. A daily automatic backup runs before
       `import` and `fen`, and a safety copy before migrations and restores. `init` asks for the
@@ -277,7 +293,7 @@ uses the next one.
 | `blunderbook init` | Create config and the DB, ask for your names and Stockfish | Done (1.9, 2.1) |
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and the DB (changes nothing) | Done (1.9, 2.1) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
-| `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
+| `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
 | `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M6) |

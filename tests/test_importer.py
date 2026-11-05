@@ -1,6 +1,7 @@
 """The import pipeline without Stockfish: queueing, sides, duplicates, analysis with a
 scripted engine, saving, and the summary line."""
 
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -253,6 +254,117 @@ def test_saved_games_are_skipped_next_time(conn: sqlite3.Connection) -> None:
     assert len(repo.list_entries(conn)) == 1
     (again,) = importer.prepare(read("legal_trap.pgn"), NAMES, known=repo.known_fingerprints(conn))
     assert (again.status, again.reason) == ("duplicate", importer.ALREADY_IMPORTED)
+
+
+# ---------------------------------------------------------------- FEN quick entry
+
+BACK_RANK = "3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32"
+
+
+def after(fen: str, uci: str) -> str:
+    board = chess.Board(fen)
+    board.push_uci(uci)
+    return board.fen()
+
+
+def test_prepare_fen_builds_a_one_move_game() -> None:
+    queued = importer.prepare_fen(
+        BACK_RANK, "c1c7", me="Rashed", opponent="endgame_eel", played_on=date(2026, 11, 1)
+    )
+    assert (queued.status, queued.side, queued.side_from) == ("ready", "white", "position")
+    assert queued.source is not None
+    assert (queued.source.source, queued.source.label) == ("fen", "FEN entry")
+    assert (queued.players, queued.date) == ("Rashed vs endgame_eel", "2026-11-01")
+    game = queued.game
+    assert game is not None
+    assert game.start_fen == BACK_RANK
+    assert [p.label for p in game.plies] == ["32. Rc7"]
+    assert '[SetUp "1"]' in game.pgn and f'[FEN "{BACK_RANK}"]' in game.pgn
+    assert '[Event "FEN entry"]' in game.pgn
+
+
+def test_prepare_fen_you_are_the_side_to_move() -> None:
+    black_to_move = "6k1/5ppp/8/8/8/8/5PPP/3R2K1 b - - 0 40"
+    queued = importer.prepare_fen(black_to_move, "Kf8", me="Rashed", opponent="Tanvir H.")
+    assert (queued.side, queued.players) == ("black", "Tanvir H. vs Rashed")
+    assert queued.game is not None and queued.game.plies[0].label == "40... Kf8"
+
+
+def test_prepare_fen_takes_uci_or_san_and_promotes_to_a_queen() -> None:
+    uci = importer.prepare_fen(BACK_RANK, "c1c7")
+    san = importer.prepare_fen(BACK_RANK, " Rc7 ")
+    assert uci.fingerprint == san.fingerprint
+    promo = "8/4P3/8/8/8/8/k7/4K3 w - - 0 1"
+    queen = importer.prepare_fen(promo, "e7e8")
+    knight = importer.prepare_fen(promo, "e7e8n")
+    assert queen.game is not None and queen.game.plies[0].uci == "e7e8q"
+    assert knight.game is not None and knight.game.plies[0].uci == "e7e8n"
+
+
+def test_prepare_fen_fingerprint() -> None:
+    """The same position, move, opponent and date is the same entry (CLAUDE.md §7.4)."""
+
+    def fp(**changes: object) -> str | None:
+        args: dict = {"move": "c1c7", "opponent": "eel", "played_on": date(2026, 11, 1)}
+        args.update(changes)
+        return importer.prepare_fen(BACK_RANK, **args).fingerprint
+
+    assert fp() == fp()
+    assert len({fp(), fp(move="c1c2"), fp(opponent="pike"), fp(played_on=date(2026, 11, 2))}) == 4
+
+
+def test_prepare_fen_cleans_names_for_the_pgn() -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", me=None, opponent=' Tanvir "TH"\n H. ')
+    assert queued.players == "? vs Tanvir 'TH' H."
+    assert queued.game is not None and queued.header("White") is None
+
+
+@pytest.mark.parametrize(
+    ("fen", "move", "message"),
+    [
+        ("not a fen", "e2e4", "That FEN can't be read"),
+        ("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", "e2e4", "needs the side to move"),
+        ("8/8/8/8/8/8/8/K7 w - - 0 1", "a1a2", "Black has no king"),
+        ("k7/8/8/8/8/8/8/K6r b - - 0 1", "h1h2", "the side not to move is in check"),
+        (
+            "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3",
+            "e2e4",
+            "no legal moves",
+        ),
+        (BACK_RANK, "e1e2", "e1e2 isn't a legal move in that position. White is to move."),
+        (BACK_RANK, "Rc9", "isn't a legal move"),
+        (BACK_RANK, "0000", "isn't a legal move"),
+        (BACK_RANK, "--", "isn't a legal move"),
+        (BACK_RANK, " ", "That isn't a legal move"),
+    ],
+)
+def test_prepare_fen_refuses(fen: str, move: str, message: str) -> None:
+    with pytest.raises(importer.FenError, match=re.escape(message)):
+        importer.prepare_fen(fen, move)
+
+
+def test_fen_entry_logs_a_mistake_an_import_would_skip() -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", me="Rashed", played_on=date(2026, 11, 1))
+    engine = Scripted(
+        {
+            BACK_RANK: Line(Eval(cp=30), mv("b3c4")),
+            after(BACK_RANK, "c1c7"): Line(Eval(cp=-100), mv("e7c7")),
+        }
+    )
+    plain = importer.analyse(queued, engine, depth=8, thresholds=Thresholds())
+    assert plain.blunders == ()  # swing 0.12: under the blunder line
+    result = importer.analyse(
+        queued, engine, depth=8, thresholds=Thresholds(), flag_at="inaccuracy"
+    )
+    (found,) = result.blunders
+    assert (found.finding.judgment, found.finding.best_san) == ("mistake", "Qc4")
+    assert found.finding.swing == pytest.approx(0.1186, abs=1e-3)
+
+    game = importer.new_game(result)
+    assert (game.source, game.site_label, game.external_id) == ("fen", "FEN entry", None)
+    assert (game.white, game.black, game.my_color) == ("Rashed", None, "white")
+    assert (game.played_on, game.time_control, game.has_clocks) == (date(2026, 11, 1), None, False)
+    assert game.start_fen == BACK_RANK
 
 
 # ---------------------------------------------------------------- summary

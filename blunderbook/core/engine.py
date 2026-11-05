@@ -24,6 +24,7 @@ from blunderbook.core.models import (
     Eval,
     Finding,
     GameAnalysis,
+    Judgment,
     ParsedGame,
     Ply,
     Thresholds,
@@ -243,13 +244,14 @@ def analyse_game(
     depth: int,
     thresholds: Thresholds,
     progress: Progress | None = None,
+    flag_at: Judgment = "blunder",
 ) -> GameAnalysis:
     """Find my blunders in ``game``.
 
     Pass 1 scores every position once (positions 0..N, finished positions without the
-    engine). My moves whose swing reaches the blunder line, and that aren't the engine's
-    best move, are flagged. Pass 2 asks for the top 3 moves in each flagged position, to
-    know which re-test answers to accept.
+    engine). My moves whose swing reaches the ``flag_at`` line (the blunder line for
+    imports), and that aren't the engine's best move, are flagged. Pass 2 asks for the top
+    3 moves in each flagged position, to know which re-test answers to accept.
 
     ``progress(done, total)`` is called after each position. ``total`` starts as N + 1 and
     grows by the number of flagged moves once pass 1 is over.
@@ -274,7 +276,7 @@ def analyse_game(
         before, after = pass1[ply.index], pass1[ply.index + 1]
         swing = detect.swing(before.score, after.score, me)
         best = before.move
-        if detect.is_flagged(swing, ply.uci, best.uci() if best else None, thresholds):
+        if detect.is_flagged(swing, ply.uci, best.uci() if best else None, thresholds, flag_at):
             flagged.append((ply, swing))
 
     total += len(flagged)

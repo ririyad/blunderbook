@@ -73,10 +73,22 @@ def judgment(swing: float, thresholds: Thresholds) -> Judgment | None:
     return None
 
 
-def is_flagged(swing: float, played_uci: str, best_uci: str | None, thresholds: Thresholds) -> bool:
-    """An import logs a move when its swing reaches the blunder line and it isn't the
-    engine's best move. No best move (the engine gave none) means no flag."""
-    return best_uci is not None and played_uci != best_uci and swing >= thresholds.blunder
+def is_flagged(
+    swing: float,
+    played_uci: str,
+    best_uci: str | None,
+    thresholds: Thresholds,
+    flag_at: Judgment = "blunder",
+) -> bool:
+    """A move is logged when its swing reaches the ``flag_at`` line and it isn't the
+    engine's best move. Imports flag from the blunder line; a FEN entry from the inaccuracy
+    line (CLAUDE.md §9). No best move (the engine gave none) means no flag."""
+    line = {
+        "blunder": thresholds.blunder,
+        "mistake": thresholds.mistake,
+        "inaccuracy": thresholds.inaccuracy,
+    }[flag_at]
+    return best_uci is not None and played_uci != best_uci and swing >= line
 
 
 def accepted_moves(

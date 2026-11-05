@@ -16,7 +16,7 @@ from blunderbook.core.detect import (
     swing,
     winning_chances,
 )
-from blunderbook.core.models import Color, Eval, Thresholds
+from blunderbook.core.models import Color, Eval, Judgment, Thresholds
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pgn"
 TH = Thresholds()
@@ -169,6 +169,22 @@ def test_is_flagged(value: float, played: str, best: str | None, flagged: bool) 
 def test_flagging_uses_the_configured_blunder_line() -> None:
     assert is_flagged(0.12, "c3d5", "e2e3", Thresholds(blunder=0.12))
     assert not is_flagged(0.15, "c3d5", "e2e3", Thresholds(blunder=0.2))
+
+
+@pytest.mark.parametrize(
+    ("value", "flag_at", "flagged"),
+    [
+        (0.06, "inaccuracy", True),
+        (0.04, "inaccuracy", False),
+        (0.12, "mistake", True),
+        (0.06, "mistake", False),
+        (0.12, "blunder", False),
+    ],
+)
+def test_flag_at_a_lower_line(value: float, flag_at: Judgment, flagged: bool) -> None:
+    """A FEN entry logs anything from an inaccuracy up (CLAUDE.md §9)."""
+    assert is_flagged(value, "c3d5", "e2e3", TH, flag_at) is flagged
+    assert not is_flagged(value, "e2e3", "e2e3", TH, flag_at)  # your move was the best
 
 
 # ---------------------------------------------------------------- accepted moves (pass 2)

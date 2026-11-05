@@ -1,9 +1,10 @@
-"""`blunderbook init`, `doctor` and `import`, against a temp config, a stubbed probe and a
-scripted engine (no Stockfish needed)."""
+"""`blunderbook init`, `doctor`, `import` and `fen`, against a temp config, a stubbed probe
+and a scripted engine (no Stockfish needed)."""
 
 import sqlite3
 import sys
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -528,3 +529,128 @@ def test_import_file_with_no_games(tmp_path: Path, cfg_file: Path) -> None:
     result = runner.invoke(app, ["import", str(path)])
     assert result.exit_code == 1
     assert f"No games found in {path}." in result.output
+
+
+# ---------------------------------------------------------------- fen
+
+BACK_RANK = "3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32"
+
+
+def score(stub: StubEngine, fen: str, eval_: Eval, *pv: str) -> None:
+    """Script the engine's answer for ``fen``."""
+    stub.table[chess.Board(fen).fen()] = Line(eval_, tuple(map(chess.Move.from_uci, pv)))
+
+
+def after(fen: str, uci: str) -> str:
+    board = chess.Board(fen)
+    board.push_uci(uci)
+    return board.fen()
+
+
+def back_rank(stub: StubEngine, after_rc7: Eval, *pv: str) -> None:
+    score(stub, BACK_RANK, Eval(cp=30), "b3c4", "g7g6")
+    score(stub, after(BACK_RANK, "c1c7"), after_rc7, *pv)
+
+
+def fen(*args: str) -> Any:
+    return runner.invoke(app, ["fen", BACK_RANK, *args])
+
+
+def test_fen_logs_a_blunder(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    back_rank(stub, Eval(mate=-1), "e7e1")
+    result = fen("--move", "Rc7", "--opponent", "endgame_eel", "--date", "2026-11-01")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert f"FEN entry {DOT} Rashed vs endgame_eel {DOT} 2026-11-01 {DOT} you played White" in out
+    assert "  32. Rc7??  Best was Qc4: 32. Qc4 g6" in out
+    assert "      Refutation: 32... Qe1#" in out
+    assert "      Suggested: Missed their threat" in out
+    assert "No clock times" not in out
+    assert out.rstrip().endswith("Logged 32. Rc7?? as a blunder: entry #1.")
+    with closing(connection.open_db(db_file)) as conn:
+        (entry,) = repo.list_entries(conn)
+    assert (entry.game.source, entry.game.site_label, entry.game.start_fen) == (
+        "fen",
+        "FEN entry",
+        BACK_RANK,
+    )
+    assert (entry.game.black, entry.game.played_on.isoformat()) == ("endgame_eel", "2026-11-01")
+    assert (entry.blunder.judgment, entry.blunder.played_uci) == ("blunder", "c1c7")
+
+
+def test_fen_logs_a_mistake_too(ready: Path, stub: StubEngine) -> None:
+    back_rank(stub, Eval(cp=-100), "e7c7")
+    result = fen("--move", "c1c7")
+    assert result.exit_code == 0, result.output
+    assert "  32. Rc7?  Best was Qc4" in result.output
+    assert "Logged 32. Rc7? as a mistake: entry #1." in result.output
+
+
+def test_fen_twice_adds_nothing(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    back_rank(stub, Eval(mate=-1), "e7e1")
+    assert fen("--move", "Rc7", "--date", "2026-11-01").exit_code == 0
+    stub.opened_with = {}
+    again = fen("--move", "c1c7", "--date", "2026-11-01")
+    assert again.exit_code == 0, again.output
+    assert "You've already logged 32. Rc7 in this position (entry #1). Nothing was added." in (
+        again.output
+    )
+    assert stub.opened_with == {}
+    assert entries(db_file) == [("Rashed vs None", "Rc7")]
+
+
+def test_fen_move_that_isnt_a_mistake(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    back_rank(stub, Eval(cp=25), "g7g6")
+    result = fen("--move", "Rc7")
+    assert result.exit_code == 0, result.output
+    assert "32. Rc7 isn't a mistake by Stockfish's measure (swing 0.00; " in result.output
+    assert "inaccuracies start at 0.05). Nothing was logged." in result.output
+    assert entries(db_file) == []
+    assert saved_games(db_file) == 0  # not saved, so you can log it again later
+
+
+def test_fen_best_move_isnt_logged(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    score(stub, BACK_RANK, Eval(cp=30), "b3c4")
+    score(stub, after(BACK_RANK, "b3c4"), Eval(cp=-100))  # a big swing, but it's the best
+    result = fen("--move", "Qc4")
+    assert result.exit_code == 0, result.output
+    assert "32. Qc4 is Stockfish's own choice here. Nothing was logged." in result.output
+    assert entries(db_file) == []
+
+
+def test_fen_date_defaults_to_today(ready: Path, stub: StubEngine) -> None:
+    back_rank(stub, Eval(mate=-1), "e7e1")
+    result = fen("--move", "Rc7")
+    assert result.exit_code == 0, result.output
+    assert f"Rashed vs ? {DOT} {date.today().isoformat()} {DOT}" in result.output
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["fen", "8/8/8/8/8/8/8/K7 w - - 0 1", "--move", "a1a2"], "Black has no king"),
+        (["fen", BACK_RANK, "--move", "e1e2"], "e1e2 isn't a legal move in that position."),
+        (["fen", BACK_RANK, "--move", "Rc7", "--date", "1/11/2026"], "--date needs a date like"),
+    ],
+)
+def test_fen_bad_input_stops_before_anything_else(
+    ready: Path, stub: StubEngine, db_file: Path, args: list[str], message: str
+) -> None:
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1
+    assert message in result.output
+    assert stub.opened_with == {}
+    assert not db_file.exists()
+
+
+def test_fen_needs_the_move(ready: Path, stub: StubEngine) -> None:
+    assert fen().exit_code == 2
+
+
+def test_fen_engine_failure_logs_nothing(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    stub.fail = True
+    result = fen("--move", "Rc7")
+    assert result.exit_code == 1
+    assert "Analysis stopped: Stockfish stopped unexpectedly.\nNothing was logged." in result.output
+    assert saved_games(db_file) == 0
+    assert stub.closed

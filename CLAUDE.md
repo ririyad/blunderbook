@@ -213,7 +213,10 @@ CREATE TABLE sync_state (
 There is no settings table. Every §6 setting lives in config.toml and nowhere else.
 
 FEN quick entries get a synthetic `games` row (`source='fen'`, `pgn` = a one-move PGN with
-`[SetUp "1"] [FEN "..."]`, `my_color` = side to move) so every blunder has a game.
+`[SetUp "1"] [FEN "..."]`, `my_color` = side to move) so every blunder has a game. Its
+headers: `Event "FEN entry"`, your first `my_names` entry on your side, `--opponent` on the
+other, and the date (today unless `--date` is given). Unknown names are `?`, and quotes in
+names become `'`.
 
 The fixed cause list (keep this order everywhere: UI chips, print page, Patterns):
 
@@ -344,7 +347,8 @@ an error. `blunderbook engine set` checks a path before saving it.
   `[Link "..."]`), fingerprint = `sha1(source + ":" + game_id)`.
 - Otherwise fingerprint = `sha1(lower(white) | lower(black) | date | first 30 SAN moves)`.
   A game that doesn't start from the standard position adds its start FEN, so two typed-up
-  positions with no names or date and the same first move don't collide.
+  positions with no names or date and the same first move don't collide. A FEN entry uses
+  this content fingerprint too: the same position, move, opponent and date is one entry.
 - An already-known fingerprint is reported as "Already imported — skipped". The same game
   twice in one file: the second is "Same game as game N — skipped". Importing the same file
   twice must add nothing.
@@ -472,7 +476,7 @@ They return **PGN text only**. The importer does everything else.
 | `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
 | `engine clear` | Set `stockfish_path = ""` (look on PATH again). |
 | `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
-| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position. Logs it even below the blunder line, with its judgment. |
+| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |

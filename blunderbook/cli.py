@@ -10,6 +10,7 @@ import sqlite3
 import sys
 from contextlib import closing
 from dataclasses import dataclass, replace
+from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -17,8 +18,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from blunderbook import __version__, config, importer
-from blunderbook.core import engine, pgn
-from blunderbook.core.models import Color
+from blunderbook.core import detect, engine, pgn
+from blunderbook.core.models import Color, Judgment, SavedIds
 from blunderbook.db import connection, repo
 
 app = typer.Typer(
@@ -419,19 +420,26 @@ def _print_blunders(saved: importer.SavedGame) -> None:
     if not game.has_clocks:
         typer.echo("  No clock times in this PGN.")
     for blunder, entry_id in zip(result.blunders, saved.blunder_ids, strict=True):
-        f, h = blunder.finding, blunder.hints
-        typer.echo(f"  {f.ply.label}??  Best was {f.best_san}: {f.best_line_san}")
-        if f.refutation_san:
-            typer.echo(f"      Refutation: {f.refutation_san}")
-        details = [f"Swing {f.swing:.2f}"]
-        if h.clock_left_s is not None:
-            details.append(f"{_seconds(h.clock_left_s)} left")
-        if h.time_spent_s is not None:
-            details.append(f"{_seconds(h.time_spent_s)} on the move")
-        details.append(f"entry #{entry_id}")
-        typer.echo("      " + " \N{MIDDLE DOT} ".join(details))
-        if h.causes:
-            typer.echo(f"      Suggested: {', '.join(h.causes)}")
+        _print_entry(blunder, entry_id)
+
+
+_MARKS: dict[Judgment, str] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
+
+
+def _print_entry(found: importer.FoundBlunder, entry_id: int) -> None:
+    f, h = found.finding, found.hints
+    typer.echo(f"  {f.ply.label}{_MARKS[f.judgment]}  Best was {f.best_san}: {f.best_line_san}")
+    if f.refutation_san:
+        typer.echo(f"      Refutation: {f.refutation_san}")
+    details = [f"Swing {f.swing:.2f}"]
+    if h.clock_left_s is not None:
+        details.append(f"{_seconds(h.clock_left_s)} left")
+    if h.time_spent_s is not None:
+        details.append(f"{_seconds(h.time_spent_s)} on the move")
+    details.append(f"entry #{entry_id}")
+    typer.echo("      " + " \N{MIDDLE DOT} ".join(details))
+    if h.causes:
+        typer.echo(f"      Suggested: {', '.join(h.causes)}")
 
 
 def _seconds(value: float) -> str:
@@ -457,6 +465,120 @@ class _Progress:
         if self.live:
             sys.stderr.write("\r\033[K")
             sys.stderr.flush()
+
+
+# ---------------------------------------------------------------- fen
+
+
+@app.command()
+def fen(
+    position: Annotated[
+        str,
+        typer.Argument(metavar="FEN", help="The position before your move, as FEN, in quotes."),
+    ],
+    move: Annotated[
+        str,
+        typer.Option("--move", help="The move you played: UCI like e2e4, or SAN like Nf3."),
+    ],
+    opponent: Annotated[str | None, typer.Option(help="Who you played.")] = None,
+    on: Annotated[
+        str | None,
+        typer.Option("--date", metavar="YYYY-MM-DD", help="When you played. Default: today."),
+    ] = None,
+    stockfish: Annotated[
+        str | None,
+        typer.Option("--stockfish", help="Use this Stockfish for this entry."),
+    ] = None,
+) -> None:
+    """Log one position and the move you played, for games you have no PGN of.
+
+    You're the side to move. It's logged as a blunder, mistake or inaccuracy, by its cost.
+    """
+    cfg = _load_config()
+    played_on = _date_option(on)
+    try:
+        queued = importer.prepare_fen(
+            position,
+            move,
+            me=cfg.my_names[0] if cfg.my_names else None,
+            opponent=opponent,
+            played_on=played_on,
+        )
+    except importer.FenError as exc:
+        _fail(str(exc))
+    assert queued.game is not None and queued.fingerprint is not None and queued.side
+    label = queued.game.plies[0].label
+
+    with closing(_open_database("Can't log the position: the database can't be used.")) as conn:
+        earlier = repo.find_saved(conn, queued.fingerprint)
+        if earlier is not None:
+            typer.echo(_already_logged(label, earlier))
+            return
+        found = _find_engine(stockfish, cfg, probe=False)
+        if found.problem is not None:
+            _fail(f"Can't analyse: {found.problem}")
+        assert found.path is not None
+        try:
+            with engine.Engine.open(
+                [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
+            ) as sf:
+                typer.echo(f"Analysing with {sf.name} at depth {cfg.engine_depth}.")
+                _version_notes(sf.info)
+                analysed = importer.analyse(
+                    queued,
+                    sf,
+                    depth=cfg.engine_depth,
+                    thresholds=cfg.thresholds,
+                    flag_at="inaccuracy",
+                )
+        except engine.EngineError as exc:
+            _fail(f"Analysis stopped: {exc}\nNothing was logged.")
+
+        if not analysed.blunders:
+            evals = analysed.analysis.evals
+            swing = detect.swing(evals[0], evals[1], queued.side)
+            if swing >= cfg.thresholds.inaccuracy:  # not flagged, so it was the best move
+                typer.echo(f"{label} is Stockfish's own choice here. Nothing was logged.")
+            else:
+                typer.echo(
+                    f"{label} isn't a mistake by Stockfish's measure (swing {swing:.2f}; "
+                    f"inaccuracies start at {cfg.thresholds.inaccuracy:.2f}). Nothing was logged."
+                )
+            return
+        saved = importer.save(conn, analysed)
+        if saved is None:  # logged meanwhile by another command
+            earlier = repo.find_saved(conn, queued.fingerprint)
+            assert earlier is not None
+            typer.echo(_already_logged(label, earlier))
+            return
+
+    (blunder,) = analysed.blunders
+    (entry_id,) = saved.blunder_ids
+    parts = [importer.FEN_LABEL, queued.players]
+    if queued.date:
+        parts.append(queued.date)
+    parts.append(f"you played {queued.side.capitalize()}")
+    typer.echo("")
+    typer.echo(" \N{MIDDLE DOT} ".join(parts))
+    _print_entry(blunder, entry_id)
+    judgment = blunder.finding.judgment
+    article = "an" if judgment == "inaccuracy" else "a"
+    typer.echo("")
+    typer.echo(f"Logged {label}{_MARKS[judgment]} as {article} {judgment}: entry #{entry_id}.")
+
+
+def _date_option(value: str | None) -> date:
+    if value is None:
+        return date.today()
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        _fail(f"--date needs a date like 2026-11-05, not {value!r}.")
+
+
+def _already_logged(label: str, earlier: SavedIds) -> str:
+    where = f" (entry #{earlier.blunder_ids[0]})" if earlier.blunder_ids else ""
+    return f"You've already logged {label} in this position{where}. Nothing was added."
 
 
 # ---------------------------------------------------------------- helpers
