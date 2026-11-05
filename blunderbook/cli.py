@@ -6,6 +6,7 @@ sync (M5) · print (M6).
 """
 
 import os
+import sqlite3
 import sys
 from contextlib import closing
 from dataclasses import dataclass, replace
@@ -18,7 +19,7 @@ import typer
 from blunderbook import __version__, config, importer
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Color
-from blunderbook.db import connection
+from blunderbook.db import connection, repo
 
 app = typer.Typer(
     name="blunderbook",
@@ -138,12 +139,10 @@ def init() -> None:
 
     db = config.db_path()
     existed = db.exists()
-    try:
-        with closing(connection.open_db(db, create=True)):
-            pass
-    except connection.StorageError as exc:
-        _fail(f"Your settings are saved, but the database isn't ready.\n{exc}")
-    typer.echo(f"{'Database' if existed else 'Created the database'} {db}")
+    with closing(_open_database("Your settings are saved, but the database isn't ready.")):
+        pass
+    if existed:
+        typer.echo(f"Database {db}")
     typer.echo("Next: blunderbook import FILE.pgn")
 
 
@@ -300,7 +299,7 @@ def import_(
         typer.Option("--stockfish", help="Use this Stockfish for this import."),
     ] = None,
 ) -> None:
-    """Import a PGN file: find your blunders with Stockfish and print the report."""
+    """Import a PGN file: find your blunders with Stockfish and save them."""
     cfg = _load_config()
     try:
         data = path.read_bytes()
@@ -309,45 +308,77 @@ def import_(
     decoded = pgn.decode(data)
     if decoded.encoding == "cp1252":
         typer.echo("Read as Windows-1252 (the file isn't UTF-8).")
-    my_side: Color | None = None if side is None else side.color
-    queue = importer.prepare(decoded.text, _all_names(cfg), side=my_side)
-    if not queue:
-        _fail(f"No games found in {path}.")
 
-    ready = [q for q in queue if q.status == "ready"]
-    analysed: dict[int, importer.AnalysedGame] = {}
-    if ready:
-        found = _find_engine(stockfish, cfg, probe=False)
-        if found.problem is not None:
-            _fail(f"Can't analyse: {found.problem}")
-        assert found.path is not None
-        use_depth = depth or cfg.engine_depth
-        try:
-            with engine.Engine.open(
-                [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
-            ) as sf:
-                typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
-                _version_notes(sf.info)
-                for k, queued in enumerate(ready, start=1):
-                    progress = _Progress(f"Game {queued.number} ({k} of {len(ready)})")
-                    analysed[queued.number] = importer.analyse(
-                        queued, sf, depth=use_depth, thresholds=cfg.thresholds, progress=progress
-                    )
-                    progress.done()
-        except engine.EngineError as exc:
-            _print_report(queue, analysed)
-            _fail(f"Analysis stopped: {exc}")
+    with closing(_open_database("Can't import: the database can't be used.")) as conn:
+        my_side: Color | None = None if side is None else side.color
+        queue = list(
+            importer.prepare(
+                decoded.text, _all_names(cfg), side=my_side, known=repo.known_fingerprints(conn)
+            )
+        )
+        if not queue:
+            _fail(f"No games found in {path}.")
 
-    _print_report(queue, analysed)
+        ready = [q for q in queue if q.status == "ready"]
+        saved: dict[int, importer.SavedGame] = {}
+        if ready:
+            found = _find_engine(stockfish, cfg, probe=False)
+            if found.problem is not None:
+                _fail(f"Can't analyse: {found.problem}")
+            assert found.path is not None
+            use_depth = depth or cfg.engine_depth
+            position = {q.number: i for i, q in enumerate(queue)}
+            try:
+                with engine.Engine.open(
+                    [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
+                ) as sf:
+                    typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
+                    _version_notes(sf.info)
+                    for k, queued in enumerate(ready, start=1):
+                        progress = _Progress(f"Game {queued.number} ({k} of {len(ready)})")
+                        analysed = importer.analyse(
+                            queued,
+                            sf,
+                            depth=use_depth,
+                            thresholds=cfg.thresholds,
+                            progress=progress,
+                        )
+                        progress.done()
+                        result = importer.save(conn, analysed)
+                        if result is None:  # another import saved it meanwhile
+                            queue[position[queued.number]] = replace(
+                                queued, status="duplicate", reason=importer.ALREADY_IMPORTED
+                            )
+                        else:
+                            saved[queued.number] = result
+            except engine.EngineError as exc:
+                _print_report(queue, saved)
+                _fail(
+                    f"Analysis stopped: {exc}\n"
+                    "Import the file again to analyse the rest. Games already saved are skipped."
+                )
+
+        _print_report(queue, saved)
+
+
+def _open_database(problem: str) -> sqlite3.Connection:
+    """Open the database, creating it if it's missing. Close it with ``closing``."""
+    path = config.db_path()
+    existed = path.exists()
+    try:
+        conn = connection.open_db(path, create=True)
+    except connection.StorageError as exc:
+        _fail(f"{problem}\n{exc}")
+    if not existed:
+        typer.echo(f"Created the database {path}")
+    return conn
 
 
 def _all_names(cfg: config.Config) -> list[str]:
     return [*cfg.my_names, cfg.lichess.username, cfg.chesscom.username]
 
 
-def _print_report(
-    queue: tuple[importer.QueuedGame, ...], analysed: dict[int, importer.AnalysedGame]
-) -> None:
+def _print_report(queue: list[importer.QueuedGame], saved: dict[int, importer.SavedGame]) -> None:
     for queued in queue:
         typer.echo("")
         typer.echo(_game_heading(queued))
@@ -358,14 +389,12 @@ def _print_report(
         elif queued.status == "needs_side":
             typer.echo("  Which side were you? Run again with --side white or --side black,")
             typer.echo("  or add your name to my_names in config.toml.")
-        elif queued.number in analysed:
-            _print_blunders(analysed[queued.number])
+        elif queued.number in saved:
+            _print_blunders(saved[queued.number])
         else:
             typer.echo("  Not analysed.")
     typer.echo("")
-    typer.echo(importer.summary(queue, analysed.values(), "found"))
-    if analysed:
-        typer.echo("Nothing was saved: storage arrives in M2.")
+    typer.echo(importer.summary(queue, saved.values()))
 
 
 def _game_heading(queued: importer.QueuedGame) -> str:
@@ -380,7 +409,8 @@ def _game_heading(queued: importer.QueuedGame) -> str:
     return " \N{MIDDLE DOT} ".join(parts)
 
 
-def _print_blunders(result: importer.AnalysedGame) -> None:
+def _print_blunders(saved: importer.SavedGame) -> None:
+    result = saved.analysed
     if not result.blunders:
         typer.echo("  No blunders found.")
         return
@@ -388,7 +418,7 @@ def _print_blunders(result: importer.AnalysedGame) -> None:
     assert game is not None
     if not game.has_clocks:
         typer.echo("  No clock times in this PGN.")
-    for blunder in result.blunders:
+    for blunder, entry_id in zip(result.blunders, saved.blunder_ids, strict=True):
         f, h = blunder.finding, blunder.hints
         typer.echo(f"  {f.ply.label}??  Best was {f.best_san}: {f.best_line_san}")
         if f.refutation_san:
@@ -398,6 +428,7 @@ def _print_blunders(result: importer.AnalysedGame) -> None:
             details.append(f"{_seconds(h.clock_left_s)} left")
         if h.time_spent_s is not None:
             details.append(f"{_seconds(h.time_spent_s)} on the move")
+        details.append(f"entry #{entry_id}")
         typer.echo("      " + " \N{MIDDLE DOT} ".join(details))
         if h.causes:
             typer.echo(f"      Suggested: {', '.join(h.causes)}")

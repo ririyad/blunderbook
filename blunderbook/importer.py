@@ -3,12 +3,17 @@
 1. :func:`prepare` reads the text and puts each game in the queue as ``ready``,
    ``needs_side``, ``duplicate`` or ``error``. No engine is needed for this step.
 2. :func:`analyse` runs one ready game through the engine and the suggested causes.
+3. :func:`save` stores the analysed game and its blunders in one transaction.
 
-Storage arrives in M2. Until then the CLI prints the report and saves nothing.
+Only analysed games are saved (CLAUDE.md §7.4). Each is saved as soon as it's analysed, so
+if the engine stops, the games before it are kept and importing the file again finishes
+the rest.
 """
 
+import sqlite3
 from collections.abc import Container, Iterable
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Literal
 
 from blunderbook.core import engine, hints, identity, pgn, timecontrol
@@ -16,12 +21,15 @@ from blunderbook.core.models import (
     Color,
     Finding,
     GameAnalysis,
+    NewBlunder,
+    NewGame,
     ParsedGame,
     SourceInfo,
     Thresholds,
     header_value,
 )
 from blunderbook.core.source import detect_source
+from blunderbook.db import repo
 
 GameStatus = Literal["ready", "needs_side", "duplicate", "error"]
 SideFrom = Literal["names", "option"]
@@ -69,6 +77,13 @@ class AnalysedGame:
     queued: QueuedGame
     analysis: GameAnalysis
     blunders: tuple[FoundBlunder, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SavedGame:
+    analysed: AnalysedGame
+    game_id: int
+    blunder_ids: tuple[int, ...]  # one per analysed.blunders, same order
 
 
 def prepare(
@@ -140,13 +155,81 @@ def analyse(
     return AnalysedGame(queued, analysis, found)
 
 
-def summary(queue: Iterable[QueuedGame], analysed: Iterable[AnalysedGame], verb: str) -> str:
-    """``"4 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders found"``.
+def save(
+    conn: sqlite3.Connection, analysed: AnalysedGame, *, now: datetime | None = None
+) -> SavedGame | None:
+    """Store an analysed game and its blunders. None when the game was saved meanwhile
+    (by another import running at the same time): nothing is written then."""
+    ids = repo.add_game(
+        conn, new_game(analysed), [new_blunder(b) for b in analysed.blunders], now=now
+    )
+    if ids is None:
+        return None
+    return SavedGame(analysed, ids.game_id, ids.blunder_ids)
 
-    ``verb`` is "found" until storage exists (M2), then "added".
-    """
+
+def new_game(analysed: AnalysedGame) -> NewGame:
+    """The ``games`` row for an analysed game. Unknown headers stay None."""
+    queued = analysed.queued
+    game, source, side = queued.game, queued.source, queued.side
+    assert game is not None and source is not None and side is not None
+    assert queued.fingerprint is not None
+    raw_tc = game.header("TimeControl")
+    tc = timecontrol.parse(raw_tc)
+    return NewGame(
+        fingerprint=queued.fingerprint,
+        source=source.source,
+        my_color=side,
+        start_fen=game.start_fen,
+        pgn=game.pgn,
+        engine_name=analysed.analysis.engine_name,
+        engine_depth=analysed.analysis.depth,
+        site_label=source.label,
+        external_id=source.url or source.game_id,
+        white=game.header("White"),
+        black=game.header("Black"),
+        white_elo=pgn.parse_int(game.header("WhiteElo")),
+        black_elo=pgn.parse_int(game.header("BlackElo")),
+        result=game.result,
+        played_on=pgn.parse_date(game.header("Date")),
+        time_control=raw_tc,
+        tc_base_s=None if tc is None else tc.base_s,
+        tc_inc_s=None if tc is None else tc.inc_s,
+        speed=None if tc is None else timecontrol.speed(tc),
+        opening=game.header("Opening"),
+        eco=game.header("ECO"),
+        has_clocks=game.has_clocks,
+    )
+
+
+def new_blunder(found: FoundBlunder) -> NewBlunder:
+    """The ``blunders`` row for one finding: everything the machine fills in."""
+    f, h = found.finding, found.hints
+    return NewBlunder(
+        ply=f.ply.index,
+        move_no=f.ply.move_no,
+        fen_before=f.ply.fen_before,
+        played_uci=f.ply.uci,
+        played_san=f.ply.san,
+        best_uci=f.best_uci,
+        best_san=f.best_san,
+        best_line_san=f.best_line_san,
+        accept_uci=f.accept_uci,
+        eval_before=f.eval_before,
+        eval_after=f.eval_after,
+        swing=f.swing,
+        judgment=f.judgment,
+        refutation_san=f.refutation_san,
+        clock_left_s=h.clock_left_s,
+        time_spent_s=h.time_spent_s,
+        auto_causes=h.causes,
+    )
+
+
+def summary(queue: Iterable[QueuedGame], saved: Iterable[SavedGame]) -> str:
+    """``"4 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added"``."""
     queue = tuple(queue)
-    blunders = sum(len(a.blunders) for a in analysed)
+    blunders = sum(len(s.blunder_ids) for s in saved)
     statuses = [q.status for q in queue]
     parts = [_count(len(queue), "game") + " read"]
     if n := statuses.count("duplicate"):
@@ -155,7 +238,7 @@ def summary(queue: Iterable[QueuedGame], analysed: Iterable[AnalysedGame], verb:
         parts.append(f"{n} {'needs' if n == 1 else 'need'} side")
     if n := statuses.count("error"):
         parts.append(_count(n, "error"))
-    parts.append(f"{_count(blunders, 'blunder')} {verb}")
+    parts.append(f"{_count(blunders, 'blunder')} added")
     return " \N{MIDDLE DOT} ".join(parts)
 
 

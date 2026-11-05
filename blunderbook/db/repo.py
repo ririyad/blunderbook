@@ -24,6 +24,7 @@ from blunderbook.core.models import (
     Judgment,
     NewBlunder,
     NewGame,
+    SavedIds,
     Source,
     Speed,
     Status,
@@ -93,7 +94,7 @@ _INSERT_GAME = (
 )
 _INSERT_BLUNDER = (
     f"INSERT INTO blunders ({', '.join(_BLUNDER_COLUMNS)}) "
-    f"VALUES ({', '.join(':' + c for c in _BLUNDER_COLUMNS)})"
+    f"VALUES ({', '.join(':' + c for c in _BLUNDER_COLUMNS)}) RETURNING id"
 )
 _SELECT_GAME = f"SELECT id, {', '.join(_GAME_COLUMNS)} FROM games"
 _SELECT_ENTRY = (
@@ -121,8 +122,8 @@ def add_game(
     blunders: Iterable[NewBlunder] = (),
     *,
     now: datetime | None = None,
-) -> int | None:
-    """Save an analysed game and its blunders in one transaction, and return the game's id.
+) -> SavedIds | None:
+    """Save an analysed game and its blunders in one transaction, and return their ids.
 
     A game with no blunders is saved too, so importing it again is skipped. Returns None,
     and writes nothing, when a game with the same fingerprint is already saved. New entries
@@ -136,10 +137,13 @@ def add_game(
         if row is None:
             return None
         game_id = int(row[0])
-        conn.executemany(
-            _INSERT_BLUNDER, [_blunder_params(game_id, b, stamp, due) for b in blunders]
+        blunder_ids = tuple(
+            int(
+                conn.execute(_INSERT_BLUNDER, _blunder_params(game_id, b, stamp, due)).fetchone()[0]
+            )
+            for b in blunders
         )
-    return game_id
+    return SavedIds(game_id, blunder_ids)
 
 
 def get_game(conn: sqlite3.Connection, game_id: int) -> Game | None:

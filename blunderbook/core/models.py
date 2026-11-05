@@ -305,3 +305,11 @@ class Entry:
 
     blunder: Blunder
     game: Game
+
+
+@dataclass(frozen=True, slots=True)
+class SavedIds:
+    """The ids a saved game and its entries got, entries in the order they were given."""
+
+    game_id: int
+    blunder_ids: tuple[int, ...]

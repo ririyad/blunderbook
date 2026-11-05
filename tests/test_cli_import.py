@@ -13,10 +13,10 @@ from typer.testing import CliRunner
 
 from blunderbook import config
 from blunderbook.cli import app
-from blunderbook.core import engine
+from blunderbook.core import engine, pgn
 from blunderbook.core.engine import EngineError, EngineInfo, Line
 from blunderbook.core.models import Eval
-from blunderbook.db import connection
+from blunderbook.db import connection, repo
 
 runner = CliRunner()
 WINDOWS = sys.platform == "win32"
@@ -285,6 +285,8 @@ class StubEngine:
     def __init__(self, table: dict[str, Line] | None = None, fail: bool = False) -> None:
         self.table = table or {}
         self.fail = fail
+        self.fail_after: int | None = None  # positions analysed before it stops
+        self.positions = 0
         self.depths: set[int] = set()
         self.opened_with: dict[str, Any] = {}
         self.closed = False
@@ -292,7 +294,8 @@ class StubEngine:
     def lines(
         self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
     ) -> list[Line]:
-        if self.fail:
+        self.positions += 1
+        if self.fail or (self.fail_after is not None and self.positions > self.fail_after):
             raise EngineError("Stockfish stopped unexpectedly.")
         self.depths.add(depth)
         return [self.table.get(board.fen(), Line(Eval(cp=20)))]
@@ -343,8 +346,8 @@ def test_import_prints_the_blunder(ready: Path, stub: StubEngine) -> None:
     assert "No clock times in this PGN." in out
     assert "6. Nxd5??  Best was e3: 6. e3 Be7" in out
     assert "Refutation: 6... Nxd5" in out
-    assert f"1 game read {DOT} 1 blunder found" in out
-    assert "Nothing was saved: storage arrives in M2." in out
+    assert f"{DOT} entry #1\n" in out
+    assert f"1 game read {DOT} 1 blunder added" in out
     assert stub.closed
     assert stub.opened_with == {
         "command": [str(ready)],
@@ -367,7 +370,7 @@ def test_import_multi_game_report(ready: Path, stub: StubEngine) -> None:
     assert "Illegal move 2. Ke3" in out
     assert "Which side were you? Run again with --side white or --side black," in out
     assert "No blunders found." in out
-    assert f"4 games read {DOT} 1 needs side {DOT} 1 error {DOT} 0 blunders found" in out
+    assert f"4 games read {DOT} 1 needs side {DOT} 1 error {DOT} 0 blunders added" in out
 
 
 def test_import_side_option(ready: Path, stub: StubEngine) -> None:
@@ -387,9 +390,8 @@ def test_import_doesnt_start_the_engine_without_ready_games(
 ) -> None:
     result = runner.invoke(app, ["import", str(FIXTURES / "chesscom_unmatched_name.pgn")])
     assert result.exit_code == 0, result.output  # no Stockfish set up, and none needed
-    assert f"1 game read {DOT} 1 needs side {DOT} 0 blunders found" in result.output
+    assert f"1 game read {DOT} 1 needs side {DOT} 0 blunders added" in result.output
     assert stub.opened_with == {}
-    assert "Nothing was saved" not in result.output
 
 
 def test_import_without_stockfish(cfg_file: Path, stub: StubEngine) -> None:
@@ -428,6 +430,90 @@ def test_import_windows_1252_file(tmp_path: Path, ready: Path, stub: StubEngine)
     assert result.exit_code == 0, result.output
     assert "Read as Windows-1252 (the file isn't UTF-8)." in result.output
     assert "Rashed vs Jos\N{LATIN SMALL LETTER E WITH ACUTE}" in result.output
+
+
+def entries(db_file: Path) -> list[tuple[str, str]]:
+    """(players, move played) for every saved entry, oldest first."""
+    with closing(connection.open_db(db_file)) as conn:
+        return [
+            (f"{e.game.white} vs {e.game.black}", e.blunder.played_san)
+            for e in reversed(repo.list_entries(conn))
+        ]
+
+
+def saved_games(db_file: Path) -> int:
+    with closing(connection.open_db(db_file)) as conn:
+        return len(repo.known_fingerprints(conn))
+
+
+def test_import_saves_and_a_second_import_adds_nothing(
+    ready: Path, stub: StubEngine, db_file: Path
+) -> None:
+    path = str(FIXTURES / "qgd_elephant.pgn")
+    first = runner.invoke(app, ["import", path])
+    assert first.exit_code == 0, first.output
+    assert f"Created the database {db_file}" in first.output
+    assert entries(db_file) == [("Rashed vs Karim S.", "Nxd5")]
+
+    stub.opened_with = {}
+    again = runner.invoke(app, ["import", path])
+    assert again.exit_code == 0, again.output
+    assert "Created the database" not in again.output
+    assert "  Already imported \N{EM DASH} skipped" in again.output
+    assert f"1 game read {DOT} 1 skipped (duplicate) {DOT} 0 blunders added" in again.output
+    assert stub.opened_with == {}  # nothing left to analyse
+    assert entries(db_file) == [("Rashed vs Karim S.", "Nxd5")]
+
+
+def test_games_without_blunders_are_saved_too(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    path = str(FIXTURES / "multi_game.pgn")
+    assert runner.invoke(app, ["import", path]).exit_code == 0
+    assert saved_games(db_file) == 2  # the two games your name matched; no blunders in either
+    again = runner.invoke(app, ["import", path])
+    assert f"4 games read {DOT} 2 skipped (duplicate) {DOT} 1 needs side" in again.output
+
+
+def test_a_game_that_needs_a_side_is_saved_once_you_give_it(
+    ready: Path, stub: StubEngine, db_file: Path
+) -> None:
+    path = str(FIXTURES / "chesscom_unmatched_name.pgn")
+    assert runner.invoke(app, ["import", path]).exit_code == 0
+    assert saved_games(db_file) == 0
+    result = runner.invoke(app, ["import", path, "--side", "black"])
+    assert result.exit_code == 0, result.output
+    assert saved_games(db_file) == 1
+
+
+def test_engine_failure_keeps_the_games_already_saved(
+    ready: Path, stub: StubEngine, db_file: Path
+) -> None:
+    path = str(FIXTURES / "multi_game.pgn")
+    (first, *_) = pgn.parse((FIXTURES / "multi_game.pgn").read_text("utf-8")).games
+    stub.fail_after = len(first.plies) + 1  # game 1 finishes, game 3 fails
+    result = runner.invoke(app, ["import", path])
+    assert result.exit_code == 1
+    assert "No blunders found." in result.output  # game 1, saved
+    assert "Not analysed." in result.output  # game 3
+    assert "Analysis stopped: Stockfish stopped unexpectedly." in result.output
+    assert "Import the file again to analyse the rest." in result.output
+    assert saved_games(db_file) == 1
+
+    stub.fail_after = None
+    again = runner.invoke(app, ["import", path])
+    assert again.exit_code == 0, again.output
+    assert "1 skipped (duplicate)" in again.output
+    assert saved_games(db_file) == 2
+
+
+def test_import_refuses_a_database_from_a_newer_app(
+    ready: Path, stub: StubEngine, db_file: Path
+) -> None:
+    newer_db(db_file)
+    result = runner.invoke(app, ["import", str(FIXTURES / "qgd_elephant.pgn")])
+    assert result.exit_code == 1
+    assert "Can't import: the database can't be used." in result.output
+    assert "made by a newer Blunderbook" in result.output
+    assert stub.opened_with == {}
 
 
 def test_import_missing_file(tmp_path: Path, cfg_file: Path) -> None:

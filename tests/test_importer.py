@@ -1,6 +1,10 @@
 """The import pipeline without Stockfish: queueing, sides, duplicates, analysis with a
-scripted engine, and the summary line."""
+scripted engine, saving, and the summary line."""
 
+import sqlite3
+from collections.abc import Iterator
+from contextlib import closing
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import chess
@@ -9,6 +13,7 @@ import pytest
 from blunderbook import importer
 from blunderbook.core.engine import Line
 from blunderbook.core.models import Eval, Thresholds
+from blunderbook.db import connection, repo
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pgn"
 NAMES = ["Rashed"]
@@ -111,7 +116,8 @@ def test_empty_text() -> None:
 # ---------------------------------------------------------------- analyse
 
 
-def test_analyse_adds_hints_to_each_blunder() -> None:
+def legal_trap() -> tuple[importer.AnalysedGame, Scripted]:
+    """legal_trap.pgn analysed with a scripted engine that flags 5... Bxd1."""
     (queued,) = importer.prepare(read("legal_trap.pgn"), NAMES)
     assert queued.game is not None
     bxd1 = queued.game.plies[9]
@@ -121,7 +127,13 @@ def test_analyse_adds_hints_to_each_blunder() -> None:
             bxd1.fen_after: Line(Eval(mate=2), mv("c4f7", "e8e7", "c3d5")),
         }
     )
-    result = importer.analyse(queued, engine, depth=12, thresholds=Thresholds())
+    return importer.analyse(queued, engine, depth=12, thresholds=Thresholds()), engine
+
+
+def test_analyse_adds_hints_to_each_blunder() -> None:
+    result, engine = legal_trap()
+    queued = result.queued
+    assert queued.game is not None
     (found,) = result.blunders
     assert found.finding.ply.label == "5... Bxd1"
     assert found.finding.best_san == "dxe5"
@@ -139,6 +151,110 @@ def test_analyse_refuses_games_that_arent_ready() -> None:
             importer.analyse(queued, Scripted(), depth=8, thresholds=Thresholds())
 
 
+# ---------------------------------------------------------------- records and saving
+
+
+@pytest.fixture
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    with closing(connection.open_db(tmp_path / "blunderbook.db", create=True)) as db:
+        yield db
+
+
+def test_new_game_from_headers() -> None:
+    result, _ = legal_trap()
+    game = importer.new_game(result)
+    queued = result.queued
+    assert queued.game is not None
+    assert (game.fingerprint, game.pgn, game.start_fen) == (
+        queued.fingerprint,
+        queued.game.pgn,
+        chess.STARTING_FEN,
+    )
+    assert (game.source, game.site_label, game.external_id) == (
+        "chesscom",
+        "Chess.com",
+        "https://www.chess.com/game/live/140512345678",
+    )
+    assert (game.white, game.black, game.white_elo, game.black_elo) == (
+        "kingside_kid",
+        "Rashed",
+        1290,
+        1305,
+    )
+    assert (game.my_color, game.result, game.played_on) == ("black", "1-0", date(2026, 10, 30))
+    assert (game.time_control, game.tc_base_s, game.tc_inc_s, game.speed) == (
+        "600",
+        600,
+        0,
+        "rapid",
+    )
+    assert (game.opening, game.eco, game.has_clocks) == (None, "C41", True)
+    assert (game.engine_name, game.engine_depth) == ("Stockfish 17.1", 12)
+
+
+def test_new_game_with_unknown_headers() -> None:
+    (queued,) = importer.prepare("1. e4 e5 2. Qh5 Nc6 *", NAMES, side="white")
+    result = importer.analyse(queued, Scripted(), depth=8, thresholds=Thresholds())
+    game = importer.new_game(result)
+    assert (game.source, game.site_label, game.external_id) == ("pgn", "PGN file", None)
+    assert (game.white, game.black, game.white_elo, game.result, game.played_on) == (
+        None,
+        None,
+        None,
+        "*",  # python-chess fills in an unknown result
+        None,
+    )
+    assert (game.time_control, game.tc_base_s, game.speed, game.has_clocks) == (
+        None,
+        None,
+        None,
+        False,
+    )
+
+
+def test_new_blunder_from_a_finding() -> None:
+    result, _ = legal_trap()
+    (found,) = result.blunders
+    b = importer.new_blunder(found)
+    f = found.finding
+    assert (b.ply, b.move_no, b.played_san, b.played_uci) == (9, 5, "Bxd1", "g4d1")
+    assert (b.fen_before, b.best_uci, b.best_san) == (f.ply.fen_before, "d6e5", "dxe5")
+    assert (b.best_line_san, b.refutation_san, b.accept_uci) == (
+        f.best_line_san,
+        f.refutation_san,
+        f.accept_uci,
+    )
+    assert (b.eval_before, b.eval_after, b.swing, b.judgment) == (
+        Eval(cp=-208),
+        Eval(mate=2),
+        f.swing,
+        "blunder",
+    )
+    assert (b.clock_left_s, b.time_spent_s) == (found.hints.clock_left_s, pytest.approx(2.6))
+    assert b.auto_causes == ("Missed their threat", "Moved too fast")
+
+
+def test_save_stores_the_game_and_its_entries(conn: sqlite3.Connection) -> None:
+    result, _ = legal_trap()
+    now = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
+    saved = importer.save(conn, result, now=now)
+    assert saved is not None and saved.analysed is result
+    (entry,) = repo.list_entries(conn)
+    assert entry.blunder.id == saved.blunder_ids[0]
+    assert entry.game.id == saved.game_id
+    assert entry.blunder.played_san == "Bxd1"
+    assert entry.game.imported_at == now
+
+
+def test_saved_games_are_skipped_next_time(conn: sqlite3.Connection) -> None:
+    result, _ = legal_trap()
+    assert importer.save(conn, result) is not None
+    assert importer.save(conn, result) is None  # saved meanwhile: nothing written
+    assert len(repo.list_entries(conn)) == 1
+    (again,) = importer.prepare(read("legal_trap.pgn"), NAMES, known=repo.known_fingerprints(conn))
+    assert (again.status, again.reason) == ("duplicate", importer.ALREADY_IMPORTED)
+
+
 # ---------------------------------------------------------------- summary
 
 
@@ -146,9 +262,9 @@ def test_summary_line() -> None:
     elephant = read("qgd_elephant.pgn")
     text = "\n\n".join([read("multi_game.pgn"), elephant, elephant])
     queue = importer.prepare(text, NAMES)
-    assert importer.summary(queue, [], "found") == (
+    assert importer.summary(queue, []) == (
         "6 games read \N{MIDDLE DOT} 1 skipped (duplicate) \N{MIDDLE DOT} 1 needs side "
-        "\N{MIDDLE DOT} 1 error \N{MIDDLE DOT} 0 blunders found"
+        "\N{MIDDLE DOT} 1 error \N{MIDDLE DOT} 0 blunders added"
     )
 
 
@@ -163,8 +279,7 @@ def test_summary_line_counts_blunders_and_plurals() -> None:
         }
     )
     result = importer.analyse(queued, engine, depth=8, thresholds=Thresholds())
-    assert importer.summary([queued], [result], "added") == (
-        "1 game read \N{MIDDLE DOT} 1 blunder added"
-    )
+    saved = importer.SavedGame(result, game_id=1, blunder_ids=(7,))
+    assert importer.summary([queued], [saved]) == "1 game read \N{MIDDLE DOT} 1 blunder added"
     two = importer.prepare('[White "A"]\n\n1. e4 *\n\n[White "B"]\n\n1. d4 *', NAMES)
-    assert "2 need side" in importer.summary(two, [], "found")
+    assert "2 need side" in importer.summary(two, [])

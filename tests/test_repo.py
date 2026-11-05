@@ -91,12 +91,12 @@ def ids(entries: list) -> list[int]:
 
 def test_game_round_trip(conn: sqlite3.Connection) -> None:
     game = new_game()
-    game_id = repo.add_game(conn, game, now=NOW)
-    assert game_id is not None
-    stored = repo.get_game(conn, game_id)
+    saved = repo.add_game(conn, game, now=NOW)
+    assert saved is not None and saved.blunder_ids == ()
+    stored = repo.get_game(conn, saved.game_id)
     assert stored is not None
     same_fields(stored, game)
-    assert (stored.id, stored.analysis_status, stored.imported_at) == (game_id, "done", NOW)
+    assert (stored.id, stored.analysis_status, stored.imported_at) == (saved.game_id, "done", NOW)
 
 
 def test_game_with_unknown_headers(conn: sqlite3.Connection) -> None:
@@ -109,9 +109,9 @@ def test_game_with_unknown_headers(conn: sqlite3.Connection) -> None:
         engine_name="Stockfish 19",
         engine_depth=12,
     )
-    game_id = repo.add_game(conn, game, now=NOW)
-    assert game_id is not None
-    stored = repo.get_game(conn, game_id)
+    saved = repo.add_game(conn, game, now=NOW)
+    assert saved is not None
+    stored = repo.get_game(conn, saved.game_id)
     assert stored is not None
     same_fields(stored, game)
     assert (stored.white, stored.played_on, stored.speed, stored.has_clocks) == (
@@ -137,7 +137,7 @@ def test_same_fingerprint_writes_nothing(conn: sqlite3.Connection) -> None:
     )
     assert first is not None and again is None
     assert len(repo.list_entries(conn)) == 1
-    stored = repo.get_game(conn, first)
+    stored = repo.get_game(conn, first.game_id)
     assert stored is not None and stored.white == "Rashed"
     assert not conn.in_transaction
 
@@ -174,13 +174,14 @@ def test_blunders_round_trip_with_defaults(conn: sqlite3.Connection) -> None:
         auto_causes=(),
         judgment="mistake",
     )
-    game_id = repo.add_game(conn, new_game(), [new_blunder(), mate], now=NOW)
+    saved = repo.add_game(conn, new_game(), [new_blunder(), mate], now=NOW)
+    assert saved is not None
     entries = repo.list_entries(conn)
-    assert len(entries) == 2
+    assert ids(entries) == list(saved.blunder_ids)  # ids in the order given
     for entry, new in zip(entries, [new_blunder(), mate], strict=True):
         b = entry.blunder
         same_fields(b, new)
-        assert b.game_id == entry.game.id == game_id
+        assert b.game_id == entry.game.id == saved.game_id
         assert (b.causes, b.other_cause, b.thinking, b.lesson) == ((), None, "", "")
         assert (b.status, b.streak, b.due_on) == ("new", 0, TODAY)
         assert b.created_at == b.updated_at == NOW

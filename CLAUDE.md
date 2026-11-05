@@ -471,7 +471,7 @@ They return **PGN text only**. The importer does everything else.
 | `engine show` | Which Stockfish is used, its version, and where the setting came from. |
 | `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
 | `engine clear` | Set `stockfish_path = ""` (look on PATH again). |
-| `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file. `--side` applies to games with no name match; otherwise they're listed as needing a side. |
+| `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
 | `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position. Logs it even below the blunder line, with its judgment. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
@@ -483,8 +483,9 @@ Every command prints a short, readable summary, e.g.
 `2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.
 
 Exit codes: `import` exits 1 only when it can't run (the file can't be read, it holds no
-games, there's no Stockfish while some game is ready, or the engine fails; in that last case
-the games done so far are reported first). A report with needs-side games or errors exits 0.
+games, the database can't be used, there's no Stockfish while some game is ready, or the
+engine fails; in that last case the games done so far are saved and reported first, and
+importing the file again finishes the rest). A report with needs-side games or errors exits 0.
 `doctor` exits 1 when it finds a problem.
 
 ---

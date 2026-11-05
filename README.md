@@ -29,20 +29,19 @@ _Last updated: 2026-11-05_
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | In progress (2/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
+| M2 Storage | In progress (3/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M2.3 Persisting imports.
+**Next up:** M2.4 `fen` command.
 
-In place so far: all of M1, the database (2.1) and the repository (2.2). The core reads PGN,
-detects your side, the source and duplicates, analyses each game with Stockfish (both passes),
-and suggests causes. `blunderbook init`, `doctor`, `import` and `engine show|set|clear` work
-(see Usage). `init` creates the database and `doctor` checks it. `import` prints the full
-report, but saves nothing until 2.3 connects it to the repository. All nine §12 fixtures flag
-their expected blunder under `uv run pytest -m engine`.
+In place so far: all of M1, and M2.1–2.3. `blunderbook import` reads a PGN file, finds your
+blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
+the database. Importing the same file again adds nothing. `init` creates the database and
+`doctor` checks it. There's no way to read or annotate the saved entries yet: that's the web
+page in M3. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -163,8 +162,21 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
       _Done when_ games and entries round-trip unchanged, and the filters, notes and deletes
       are tested against a real database.
-- [ ] **2.3 Persisting imports.** Importer saves games and blunders, dedupes by fingerprint,
-      supports `--side`, and prints the summary line.
+- [x] **2.3 Persisting imports.** `blunderbook import` saves what it finds:
+      - It opens the database, creating it if it's missing. A database it can't use stops the
+        import before Stockfish starts.
+      - Games already saved are "Already imported — skipped", and Stockfish doesn't start if
+        nothing is left to analyse.
+      - Each game is saved, with its entries, as soon as it's analysed. If Stockfish stops,
+        the games before it are kept, and importing the file again finishes the rest.
+      - Games that need a side aren't saved. Run again with `--side` to save them.
+      - The report shows each new entry's id (`entry #12`), and the summary says
+        "N blunders added".
+
+      `importer.new_game()` / `new_blunder()` turn an analysis into database records, and
+      `importer.save()` stores them. `repo.add_game()` now also returns the new entry ids.
+      Checked end to end with Stockfish 19: `back_rank.pgn` saved `32. Rc7??` as entry #1, and
+      the second import skipped it.
       _Done when_ importing the same file twice adds nothing.
 - [ ] **2.4 `fen` command.** Synthetic `source='fen'` game row. Logs the move with its judgment,
       even below the blunder line. Takes `--stockfish` too.
@@ -264,7 +276,7 @@ uses the next one.
 | `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
 | `blunderbook init` | Create config and the DB, ask for your names and Stockfish | Done (1.9, 2.1) |
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish and the DB (changes nothing) | Done (1.9, 2.1) |
-| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and print the report | Done (1.9; saved from M2) |
+| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD]` | Log a single position | Planned (M2) |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
