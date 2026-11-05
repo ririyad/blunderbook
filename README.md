@@ -27,7 +27,7 @@ _Last updated: 2026-11-05_
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (6/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (7/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,11 +35,13 @@ _Last updated: 2026-11-05_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.7 Engine analysis.
+**Next up:** M1.8 Suggested causes.
 
 In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
 parsing, config.toml, Stockfish setup, PGN reading with all nine §12 fixtures, side detection,
-fingerprints, source detection, and the blunder maths. The working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see Usage).
+fingerprints, source detection, the blunder maths, and engine analysis (both passes). The
+working commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see
+Usage).
 
 ---
 
@@ -92,8 +94,13 @@ Each item is one small commit, with its tests in the same change. Every commit m
       stop at an illegal PV move. `Thresholds` moved to `core/models.py` so core never imports
       `config`. config.toml now rejects thresholds that don't go up. See Open decisions 11.
       _Done when_ thresholds and Black-start move numbering (`5... Nxe5 6. Be2`) are tested.
-- [ ] **1.7 Engine analysis.** Builds on `probe()` in `core/engine.py`: pass 1, MultiPV 3 pass 2,
-      terminal positions without the engine, scores stored from White's point of view.
+- [x] **1.7 Engine analysis.** `core/engine.py`: `Engine` (a context manager; checks it's
+      Stockfish and applies Threads and Hash), `analyse_game()` (pass 1 on every position, then
+      MultiPV 3 on flagged ones), `terminal_line()` (finished positions never go to the
+      engine), and scores turned to White's point of view. Each flagged move becomes a
+      `Finding` holding everything the engine fills in for a blunder entry. `probe()` now uses
+      `Engine`. Tests use a scripted analyser and the fake UCI engine, which now plays legal
+      moves and can crash on demand. Two tests run against real Stockfish. See Open decisions 12.
       _Done when_ the engine always closes, even on errors.
 - [ ] **1.8 Suggested causes.** `core/hints.py`: time trouble, moved too fast, missed their threat,
       hung a piece. _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
@@ -322,6 +329,21 @@ These are flagged against the spec and need your confirmation or a change.
       `5...Nxe5`.
     - **config.toml must have `inaccuracy <= mistake <= blunder`.** Otherwise loading it fails
       with an error naming the rule.
+12. **Analysis details §7.6 doesn't spell out (done in 1.7).**
+    - **"Best was" comes from pass 1.** That's the move that triggered the flag. Pass 2 only
+      decides which re-test answers are accepted. Its top line can differ slightly, and showing
+      it could make "Best was" disagree with the reason the move was flagged.
+    - **Finished positions.** Checkmate, stalemate and draws that end the game by themselves
+      (insufficient material, 75 moves, fivefold repetition) are scored without the engine.
+      Threefold repetition and the 50-move rule only matter if someone claims them, so those
+      positions still go to the engine.
+    - **Each position is sent with the game's moves**, so Stockfish sees repetitions. Each game
+      starts with `ucinewgame`.
+    - **Progress** counts positions. The total starts at N + 1 and grows by the number of
+      flagged moves once pass 1 ends.
+    - **No time limit per position.** The analysis stops at a depth only, so an engine that
+      hangs would hang the import. Proposal: M5's job queue gets a Cancel button, which closes
+      the engine.
 
 ### Decided
 

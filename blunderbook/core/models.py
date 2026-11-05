@@ -170,6 +170,39 @@ class ParsedPgn:
     problems: tuple[PgnProblem, ...]
 
 
+# ---------------------------------------------------------------- analysis (core/engine.py)
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """One flagged move of mine: everything the machine fills in for a blunder entry.
+
+    Moves are UCI strings, lines are SAN text, scores are White POV (CLAUDE.md §7.6).
+    """
+
+    ply: Ply  # the move I played: index, move number, FENs, clock
+    eval_before: Eval
+    eval_after: Eval
+    swing: float
+    judgment: Judgment
+    best_uci: str
+    best_san: str
+    best_line_san: str  # "6. e3 Be7 7. Bd3 c6 8. h3 Nf8"
+    refutation_san: str | None  # "6... Nxd5 7. Bxd8 Bb4+"; None if the engine gave no line
+    refutation_uci: tuple[str, ...]  # the engine line after my move, for suggested causes
+    accept_uci: tuple[str, ...]  # moves a re-test accepts, best first
+
+
+@dataclass(frozen=True, slots=True)
+class GameAnalysis:
+    """The result of analysing one game for one side."""
+
+    engine_name: str  # e.g. "Stockfish 17.1", stored with the game
+    depth: int
+    evals: tuple[Eval, ...]  # positions 0..N: before ply 0, then after each ply
+    findings: tuple[Finding, ...]  # flagged moves, in game order
+
+
 # ---------------------------------------------------------------- source (core/source.py)
 
 
