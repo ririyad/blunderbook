@@ -2,13 +2,15 @@
 
 Commands arrive milestone by milestone (see the README roadmap):
 engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
-serve (M3) · sync (M5) · print (M6).
+serve (3.4) · sync (M5) · print (M6).
 """
 
+import errno
 import os
+import socket
 import sqlite3
 import sys
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -677,6 +679,83 @@ def _date_option(value: str | None) -> date:
 def _already_logged(label: str, earlier: SavedIds) -> str:
     where = f" (entry #{earlier.blunder_ids[0]})" if earlier.blunder_ids else ""
     return f"You've already logged {label} in this position{where}. Nothing was added."
+
+
+# ---------------------------------------------------------------- serve
+
+HOST = "127.0.0.1"  # this computer only: nothing else on the network can reach it (§10)
+DEFAULT_PORT = 8732
+
+
+@app.command()
+def serve(
+    port: Annotated[
+        int, typer.Option(min=1, max=65535, help="The port on 127.0.0.1 to serve on.")
+    ] = DEFAULT_PORT,
+) -> None:
+    """Start the web app on this computer: read your blunders and write your notes.
+
+    It answers on 127.0.0.1 only. Press Ctrl+C to stop it.
+    """
+    cfg = _load_config()
+    sock = _listen(port)  # first: a busy port changes nothing
+    try:
+        _daily_backup(cfg)
+        with closing(_open_database("Can't start: the database can't be used.", cfg)):
+            pass  # created or upgraded (backed up first) now, not halfway through a request
+
+        import uvicorn  # here, so the other commands start quickly
+
+        from blunderbook.api.app import create_app
+
+        server = uvicorn.Server(
+            uvicorn.Config(
+                create_app(config.db_path()),
+                log_level="warning",
+                access_log=False,
+                timeout_graceful_shutdown=5,
+            )
+        )
+        typer.echo(f"Blunderbook is running at http://{HOST}:{port}/")
+        typer.echo("Open that address in your browser. Press Ctrl+C to stop.")
+        with suppress(KeyboardInterrupt):  # uvicorn stops cleanly, then raises Ctrl+C again
+            server.run(sockets=[sock])
+    finally:
+        sock.close()
+    typer.echo("Stopped.")
+
+
+def _listen(port: int) -> socket.socket:
+    """Take ``port`` on 127.0.0.1, or say plainly why it can't be had."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            # Windows lets a second program share a port unless the first one says no.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            # Elsewhere this only allows a quick restart; two servers still can't share it.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((HOST, port))
+    except OSError as exc:
+        sock.close()
+        other = port + 1 if port < 65535 else port - 1
+        code = getattr(exc, "winerror", None) or exc.errno
+        if code in (errno.EADDRINUSE, _WSAEADDRINUSE):
+            _fail(
+                f"Port {port} is already in use. Is Blunderbook already running?\n"
+                f"Stop it, or use another port: blunderbook serve --port {other}"
+            )
+        if code == _WSAEACCES:
+            _fail(
+                f"Windows won't let Blunderbook use port {port}: another program holds it, "
+                f"or it's reserved.\nUse another port: blunderbook serve --port {other}"
+            )
+        _fail(f"Can't serve on {HOST}:{port}: {exc.strerror or exc}")
+    return sock
+
+
+_WSAEADDRINUSE = 10048  # Windows socket error codes
+_WSAEACCES = 10013
 
 
 # ---------------------------------------------------------------- backup, restore

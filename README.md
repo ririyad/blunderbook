@@ -30,21 +30,22 @@ _Last updated: 2026-11-05_
 | M0 Planning | Done | Roadmap, README, spec path fix |
 | M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | In progress (3/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
+| M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
 | M5 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M6 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M3.4 `serve`.
+**Next up:** M4.1 Scheduling.
 
-In place so far: all of M1 and M2, and M3.1–3.3. `blunderbook import` reads a PGN file, finds your
+In place so far: all of M1, M2 and M3. `blunderbook import` reads a PGN file, finds your
 blunders with Stockfish (both passes), suggests causes, and saves each game and its entries to
 the database. Importing the same file again adds nothing. `blunderbook fen` logs a single
 position you have no PGN of. The database is backed up once a day before `import` and `fen`,
 and `blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor`
-checks it and the backups. The web page's Log view is built: browse your entries, step
-through the game, confirm causes and write your notes. There's no `serve` command to open it
-yet (3.4). All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
+checks it and the backups. `blunderbook serve` opens the web page on this computer: browse
+your entries, step through the game, confirm causes and write your notes. Re-test and
+Patterns arrive in M4. All nine §12 fixtures flag their expected blunder under
+`uv run pytest -m engine`.
 
 Scope (2026-11-05): imports stay on the CLI. The web page is for reading your blunders,
 writing notes, re-testing and patterns. See Decided.
@@ -313,8 +314,31 @@ Each item is one small commit, with its tests in the same change. Every commit m
         - A failed save shows its message.
         - A note holding `</textarea><script>` stayed plain text.
         - No sideways scroll at 390 px.
-- [ ] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
+- [x] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
       _Done when_ you can browse and annotate imported blunders.
+      - **Start-up order:**
+        1. config.toml;
+        2. the port, so a busy one changes nothing;
+        3. the daily backup;
+        4. the database: created if it's missing, or upgraded after a `-pre-migrate` backup,
+           before any request comes in.
+      - **The port:** `--port` (default 8732, 1–65535). On Windows it's held exclusively.
+        uvicorn's own binding would let a second server share it there. A busy port says "Is
+        Blunderbook already running?" and suggests the next port.
+      - **Stopping:** Ctrl+C stops it cleanly with exit 0 ("Stopped."), not Click's
+        "Aborted!". uvicorn and FastAPI load only for `serve`, so the other commands start as
+        before. No access log.
+      - **Tests** (`test_cli_serve.py`): 127.0.0.1 and the default port; bad ports; Ctrl+C; a
+        busy port touching nothing; a bad config; the daily backup once a day, or off; an
+        upgrade backed up first; no start without that copy. One test runs the real server in
+        a thread and fetches the page, the API, and a refused other host.
+      - **Checked by hand:**
+        - The real `blunderbook serve` on a scratch database served the page and the API on
+          127.0.0.1 and localhost.
+        - A second `serve` on the same port exited 1 with the "already in use" message.
+        - SIGINT, as Ctrl+C sends, printed "Stopped." with exit 0.
+        - In headless Chrome, through `serve`: the Log listed 5 entries, and a lesson and a
+          confirmed cause were saved.
 
 ### M4 Re-test + Patterns
 
@@ -394,11 +418,27 @@ uses the next one.
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the DB and the last backup (changes nothing) | Done (1.9, 2.1, 2.5) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
-| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` (read, annotate, re-test) | Planned (M3 / M6) |
+| `blunderbook serve [--port 8732]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4); re-test in M4, `--open` in 6.2 |
 | `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M5) |
 | `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M6) |
 | `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Done (2.5) |
 | `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Done (2.5) |
+
+### The web page
+
+```sh
+blunderbook serve              # then open http://127.0.0.1:8732/ in your browser
+blunderbook serve --port 8733  # if 8732 is taken
+```
+
+It runs on this computer only (127.0.0.1): nothing else on your network can reach it, and it
+loads nothing from the internet. The Log lists your entries, newest first.
+- **Pick an entry:** see the position before your move, with your move and the best move as
+  arrows. Step through the whole game.
+- **Your part:** confirm the causes (dashed ones are suggestions) and write what you were
+  thinking and the lesson. Everything saves as you type.
+- **Stop it** with Ctrl+C. Keep importing with `blunderbook import` while it runs, and reload
+  the page to see the new entries.
 
 ### Backups
 
@@ -411,10 +451,11 @@ it in config.toml:
 [backup]
 dir = '%OneDrive%\Blunderbook'   # empty = the local backups folder
 keep = 14                         # newest backups kept
-auto = true                       # once a day, before import and fen
+auto = true                       # once a day, before import, fen and serve
 ```
 
-- **Daily:** `import` and `fen` back up first when the newest backup is over a day old.
+- **Daily:** `import`, `fen` and `serve` back up first when the newest backup is over a day
+  old.
 - **By hand:** `blunderbook backup`, or `blunderbook backup --to E:\USB` for a one-off copy.
 - **Safety copies:** before a restore (`-pre-restore`) and before an upgrade to a newer schema
   (`-pre-migrate`). They count towards `keep` like any other backup.
@@ -516,6 +557,15 @@ None open.
   - Dates show the year when it isn't this year.
   - "Re-test this one now" and "Re-tested N×" come with M4.
   - (CLAUDE.md §11, §12)
+- **2026-11-05: `serve` (slice 3.4).**
+  - The port is taken before anything else, so a busy port changes nothing.
+  - On Windows the port is held exclusively.
+  - A missing database is created at start, so the page shows the empty state, not an
+    error.
+  - Ctrl+C exits 0.
+  - No access log.
+  - `--open` stays in 6.2.
+  - (CLAUDE.md §9)
   - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
 - **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
   repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),

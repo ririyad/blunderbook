@@ -489,7 +489,7 @@ They return **PGN text only**. The importer does everything else.
 | `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
 | `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
-| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. |
+| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` arrives in M6. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
 | `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
@@ -502,7 +502,8 @@ games, the database can't be used, there's no Stockfish while some game is ready
 engine fails; in that last case the games done so far are saved and reported first, and
 importing the file again finishes the rest). A report with needs-side games or errors exits 0.
 `doctor` exits 1 when it finds a problem. Warnings (an old backup, a missing backup folder)
-are shown but don't change the exit code.
+are shown but don't change the exit code. `serve` exits 1 only when it can't start (bad
+config, busy port, a database it can't use).
 
 ---
 
