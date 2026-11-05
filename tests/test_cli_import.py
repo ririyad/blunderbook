@@ -2,6 +2,7 @@
 and a scripted engine (no Stockfish needed). Includes their backup steps: the init prompt,
 doctor's Backups row, the daily backup and the backup before an upgrade."""
 
+import re
 import sqlite3
 import sys
 from contextlib import closing
@@ -842,8 +843,10 @@ def test_a_failed_daily_backup_doesnt_stop_the_import(
     assert import_fixture("qgd_elephant.pgn").exit_code == 0
     result = import_fixture("blackburne_shilling.pgn")
     assert result.exit_code == 0, result.output
-    assert "Warning: the daily backup didn't work: Can't create the backup folder" in (
-        result.output
+    # Some systems fail when the folder is created, macOS already when it is listed.
+    assert re.search(
+        r"Warning: the daily backup didn't work: Can't (create|read) the backup folder",
+        result.output,
     )
     assert saved_games(db_file) == 2
 
