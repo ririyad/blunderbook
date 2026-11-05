@@ -32,11 +32,11 @@ _Last updated: 2026-11-05_
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
-| M5 Web import | In progress (2/3) | Shared import code, background job with progress, Import view |
+| M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M5.3 Import view.
+**Next up:** M6.1 API docs check.
 
 In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -384,8 +384,13 @@ Each item is one small commit, with its tests in the same change. Every commit m
       not analysed, needs side, duplicate, error), reason and new entries. Stockfish version
       warnings and your names now come from `engine.version_note()` and `config.all_names()`,
       shared with the CLI. Checked end to end under uvicorn with the fake UCI engine.
-- [ ] **5.3 Import view.** The Import tab: paste box, choose/drop a .pgn, progress bar, the
+- [x] **5.3 Import view.** The Import tab: paste box, choose/drop a .pgn, progress bar, the
       report with links to new entries, and FEN quick entry. The Log's empty state points to it.
+      _Done:_ `views/import.js` sends the pasted text or the file's raw bytes as
+      `application/x-chess-pgn` (so a cp1252 file is read by the server), checks the job every
+      500 ms, and shows the summary once the job ends (the new entries come at the end). A reload
+      picks the last job up again. The Re-test and Patterns empty states point to the tab too.
+      Checked in a browser with the fake UCI engine, including at 390 px wide.
 
 ### M6 Sync (no network in tests)
 

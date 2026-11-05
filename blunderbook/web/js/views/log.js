@@ -187,8 +187,8 @@ function renderNoEntry() {
   $("detail").innerHTML = filtering()
     ? '<p class="empty">Pick an entry, or change the filters.</p>'
     : '<div class="empty"><p><b>No entries yet.</b></p>'
-      + "<p>Import a PGN with <code>blunderbook import FILE.pgn</code>.</p>"
-      + "<p>For one position with no PGN, use <code>blunderbook fen</code>.</p></div>";
+      + `<p>Import a PGN on the <a href="#import">Import</a> tab, or with <code>blunderbook import FILE.pgn</code>.</p>`
+      + "<p>For one position with no PGN, use the FEN quick entry there, or <code>blunderbook fen</code>.</p></div>";
 }
 
 /** The positions the step controls go through, and which one comes before your move. */

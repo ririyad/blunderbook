@@ -37,7 +37,7 @@ function empty() {
   return `
   <div class="panel"><div class="empty">
     <p><b>No entries yet.</b></p>
-    <p>Import a PGN with <code>blunderbook import FILE.pgn</code>. Patterns show up once you have a few.</p>
+    <p>Import a PGN on the <a href="#import">Import</a> tab, or with <code>blunderbook import FILE.pgn</code>. Patterns show up once you have a few.</p>
   </div></div>`;
 }
 

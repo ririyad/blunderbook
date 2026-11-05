@@ -9,13 +9,18 @@ export class ApiError extends Error {
 }
 
 /** GET (or `options.method`) `path`; returns the parsed JSON, or null for 204.
- *  `options.keepalive` lets the request finish after the page closes. */
+ *  `options.body` is sent as JSON; `options.data` (a Blob or bytes) is sent as it is, with
+ *  `options.type` as its Content-Type. `options.keepalive` lets the request finish after
+ *  the page closes. */
 export async function api(path, options = {}) {
   const init = { method: options.method || "GET", headers: { Accept: "application/json" } };
   if (options.keepalive) init.keepalive = true;
   if (options.body !== undefined) {
     init.headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(options.body);
+  } else if (options.data !== undefined) {
+    init.headers["Content-Type"] = options.type;
+    init.body = options.data;
   }
   let response;
   try {

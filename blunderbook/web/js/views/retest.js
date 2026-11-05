@@ -55,7 +55,7 @@ function renderEmpty(data, finished) {
   const next = fmtDate(data.next_due_on);
   const lead = data.total
     ? `${finished ? "Session done. " : ""}Next re-test: ${next ? esc(next) : "—"}.`
-    : "Import a PGN with <code>blunderbook import FILE.pgn</code>.";
+    : `Import a PGN on the <a href="#import">Import</a> tab, or with <code>blunderbook import FILE.pgn</code>.`;
   root.innerHTML = `
   <div class="panel rt-empty">
     <h2>Nothing due right now</h2>

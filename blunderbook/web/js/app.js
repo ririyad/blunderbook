@@ -1,14 +1,15 @@
-// The page shell: hash router (#log, #retest, #patterns) and the Re-test badge.
+// The page shell: hash router (#log, #retest, #patterns, #import) and the Re-test badge.
 // A route can carry more after a slash (#log/12); the view gets that part.
 
 import { api } from "./api.js";
 import { showError } from "./ui.js";
+import * as importView from "./views/import.js";
 import * as log from "./views/log.js";
 import * as patterns from "./views/patterns.js";
 import * as retest from "./views/retest.js";
 
-const VIEWS = { log, retest, patterns };
-const TITLES = { log: "Log", retest: "Re-test", patterns: "Patterns" };
+const VIEWS = { log, retest, patterns, import: importView };
+const TITLES = { log: "Log", retest: "Re-test", patterns: "Patterns", import: "Import" };
 const DEFAULT = "log";
 
 function route() {
