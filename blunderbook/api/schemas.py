@@ -3,6 +3,7 @@
 Evals are White POV, exactly as stored: ``{"cp": 36}`` or ``{"mate": -2}``.
 """
 
+import datetime as dt
 from datetime import date, datetime
 from typing import Annotated
 
@@ -228,3 +229,61 @@ class PatternsOut(BaseModel):
     biggest_leak: str | None
     by_speed: list[SpeedCountOut]  # fastest first, unknown last
     history: list[RetestedOut]  # most recently re-tested first
+
+
+# ---------------------------------------------------------------- import
+
+
+class EntryRefOut(BaseModel):
+    id: int
+    label: str  # "6. Nxd5"
+    judgment: Judgment
+
+
+class ImportGameOut(BaseModel):
+    number: int  # its place in the text
+    players: str  # "Rashed vs Karim S."
+    date: str | None
+    site_label: str | None
+    my_color: Color | None
+    # waiting | analysing | analysed | imported | not_analysed | needs_side | duplicate | error
+    status: str
+    reason: str | None  # why it's skipped, or what to do
+    warnings: list[str]
+    entries: list[EntryRefOut]  # new entries, once the import finished
+
+
+class ImportJobOut(BaseModel):
+    id: str
+    status: str  # running | done | stopped | failed
+    percent: int  # of the whole import
+    game: int | None  # the game being analysed
+    game_index: int  # its place among the games to analyse (1-based; 0 before the first)
+    games_to_analyse: int
+    done: int  # positions of that game done / total
+    total: int
+    engine_name: str | None
+    games: list[ImportGameOut]
+    summary: str  # "2 games read · 1 skipped (duplicate) · 3 blunders added"
+    notes: list[str]
+    error: str | None
+
+
+class ImportStarted(BaseModel):
+    job_id: str
+
+
+class FenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fen: str
+    move: str  # UCI (e2e4) or SAN (Nf3)
+    opponent: str | None = None
+    date: dt.date | None = None  # default: today
+
+
+class FenOut(BaseModel):
+    result: str  # logged | already_logged | best_move | not_a_mistake
+    message: str
+    entry_id: int | None
+    notes: list[str]

@@ -124,6 +124,11 @@ class Config:
 # ---------------------------------------------------------------- load
 
 
+def all_names(config: Config) -> list[str]:
+    """The names that mark your side in a game: ``my_names`` and your site usernames."""
+    return [*config.my_names, config.lichess.username, config.chesscom.username]
+
+
 def load(path: Path | None = None) -> Config:
     """Read config.toml. A missing file gives the defaults."""
     path = path or config_path()

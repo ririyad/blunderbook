@@ -32,11 +32,11 @@ _Last updated: 2026-11-05_
 | M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
-| M5 Web import | In progress (1/3) | Shared import code, background job with progress, Import view |
+| M5 Web import | In progress (2/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M5.2 Import jobs + API.
+**Next up:** M5.3 Import view.
 
 In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -374,11 +374,16 @@ Each item is one small commit, with its tests in the same change. Every commit m
       `run()` takes a per-game progress context and a `should_stop()` check (between
       positions), and returns the engine's error instead of raising it. `find_logged()` checks
       a FEN entry before Stockfish runs.
-- [ ] **5.2 Import jobs + API.** `api/jobs.py` (one background import at a time, progress,
+- [x] **5.2 Import jobs + API.** `api/jobs.py` (one background import at a time, progress,
       stop on shutdown) and `api/routes_import.py`: `POST /api/import` (raw PGN bytes),
       `GET /api/import/{job_id}`, `POST /api/fen`. Origin and content-type checks, a 10 MB cap.
       _Done when_ importing the same bytes twice adds nothing, and stopping mid-game keeps the
       games before it.
+      Imports and FEN entries share one engine slot (409 while it's taken). No Stockfish is a
+      503 before anything starts. Each game row has its status (waiting, analysing, imported,
+      not analysed, needs side, duplicate, error), reason and new entries. Stockfish version
+      warnings and your names now come from `engine.version_note()` and `config.all_names()`,
+      shared with the CLI. Checked end to end under uvicorn with the fake UCI engine.
 - [ ] **5.3 Import view.** The Import tab: paste box, choose/drop a .pgn, progress bar, the
       report with links to new entries, and FEN quick entry. The Log's empty state points to it.
 

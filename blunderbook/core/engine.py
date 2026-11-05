@@ -59,6 +59,18 @@ class EngineInfo:
         return self.major is None
 
 
+def version_note(info: EngineInfo) -> str | None:
+    """A warning to show when the engine's version can't be trusted for our rules."""
+    if info.outdated:
+        return (
+            f"Blunderbook expects Stockfish {MIN_STOCKFISH_MAJOR} or newer. "
+            "Older versions can judge positions differently."
+        )
+    if info.dev_build:
+        return "This looks like a development build, so its version can't be checked."
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class Line:
     """One engine line: its score (White POV) and principal variation."""

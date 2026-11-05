@@ -5,9 +5,12 @@ daily backup). Each request opens its own connection.
 """
 
 import mimetypes
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -17,7 +20,8 @@ from starlette.types import Scope
 from blunderbook import __version__
 from blunderbook.db.connection import StorageError
 
-from . import routes_blunders, routes_patterns, routes_retest
+from . import routes_blunders, routes_import, routes_patterns, routes_retest
+from .jobs import ImportJobs
 
 WEB = Path(__file__).parent.parent / "web"
 
@@ -63,12 +67,24 @@ def create_app(db_path: Path) -> FastAPI:
     mimetypes.add_type("text/css", ".css")
 
     # The /docs pages load their scripts from a CDN, so they're off: the app stays offline.
-    app = FastAPI(title="Blunderbook", version=__version__, docs_url=None, redoc_url=None)
+    jobs = ImportJobs(db_path)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+        # Ctrl+C on serve: stop a running import between positions; its engine closes.
+        await run_in_threadpool(jobs.stop)
+
+    app = FastAPI(
+        title="Blunderbook", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan
+    )
     app.state.db_path = db_path
+    app.state.jobs = jobs
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(LOCAL_HOSTS))
     app.include_router(routes_blunders.router)
     app.include_router(routes_retest.router)
     app.include_router(routes_patterns.router)
+    app.include_router(routes_import.router)
     app.mount("/", _Web(directory=WEB, html=True), name="web")  # last: /api comes first
 
     @app.exception_handler(StorageError)

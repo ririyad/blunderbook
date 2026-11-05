@@ -399,7 +399,10 @@ def import_(
         my_side: Color | None = None if side is None else side.color
         queue = list(
             importer.prepare(
-                decoded.text, _all_names(cfg), side=my_side, known=repo.known_fingerprints(conn)
+                decoded.text,
+                config.all_names(cfg),
+                side=my_side,
+                known=repo.known_fingerprints(conn),
             )
         )
         if not queue:
@@ -464,10 +467,6 @@ def _open_database(problem: str, cfg: config.Config) -> sqlite3.Connection:
     if not existed:
         typer.echo(f"Created the database {path}")
     return conn
-
-
-def _all_names(cfg: config.Config) -> list[str]:
-    return [*cfg.my_names, cfg.lichess.username, cfg.chesscom.username]
 
 
 def _print_report(queue: list[importer.QueuedGame], saved: dict[int, importer.SavedGame]) -> None:
@@ -931,15 +930,9 @@ def _fail(message: str) -> NoReturn:
 
 
 def _version_notes(info: engine.EngineInfo, indent: str = "") -> None:
-    if info.outdated:
-        typer.echo(
-            f"{indent}Note: Blunderbook expects Stockfish {engine.MIN_STOCKFISH_MAJOR} or "
-            "newer. Older versions can judge positions differently."
-        )
-    elif info.dev_build:
-        typer.echo(
-            f"{indent}Note: this looks like a development build, so its version can't be checked."
-        )
+    note = engine.version_note(info)
+    if note is not None:
+        typer.echo(f"{indent}Note: {note}")
 
 
 def _env_override_note() -> None:
