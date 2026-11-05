@@ -158,3 +158,16 @@ class ParsedPgn:
 
     games: tuple[ParsedGame, ...]
     problems: tuple[PgnProblem, ...]
+
+
+# ---------------------------------------------------------------- source (core/source.py)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceInfo:
+    """Where a game came from, read from its headers (CLAUDE.md §7.5)."""
+
+    source: Source  # never "fen": that's set by the FEN quick entry, not detected
+    label: str  # "Lichess", "Chess.com", "Over the board · Dhaka Chess Club", "PGN file"
+    game_id: str | None = None  # "abcd1234" (Lichess), "live/140512345678" (Chess.com)
+    url: str | None = None  # canonical game URL when game_id is known

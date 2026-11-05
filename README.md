@@ -22,12 +22,12 @@ its own, because its `chess.js` and `stockfish.js` files aren't in the repo.
 
 ## Status
 
-_Last updated: 2026-11-04_
+_Last updated: 2026-11-05_
 
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | In progress (4/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
+| M1 Core | In progress (5/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
 | M2 Storage | Not started | SQLite, migrations, dedupe, `fen` command |
 | M3 API + Log view | Not started | FastAPI, blunder routes, web shell, Log view |
 | M4 Re-test + Patterns | Not started | Scheduling, attempts, hints, both views |
@@ -35,10 +35,11 @@ _Last updated: 2026-11-04_
 | M6 Sync | Not started | Lichess and Chess.com adapters (recorded fixtures only) |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M1.5 Identity + source.
+**Next up:** M1.6 Detection maths.
 
 In place so far: the scaffold (Python 3.15, tests, lint, types), shared types, time-control
-parsing, config.toml, Stockfish setup, and PGN reading with all nine §12 fixtures. The working
+parsing, config.toml, Stockfish setup, PGN reading with all nine §12 fixtures, side detection,
+fingerprints and source detection. The working
 commands are `blunderbook --version` and `blunderbook engine show|set|clear` (see Usage).
 
 ---
@@ -80,7 +81,11 @@ Each item is one small commit, with its tests in the same change. Every commit m
       caught too (see Open decisions 7). All nine §12 fixtures are in `tests/fixtures/pgn/`, each
       checked for its blunder move, side and ply.
       _Done when_ `multi_game.pgn` gives the good games plus one reported error (`Illegal move 2. Ke3`).
-- [ ] **1.5 Identity + source.** `core/identity.py` (side detection, fingerprints), `core/source.py`.
+- [x] **1.5 Identity + source.** `core/identity.py`: `my_side()` (trimmed, case-insensitive exact
+      match; `None` = needs side, also when both players match) and `fingerprint()` (site game id,
+      else players, date and first 30 moves, plus the start FEN; see Open decisions 8–9).
+      `core/source.py`: `detect_source()` gives the source, label, and the Lichess / Chess.com game
+      id and URL (see Open decisions 10).
       _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
 - [ ] **1.6 Detection maths.** `core/detect.py`: winning chances, swing, judgment, flagging,
       `best_line_san` and `refutation_san` formatting.
@@ -263,6 +268,28 @@ These are flagged against the spec and need your confirmation or a change.
    - If an illegal move follows skipped text, the reason names it: "Illegal move 2. Nc6
      (after unreadable text 'O-0')".
    - Symbols such as `±` are left alone.
+8. **Both players match your names (done in 1.5).** §7.3 only covers "no match". If White and
+   Black are both yours (two of your accounts, or a training game against yourself), the game
+   also comes back as needing a side. Picking White would be a guess.
+9. **Fingerprint of a game that starts from a FEN (done in 1.5; proposed addition to §7.4).**
+   Without a site game id, the fingerprint is players | date | first 30 moves. Two typed-up
+   positions with no names or date and the same first move (say `Ra8+`) would match, and the
+   second would be skipped as "Already imported". When the game doesn't start from the standard
+   position, the start FEN is added to the fingerprint. Standard games use the §7.4 formula
+   exactly.
+10. **Source detection details (done in 1.5; proposed wording for §7.5).**
+    - "chess.com" must be a whole name. `playchess.com` (ChessBase's server) contains that text
+      but is a different site, so it counts as a PGN file.
+    - A Site with a dot but a capitalised ending, like `St.Louis`, counts as a place, so it's over
+      the board. `playchess.com` and `www.chess24.com/en` count as websites.
+    - The Lichess game id is the first 8 characters of the Site path. A 12-character player link
+      is cut to 8, and `/white` or `/black` is ignored. Pages such as `/study/...`, `/broadcast/...`
+      and `/analysis` give no id, so those games use the content fingerprint.
+    - The Chess.com id comes from `Link`, then `Site`, and keeps the game type: `live/140512345678`
+      or `daily/…`. It's marked `TODO(verify)`. I couldn't check the older `/live/game/<id>` form,
+      so both forms are accepted.
+    - ChessBase and some databases write `Site "INT"` or `"Internet"` for online games. The rule
+      makes those "Over the board · INT". That's left as it is. Retype the header if it matters.
 
 ### Decided
 
