@@ -11,7 +11,20 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from blunderbook.api.app import CONTENT_SECURITY_POLICY, WEB, create_app
-from blunderbook.api.schemas import EntryOut, EntrySummary, GameOut, MoveOut
+from blunderbook.api.schemas import (
+    AttemptOut,
+    CauseCountOut,
+    EntryOut,
+    EntrySummary,
+    GameOut,
+    MoveOut,
+    PatternsOut,
+    RetestedOut,
+    RetestItem,
+    RetestQueue,
+    SourceCountOut,
+    SpeedCountOut,
+)
 from blunderbook.core.models import CAUSES
 
 URL = "http://127.0.0.1"
@@ -141,8 +154,8 @@ def test_cause_list_matches_the_core() -> None:
     assert tuple(re.findall(r'"([^"]+)"', body)) == CAUSES
 
 
-def fields_read(pattern: str) -> set[str]:
-    return set(re.findall(pattern, LOG_JS.read_text("utf-8")))
+def fields_read(pattern: str, path: Path = LOG_JS) -> set[str]:
+    return set(re.findall(pattern, path.read_text("utf-8")))
 
 
 @pytest.mark.parametrize(
@@ -162,14 +175,57 @@ def test_log_reads_only_fields_the_api_sends(pattern: str, model: type[BaseModel
     assert used <= set(model.model_fields), used - set(model.model_fields)
 
 
+RETEST_JS = WEB / "js" / "views" / "retest.js"
+PATTERNS_JS = WEB / "js" / "views" / "patterns.js"
+
+
+@pytest.mark.parametrize(
+    ("path", "pattern", "models"),
+    [
+        (RETEST_JS, r"\bitem\.(\w+)", (RetestItem,)),
+        (RETEST_JS, r"\bdata\.(\w+)", (RetestQueue,)),
+        (RETEST_JS, r"\br\.(\w+)", (AttemptOut,)),
+        (PATTERNS_JS, r"\bp\.(\w+)", (PatternsOut,)),
+        (PATTERNS_JS, r"\bc\.(\w+)", (CauseCountOut,)),
+        (PATTERNS_JS, r"\bs\.(\w+)", (SourceCountOut, SpeedCountOut)),
+        (PATTERNS_JS, r"\br\.(\w+)", (RetestedOut,)),
+    ],
+    ids=["queue item", "queue", "attempt", "patterns", "cause", "source/speed", "history"],
+)
+def test_views_read_only_fields_the_api_sends(
+    path: Path, pattern: str, models: tuple[type[BaseModel], ...]
+) -> None:
+    used = fields_read(pattern, path)
+    assert used, "the pattern found nothing"
+    known = set().union(*(m.model_fields for m in models))
+    assert used <= known, used - known
+
+
+def test_retest_hides_nothing_it_needs_before_the_attempt() -> None:
+    """The queue item is all the board has before you move: the answer only comes from the
+    attempt's result (CLAUDE.md §10)."""
+    used = fields_read(r"\bitem\.(\w+)", RETEST_JS)
+    assert not used & {"best_uci", "accept_uci", "played_uci", "played_san", "lesson"}
+
+
+# `/api/blunders`, `/api/blunders/${id}`, `/api/retest/${item.id}/attempt`
+API_CALL = re.compile(r"""["'`](/api/[a-z/]+(?:\$\{[^}]+\}[a-z/]*)*)""")
+
+
 def test_page_calls_only_routes_that_exist(db_file: Path) -> None:
     routes = set(create_app(db_file).openapi()["paths"])  # "/api/blunders/{blunder_id}", ...
+    seen = set()
     for path in JS_FILES:
-        for called in re.findall(r"""["'`](/api/[a-z/]+)""", path.read_text("utf-8")):
-            assert called.rstrip("/") in routes or called.rstrip("/") + "/{blunder_id}" in routes, (
-                served(path),
-                called,
-            )
+        for called in API_CALL.findall(path.read_text("utf-8")):
+            route = re.sub(r"\$\{[^}]+\}", "{blunder_id}", called).rstrip("/")
+            assert route in routes, (served(path), called)
+            seen.add(route)
+    assert {
+        "/api/retest/queue",
+        "/api/retest/{blunder_id}/attempt",
+        "/api/retest/{blunder_id}/hint",
+        "/api/patterns",
+    } <= seen
 
 
 def test_no_inline_handlers_in_scripts() -> None:

@@ -159,6 +159,7 @@ class AttemptOut(BaseModel):
     solved: bool
     move_uci: str | None  # your move as recorded (a bare promotion becomes a queen)
     move_san: str | None
+    move_fen: str | None  # the position after your move, to draw it; null when you gave up
     best_uci: str
     best_san: str
     best_line_san: str

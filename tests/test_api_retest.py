@@ -181,6 +181,7 @@ def test_a_solve_is_recorded_and_rescheduled(
         "solved": True,
         "move_uci": "e2e3",
         "move_san": "e3",
+        "move_fen": "r1bqkb1r/pppn1ppp/5n2/3p2B1/3P4/2N1P3/PP3PPP/R2QKBNR b KQkq - 0 6",
         "best_uci": "e2e3",
         "best_san": "e3",
         "best_line_san": "6. e3",
@@ -219,7 +220,7 @@ def test_the_game_move_is_a_miss(client: TestClient, ids: dict[str, int], db_fil
 def test_giving_up_is_a_miss(client: TestClient, ids: dict[str, int], db_file: Path) -> None:
     result = attempt(client, ids["scholars"], None)
     assert result["solved"] is False
-    assert (result["move_uci"], result["move_san"]) == (None, None)
+    assert (result["move_uci"], result["move_san"], result["move_fen"]) == (None, None, None)
     assert result["status"] == "missed"
     (tried,) = attempts(db_file, ids["scholars"])
     assert tried.move_uci is None and tried.solved is False

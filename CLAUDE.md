@@ -521,7 +521,8 @@ DELETE /api/blunders/{id}
 
 GET    /api/retest/queue?all=     {items, total, next_due_on}: due entries (position, side to
                                   move, move no., legal moves); all=1 gives every entry
-POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, lesson, next due
+POST   /api/retest/{id}/attempt   {move_uci|null, used_hint} -> solved, best, lesson, next due,
+                                  and the position after your move (move_fen)
 GET    /api/retest/{id}/hint      the from-square only
 
 GET    /api/patterns

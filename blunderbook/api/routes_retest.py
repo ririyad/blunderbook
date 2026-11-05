@@ -60,11 +60,13 @@ def attempt(blunder_id: int, body: AttemptIn, conn: Db) -> AttemptOut:
         not_found(blunder_id)
     entry, tried = result
     b = entry.blunder
+    board = chess.Board(fen)
     return AttemptOut(
         id=b.id,
         solved=tried.solved,
         move_uci=tried.move_uci,
-        move_san=None if move is None else chess.Board(fen).san(move),
+        move_san=None if move is None else board.san(move),
+        move_fen=None if move is None else _after(board, move),
         best_uci=b.best_uci,
         best_san=b.best_san,
         best_line_san=b.best_line_san,
@@ -101,3 +103,9 @@ def _item(entry: Entry) -> RetestItem:
         played_on=g.played_on,
         due_on=b.due_on,
     )
+
+
+def _after(board: chess.Board, move: chess.Move) -> str:
+    after = board.copy(stack=False)
+    after.push(move)
+    return after.fen()

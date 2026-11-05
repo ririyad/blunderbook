@@ -155,6 +155,10 @@ code{background:#f0ede6;border-radius:4px;padding:1px 5px}
 .feedback .lesson{margin-top:8px;padding:9px 11px;background:#fff;border-radius:8px;border:1px solid var(--line)}
 .rt-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .queue{font-size:12.5px;color:var(--muted);margin-top:16px}
+.rt-empty{text-align:center;padding:30px 16px}
+.rt-empty h2{font-size:22px}
+.rt-empty p.small{font-size:14px;margin:8px 0 16px}
+.feedback a{color:inherit}
 
 /* patterns */
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -174,6 +178,8 @@ code{background:#f0ede6;border-radius:4px;padding:1px 5px}
 .hbar .s{background:repeating-linear-gradient(45deg,#b9b2a3 0 3px,#d9d4c8 3px 6px)}
 .hbar .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .insight{margin-top:12px;padding:10px 12px;border-left:3px solid var(--ink);background:#faf8f3;font-size:13px}
+a.hist{color:inherit;font-weight:600;text-decoration:none}
+a.hist:hover{text-decoration:underline}
 
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
