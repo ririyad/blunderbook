@@ -1,821 +1,532 @@
 # Blunderbook
 
-A personal, local-first chess mistake library. It imports your games, uses Stockfish to find
-your blunders, and fills in everything a machine can. What you were thinking and the lesson
-are left for you to write. It then re-tests you on those positions with spaced repetition
-and shows the patterns behind your mistakes.
+**A private, local-first chess mistake library.** Blunderbook imports your games, has
+Stockfish find your blunders, fills in everything a machine can, and then re-tests you on
+those positions until you stop making the same mistakes.
 
-It replaces the printed A4 "Blunder Log" diary page and keeps its spirit: minimal, focused,
-and honest about what was automated and what wasn't.
+![The Log: a blunder with the board, the best move, the game's details, the causes and your notes](docs/images/log.png)
 
-- **PGN is the core format.** Lichess and Chess.com are optional adapters that only download PGN.
-- **Automate the mechanical, never the reflection.** Causes are suggested and never confirmed for you.
-- **Local-first and private.** One SQLite file on your machine. No accounts, no telemetry, no cloud.
-- **Same engine, same rules for every source.** Every game gets its own Stockfish analysis.
-- **No frontend build step.** Plain HTML, CSS and ES modules served by the backend.
+## Why it exists
 
-The full spec is in [CLAUDE.md](CLAUDE.md). The approved UI prototype is
-[docs/reference-demo.html](docs/reference-demo.html). It's a UI reference only and won't run on
-its own, because its `chess.js` and `stockfish.js` files aren't in the repo. Its Import view
-is ported in M5 without its in-browser analysis: the server analyses.
+Many club players keep a **blunder log**: a notebook or a printed A4 sheet with one page per
+serious mistake. Each page holds a diagram of the position, the move you played, the move you
+should have played, why it happened, what you were thinking and the lesson. Going back over
+those pages is one of the most reliable ways to stop repeating the same mistakes.
 
----
+Keeping it by hand is slow, though. You have to find the mistakes, copy the position, look up
+the engine's line, note the clock and fill in the game's details before you get to the part
+that helps: thinking about why it happened.
 
-## Status
+Blunderbook keeps that diary for you:
 
-_Last updated: 2026-11-06_
+- **It does the mechanical work.** It finds your blunders with Stockfish and records the
+  position, the best move and line, the refutation, the evals, the clock and the game's
+  details. It also suggests likely causes.
+- **The reflection stays yours.** "What I was thinking" and "Lesson" are always written by
+  you, and a suggested cause counts only once you confirm it.
+- **It brings the positions back.** A spaced-repetition re-test shows each position again
+  until you find the right move.
+- **It shows your patterns.** Which causes cost you the most, at which time controls.
+- **It still prints.** Your entries print as A4 pages laid out like the paper log, two per
+  page.
 
-| Milestone | State | Notes |
-|---|---|---|
-| M0 Planning | Done | Roadmap, README, spec path fix |
-| M1 Core | Done (9/9) | Pure logic + engine + `init` / `doctor` / `import` (no DB yet) |
-| M2 Storage | Done (5/5) | SQLite, migrations, dedupe, `fen` command, backup + restore |
-| M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
-| M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
-| M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
-| M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
+Everything stays on your computer: one SQLite file, no account, no cloud, no tracking.
 
-**Next up:** v1 is complete. Before relying on sync, try one real `blunderbook sync` and record
-the responses (the fixtures are still hand-built, `TODO(verify)`).
+## Contents
 
-In place: all of M1 to M7. `blunderbook import` reads a PGN file, finds your blunders
-with Stockfish (both passes), suggests causes, and saves each game and its entries to the
-database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
-you have no PGN of. The database is backed up once a day before `import` and `fen`, and
-`blunderbook backup` / `restore` work by hand. `init` creates the database and `doctor` checks
-it and the backups. `blunderbook serve` opens the web page on this computer: browse your
-entries, step through the game, confirm causes and write your notes. Re-test shows each due
-position facing your side: tap a piece and a square, take a hint or give up, and see the
-answer, your lesson and the next date. Patterns shows your causes, time controls and re-test
-history. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
-The Import tab imports a pasted or dropped PGN, or one FEN position, on the page.
-`blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
-against hand-built responses only; no real download has been checked yet).
-`blunderbook print` writes the A4 Blunder Log page, and `serve --open` opens the page for you.
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Install](#install)
+- [Using Blunderbook](#using-blunderbook)
+- [How blunders are judged](#how-blunders-are-judged)
+- [Configuration](#configuration)
+- [Command reference](#command-reference)
+- [Troubleshooting](#troubleshooting)
+- [Privacy](#privacy)
+- [Development](#development)
 
-Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
-patterns, and from M5 for importing too. See Decided.
+## Features
 
----
+| | |
+|---|---|
+| **Import any game** | PGN files from Lichess, Chess.com or ChessBase, tournament downloads, and over-the-board games you typed up. One file can hold many games. |
+| **Sync from Lichess and Chess.com** | `blunderbook sync` downloads your new games and imports them. |
+| **One position, no PGN** | Log a single position from its FEN and the move you played. |
+| **Same judgement everywhere** | Every game gets its own Stockfish analysis, whatever the source, so a blunder means the same thing in every entry. |
+| **Suggested causes** | Time trouble, moving too fast, a missed threat or a hung piece are suggested from the clock and the engine's line. You confirm them. |
+| **Re-test** | Each blunder comes back as a puzzle on a schedule: 1, 3, 7, 14, 30, then 60 days after each correct answer. |
+| **Patterns** | Your most common causes, blunders by time control, and your re-test history. |
+| **Print** | An A4 page per two entries, black and white, like the paper log. |
+| **Backups** | Daily automatic backups, to a folder your cloud drive syncs if you like. |
 
-## Roadmap
+![Re-test: find the best move in a position where you went wrong](docs/images/retest.png)
 
-Each item is one small commit, with its tests in the same change. Every commit must pass
-`uv run pytest`, `ruff check`, `ruff format --check`, and mypy (strict on `blunderbook/core`).
+![Patterns: what causes your blunders, by time control, and your re-test history](docs/images/patterns.png)
 
-### M0 Planning
+## Quick start
 
-- [x] Review the spec and break the milestones into commit-sized slices
-- [x] README with status and roadmap
-- [x] Fix the reference-demo path in CLAUDE.md and add the README upkeep rule
+With [uv](https://docs.astral.sh/uv/) and Stockfish installed (see [Install](#install)):
 
-### M1 Core: pure logic, no database
+```sh
+git clone https://github.com/ririyad/blunderbook.git
+cd blunderbook
+uv tool install .                  # puts the blunderbook command on your PATH
 
-- [x] **1.1 Scaffold.** `pyproject.toml` (deps from CLAUDE.md §3 only), `.python-version` (3.15),
-      `.gitignore`, `.gitattributes` (LF), package tree, ruff/mypy/pytest config, `engine` marker
-      that skips when no Stockfish is found.
-      _Done when_ `uv sync && uv run pytest` passes on an empty suite.
-- [x] **1.2 Models + time control.** `core/models.py` (shared types, `CAUSES`, `Eval` with its JSON
-      form, `TimeControl`) and `core/timecontrol.py` (parse, speed, label). Records like parsed games
-      and findings arrive with the slices that fill them in.
-      _Done when_ `180+2` → blitz / `"3+2"`, `1500+10` → classical / `"25+10"` (estimate 1900 s),
-      and `-` / `?` / daily `1/86400` → unknown.
-- [x] **1.3 Config + Stockfish path.** `config.py` (load/save config.toml with a small built-in
-      writer, typed checks that name the bad key, token never shown) and Stockfish lookup:
-      `--stockfish` option → `BLUNDERBOOK_STOCKFISH` → `stockfish_path` → `PATH`. A broken setting
-      is reported, never skipped. Paths can be pasted with quotes, use `~` or env vars, or point at
-      the unzipped folder. `core/engine.py` `probe()` checks that the program is Stockfish and reads
-      its version. CLI `engine show|set|clear`.
-      _Done when_ `engine set <folder>` finds the program, checks it, saves it, and `show` / `clear` work.
-- [x] **1.4 PGN parsing.** `core/pgn.py`: multi-game split with `chess.pgn.read_game`, mainline only
-      (variations skipped unparsed), FEN before/after each ply, `[%clk]` in seconds, each game's own
-      verbatim text, plain reasons for unreadable games, and nothing logged to the console.
-      `decode()` reads UTF-8, falling back to cp1252 (CLAUDE.md §7.1). `parse_date` / `parse_int`
-      for headers. Read-only headers use the 3.15 `frozendict`. Text python-chess skips silently is
-      caught too (CLAUDE.md §7.1). All nine §12 fixtures are in `tests/fixtures/pgn/`, each
-      checked for its blunder move, side and ply.
-      _Done when_ `multi_game.pgn` gives the good games plus one reported error (`Illegal move 2. Ke3`).
-- [x] **1.5 Identity + source.** `core/identity.py`: `my_side()` (trimmed, case-insensitive exact
-      match; `None` = needs side, also when both players match) and `fingerprint()` (site game id,
-      else players, date and first 30 moves, plus the start FEN; CLAUDE.md §7.3–7.4).
-      `core/source.py`: `detect_source()` gives the source, label, and the Lichess / Chess.com game
-      id and URL (CLAUDE.md §7.5).
-      _Done when_ unmatched names give `needs_side`, and lichess / chesscom / otb / pgn detection is tested.
-- [x] **1.6 Detection maths.** `core/detect.py`: winning chances, swing (checked against the
-      demo's numbers for every fixture blunder), judgment, flagging, accepted re-test moves
-      (pure part of pass 2), and `best_line_san` (6 plies) / `refutation_san` (5 plies), which
-      stop at an illegal PV move. `Thresholds` moved to `core/models.py` so core never imports
-      `config`. config.toml now rejects thresholds that don't go up (CLAUDE.md §7.6).
-      _Done when_ thresholds and Black-start move numbering (`5... Nxe5 6. Be2`) are tested.
-- [x] **1.7 Engine analysis.** `core/engine.py`: `Engine` (a context manager; checks it's
-      Stockfish and applies Threads and Hash), `analyse_game()` (pass 1 on every position, then
-      MultiPV 3 on flagged ones), `terminal_line()` (finished positions never go to the
-      engine), and scores turned to White's point of view. Each flagged move becomes a
-      `Finding` holding everything the engine fills in for a blunder entry. `probe()` now uses
-      `Engine`. Tests use a scripted analyser and the fake UCI engine, which now plays legal
-      moves and can crash on demand. Two tests run against real Stockfish (CLAUDE.md §7.6).
-      _Done when_ the engine always closes, even on errors.
-- [x] **1.8 Suggested causes.** `core/hints.py`: `suggest()` returns the suggested causes (in
-      the fixed cause order) plus the clock left and time spent, ready for `clock_left_s` /
-      `time_spent_s`. Rules: time trouble, moved too fast, missed their threat, and hung a piece
-      (6 plies of the refutation). The §12 fixtures give their expected hints, including
-      `back_rank` "Time trouble" and `scholars_mate` "Missed their threat" (also against real
-      Stockfish). See CLAUDE.md §7.7.
-      _Done when_ every rule is tested with a stubbed engine, including "no clocks → skip".
-- [x] **1.9 Importer + CLI.** `importer.py`: `prepare()` queues each game as ready, needs side,
-      duplicate (already known, or repeated in the same file) or error. `analyse()` adds the
-      engine findings and suggested causes. `summary()` prints the §9 line. CLI commands:
-      - `init` asks for your names and the Stockfish path (Enter = PATH; a bad path is asked
-        again).
-      - `doctor` checks config, names, Stockfish, analysis settings and the DB (not used yet),
-        and exits 1 on a problem.
-      - `import` prints the report: each game, its blunders with best line, refutation, swing,
-        clock and suggested causes, then the summary. It saves nothing yet. It takes `--side`,
-        `--depth` and `--stockfish`. `doctor` takes `--stockfish` too.
+blunderbook init                   # your names, Stockfish, the backup folder
+blunderbook import my-games.pgn    # find your blunders
+blunderbook serve --open           # open the web app in your browser
+```
 
-      The nine §12 fixtures run through the whole pipeline at depth 12 with one thread (about
-      9 s). See CLAUDE.md §9 (exit codes) and §12.
-      _Done when_ every fixture flags its expected move under `uv run pytest -m engine`.
-
-### M2 Storage
-
-- [x] **2.1 Connection + migrations.** `db/connection.py`:
-      - `open_db()` turns on foreign keys and WAL, then runs the forward-only migrations. Each
-        migration and its `user_version` bump share one transaction, so a failed one changes
-        nothing.
-      - It refuses a DB from a newer app, a SQLite file from another app (tables but no
-        version) and a file that isn't SQLite, without touching them. It never creates a file
-        unless asked.
-      - `check()` is read-only: schema version and `PRAGMA integrity_check`.
-      - Connections use SQLite's autocommit mode, and `transaction()` groups writes.
-
-      `0001_init.sql` is §5 (no `settings` table), plus an index on
-      `retest_attempts.blunder_id`. A test checks §5 and the migrated schema agree. `init` now
-      creates the DB (moved here from 2.3), and `doctor` shows its path, schema version and
-      integrity without creating or upgrading it. Tests never touch your real DB: each one gets
-      its own path.
-      _Done when_ running migrations twice is a no-op.
-- [x] **2.2 Repository.** `db/repo.py` holds all data SQL, with every value a parameter.
-      Records in `core/models.py`: `NewGame` / `NewBlunder` (what an import writes), `Game` /
-      `Blunder` (plus ids, your notes, the re-test schedule, timestamps) and `Entry` (a blunder
-      with its game).
-      - `add_game()` saves a game and its blunders in one transaction. A known fingerprint
-        writes nothing. Games with no blunders are saved too, so they're skipped next time.
-        New entries are due today.
-      - `list_entries()` is the Log: newest first, filtered by source, status, cause
-        (confirmed, or suggested while none is confirmed) and due date.
-      - `update_notes()` changes only the fields given, keeps your text exactly, and stores
-        causes once each in the fixed order. `delete_blunder()` keeps the game, so the entry
-        doesn't come back on the next import.
-      - Also `known_fingerprints()`, `get_game()`, `get_entry()`. Re-test, sync and Patterns
-        queries arrive with M4 and M5.
-
-      _Done when_ games and entries round-trip unchanged, and the filters, notes and deletes
-      are tested against a real database.
-- [x] **2.3 Persisting imports.** `blunderbook import` saves what it finds:
-      - It opens the database, creating it if it's missing. A database it can't use stops the
-        import before Stockfish starts.
-      - Games already saved are "Already imported — skipped", and Stockfish doesn't start if
-        nothing is left to analyse.
-      - Each game is saved, with its entries, as soon as it's analysed. If Stockfish stops,
-        the games before it are kept, and importing the file again finishes the rest.
-      - Games that need a side aren't saved. Run again with `--side` to save them.
-      - The report shows each new entry's id (`entry #12`), and the summary says
-        "N blunders added".
-
-      `importer.new_game()` / `new_blunder()` turn an analysis into database records, and
-      `importer.save()` stores them. `repo.add_game()` now also returns the new entry ids.
-      Checked end to end with Stockfish 19: `back_rank.pgn` saved `32. Rc7??` as entry #1, and
-      the second import skipped it.
-      _Done when_ importing the same file twice adds nothing.
-- [x] **2.4 `fen` command.** `blunderbook fen "FEN" --move Rc7 [--opponent X] [--date D]`
-      logs one position, for games you have no PGN of. You're the side to move.
-      - **Input:** the move is UCI or SAN (`e7e8` promotes to a queen). The FEN must include
-        the side to move, because filling it in would be a guess. Impossible positions,
-        finished games and illegal moves get a plain reason, before anything is opened.
-      - **What's logged:** anything from an inaccuracy up, marked `??` / `?` / `?!`, with
-        the best line, refutation and suggested causes. A move under the inaccuracy line, or
-        Stockfish's own choice, isn't logged, since a re-test would have no wrong answer.
-      - **Storage:** it's saved as the §5 synthetic one-move game (`[SetUp "1"] [FEN …]`,
-        "FEN entry", your first name vs `--opponent`, today unless `--date`). The same
-        position, move, opponent and date again says "already logged (entry #N)" without
-        starting Stockfish.
-
-      The core change is `flag_at` on `analyse_game()` / `is_flagged()`: imports flag from
-      the blunder line, a FEN entry from the inaccuracy line. Checked with Stockfish 19: the
-      back-rank `Rc7` and the Elephant `Nxd5` were logged as blunders, `h3` as an inaccuracy,
-      and `e3` (the best move) was not logged.
-- [x] **2.5 Backup + restore.** `db/backup.py` (CLAUDE.md §6 Backups), `[backup]` in config.toml,
-      `backup [--to FOLDER]` and `restore FILE` commands. A daily automatic backup runs before
-      `import` and `fen`, and a safety copy before migrations and restores. `init` asks for the
-      folder (suggests OneDrive when it's set up), and `doctor` shows the last backup.
-      _Done when_ backup → change → restore gives back the old data, a corrupt or newer-schema
-      file is refused, and rotation never deletes a file you named yourself.
-      - **Snapshot:** `VACUUM INTO` a temp file next to the database, `integrity_check`, copy
-        to `blunderbook-YYYY-MM-DD_HHMMSSZ[-reason].db.partial` in the backup folder, rename.
-        A test proves changes still in the `-wal` file are in the backup.
-      - **Rotation** keeps the newest `keep` files with that exact name pattern. Other files,
-        `.partial` leftovers and look-alike names are never touched.
-      - **Daily:** before `import` and `fen` (and `serve` / `sync` when they arrive), when the
-        newest backup's name is over 24 h old and the database has data. A failure is one
-        warning; the command carries on.
-      - **Before an upgrade:** `open_db(before_migrate=…)` runs when a database with data needs
-        migrating. The CLI takes a `-pre-migrate` backup there, even with `auto = false`. If
-        that backup fails, the upgrade doesn't happen.
-      - **Restore:** checks the file (SQLite, integrity, a Blunderbook schema no newer than this
-        app, not empty, not the live database), shows what the backup and your database hold,
-        and asks. Then a `-pre-restore` copy, `Connection.backup` into the live file, and
-        migrate. A bare file name is looked up in the backup folder.
-      - **Config:** `[backup] dir / keep / auto`. `dir` takes quotes, `~` and variables; an unset
-        variable (say `%OneDrive%` on a computer without it) is an error, not a stray folder.
-      - **Checked by hand** with Stockfish 19 on a scratch database: import → daily backup →
-        `backup` → import → `restore` of the first backup gave back 1 game · 1 entry, with a
-        `-pre-restore` copy of the 3 games · 5 entries.
-
-### M3 API + Log view
-
-- [x] **3.1 API.** App factory, pydantic schemas, `GET/PATCH/DELETE /api/blunders`. Detail includes
-      the FEN for each ply, for the step controls. Tested with `TestClient` and a temp DB.
-      - **`api/app.py`:** `create_app(db_path)`. Each request opens its own connection. A
-        database that can't be opened is a 503 with the reason. Only `Host: 127.0.0.1` or
-        `localhost` is answered, and the `/docs` pages (CDN scripts) are off.
-      - **List:** `GET /api/blunders?source=&status=&cause=&due=1`, newest first. Each item has
-        your move (`6. Nxd5`), judgment, status, due date, opponent, date and `3+2` time
-        control. `status` can be repeated. Unknown filter values are a 422.
-      - **Entry:** `GET /api/blunders/{id}`: the machine's part, your notes, the schedule, and
-        your winning chances before and after (`core/detect.chances`, so the swing is their
-        difference). The game comes with its metadata and the whole mainline, each move with
-        the FEN after it, read again from the stored PGN.
-      - **Notes:** `PATCH` with any of `causes`, `other_cause`, `thinking`, `lesson`. A field
-        that's left out or `null` stays. Text is kept exactly, and causes are kept once each in
-        the fixed order. An unknown cause or any other field (say `best_uci`) is a 422, and
-        nothing changes.
-      - **Delete:** `DELETE` answers 204. The game stays, so it isn't imported again.
-      - **Checked by hand** with Stockfish 19 and a real uvicorn server on a scratch database:
-        list, entry (18 moves, chances 0.52 → 0.10), notes, cause filter and delete over HTTP.
-        Another `Host` got a 400. After the delete, importing the same file again still
-        skipped the game.
-- [x] **3.2 Web shell.** `index.html`, `css/app.css` ported from the demo, hash router
-      (`#log`, `#retest`, `#patterns`), `board.js` ported from the demo's `renderBoard`. No
-      `chess.js` and no other frontend dependencies.
-      - **Page:** the demo's header and its CSS, without the Import view, "+ Add games", sync
-        and the demo note. The tabs are links. The Re-test badge counts entries due today or
-        earlier (new ones too) and is hidden at 0. A problem reaching the API shows as one red
-        line above the views. The three views are placeholders for now.
-      - **`js/`:**
-        - `app.js` is the router. `#log/12` gives the view `12`, and an unknown route goes to
-          the Log.
-        - `api.js` does fetch and JSON, and passes on the server's message.
-        - `ui.js` has `esc()`, the toast and the error line.
-        - `board.js` draws a FEN from either side, with highlights, red and green arrows, and
-          buttons labelled "e4 white pawn" when it's interactive.
-      - **Served by the app:** `web/` at `/`, after the API routes, with a Content-Security-
-        Policy that allows only the page's own files, plus `no-cache` and `nosniff`. `.js` is
-        always sent as `text/javascript`. The wheel includes `web/`.
-      - **Tests** (`test_web.py`):
-        - every file is served with its type and the headers;
-        - nothing loads from another site;
-        - no inline scripts;
-        - every `import` names a file that exists;
-        - the §11 palette is in the CSS;
-        - `/api` still comes first;
-        - other hosts get a 400.
-      - **Checked by hand** with headless Chrome against a scratch database: the header, the
-        tabs and a badge of 1. Boards from both sides with the Elephant's red and green arrows,
-        and 64 labelled buttons. The shell at 390 px.
-- [x] **3.3 Log view.** Filters, list, detail board with arrows and step controls, I played /
-      Best was, eval bar, metadata grid, cause chips (auto ones dashed), autosaving notes. The
-      empty state says "Import a PGN with `blunderbook import FILE.pgn`". No "Add games" button.
-      - **List:** newest first. Each row has its mark (`??` / `?` / `?!`), status pill, source
-        tag, opponent, time control and date. Filters:
-        - source;
-        - status ("Due for re-test" means due and re-tested before, as in the demo);
-        - cause.
-      - **Detail:** opens on the position before your move.
-        - The board has a red arrow for your move and the best move in green (toggle).
-        - The step controls go through the whole game, with labels like "After 6... Nxd5".
-        - Then I played / Best was, the eval bar (your winning chances from the API), the
-          details grid and the "No clock times" note.
-      - **Your part:** cause chips, with suggestions dashed and tagged AUTO. Confirming
-        "Other" shows a box for what it was. Then the "What I was thinking" and "Lesson"
-        boxes, the re-test status, and "Delete this entry", which asks first.
-      - **Saving:** text after a 400 ms pause, causes at once, one save at a time.
-        - Unsaved text goes out before you switch entries, and when the page closes.
-        - A failed save says so in red and tries again when you type.
-        - `#log/12` opens entry 12, and picking an entry updates it.
-      - **Modules:**
-        - `views/log.js` is the view.
-        - `format.js` holds pure helpers: evals, clocks, dates, Win / Draw / Loss.
-        - `causes.js` is the fixed list, and a test checks it against `CAUSES`.
-      - **Tests:** `test_web.py` checks that every field `log.js` reads exists in the API's
-        schemas, that every `/api` path it calls exists, and that no HTML in the scripts uses
-        `onclick=`.
-      - **Checked by hand** in headless Chrome, driven over the DevTools protocol, with seven
-        real Stockfish entries:
-        - Lichess, PGN, OTB and a FEN-entry inaccuracy, from both sides.
-        - Stepping to the end of the game, and the best-move arrow.
-        - Confirming causes and "Other"; notes saved, including when you switch entries
-          before the pause; still there after a reload.
-        - Every filter, and delete with the badge going 7 → 6.
-        - A failed save shows its message.
-        - A note holding `</textarea><script>` stayed plain text.
-        - No sideways scroll at 390 px.
-- [x] **3.4 `serve`.** Binds to `127.0.0.1` only, and runs the daily backup check at start.
-      _Done when_ you can browse and annotate imported blunders.
-      - **Start-up order:**
-        1. config.toml;
-        2. the port, so a busy one changes nothing;
-        3. the daily backup;
-        4. the database: created if it's missing, or upgraded after a `-pre-migrate` backup,
-           before any request comes in.
-      - **The port:** `--port` (default 8732, 1–65535). On Windows it's held exclusively.
-        uvicorn's own binding would let a second server share it there. A busy port says "Is
-        Blunderbook already running?" and suggests the next port.
-      - **Stopping:** Ctrl+C stops it cleanly with exit 0 ("Stopped."), not Click's
-        "Aborted!". uvicorn and FastAPI load only for `serve`, so the other commands start as
-        before. No access log.
-      - **Tests** (`test_cli_serve.py`): 127.0.0.1 and the default port; bad ports; Ctrl+C; a
-        busy port touching nothing; a bad config; the daily backup once a day, or off; an
-        upgrade backed up first; no start without that copy. One test runs the real server in
-        a thread and fetches the page, the API, and a refused other host.
-      - **Checked by hand:**
-        - The real `blunderbook serve` on a scratch database served the page and the API on
-          127.0.0.1 and localhost.
-        - A second `serve` on the same port exited 1 with the "already in use" message.
-        - SIGINT, as Ctrl+C sends, printed "Stopped." with exit 0.
-        - In headless Chrome, through `serve`: the Log listed 5 entries, and a lesson and a
-          confirmed cause were saved.
-
-### M4 Re-test + Patterns
-
-- [x] **4.1 Scheduling.** `core/retest.py`: intervals `[1, 3, 7, 14, 30, 60]`, accept matching, queue order.
-      `after_attempt()` gives the new status, streak and due date. `is_solved()` matches the
-      from- and to-square, so `e7e8` and `e7e8q` are the same answer. `queue_key()` puts the oldest
-      due date first, then the most recent game (unknown dates last, as in the Log), then move order.
-- [x] **4.2 Re-test API.** Queue, attempt and hint routes. Each queue item carries its legal
-      moves (`legal_uci`) for tap-to-move; the server checks every attempt.
-      _Done when_ a test proves the queue never includes `best_uci`, `accept_uci`, the played move or the lesson.
-      The queue is `{items, total, next_due_on}` (for the empty state), and `?all=1` gives every
-      entry for "Practise all anyway". An attempt must be a legal move (a bare `e7e8` promotes to
-      a queen); it's recorded in `retest_attempts` and rescheduled in one transaction, then the
-      answer comes back. Shared route helpers moved to `api/common.py`.
-- [x] **4.3 Patterns.** `core/patterns.py` (confirmed vs suggested counts, tiles, by speed/source,
-      biggest leak) and `GET /api/patterns`.
-      Causes come back in the fixed cause order (CLAUDE.md §5), not sorted by count as the demo
-      does; a tied biggest leak goes to the earlier cause. The response also has the re-test
-      history (re-tested entries, most recent first, with their number of tries).
-- [x] **4.4 Views.** Re-test (tap to move, hint, "I don't know", result panel, empty state) and
-      Patterns (tiles, solid/striped bars, insight line).
-      Tap-to-move only offers the legal moves the API sent; a promotion is a queen. After you
-      move, the attempt answer includes the new position (`move_fen`), so the page still has no
-      chess logic. History entries link to the Log. Checked in a browser, also at 390 px.
-
-### M5 Web import
-
-- [x] **5.1 Shared import runner.** Move the CLI's analyse-and-save loop into
-      `importer.run(...)` and its FEN outcome into `importer.log_fen(...)`, so the page and the
-      CLI share them. No behaviour change: the CLI tests pass unchanged.
-      `run()` takes a per-game progress context and a `should_stop()` check (between
-      positions), and returns the engine's error instead of raising it. `find_logged()` checks
-      a FEN entry before Stockfish runs.
-- [x] **5.2 Import jobs + API.** `api/jobs.py` (one background import at a time, progress,
-      stop on shutdown) and `api/routes_import.py`: `POST /api/import` (raw PGN bytes),
-      `GET /api/import/{job_id}`, `POST /api/fen`. Origin and content-type checks, a 10 MB cap.
-      _Done when_ importing the same bytes twice adds nothing, and stopping mid-game keeps the
-      games before it.
-      Imports and FEN entries share one engine slot (409 while it's taken). No Stockfish is a
-      503 before anything starts. Each game row has its status (waiting, analysing, imported,
-      not analysed, needs side, duplicate, error), reason and new entries. Stockfish version
-      warnings and your names now come from `engine.version_note()` and `config.all_names()`,
-      shared with the CLI. Checked end to end under uvicorn with the fake UCI engine.
-- [x] **5.3 Import view.** The Import tab: paste box, choose/drop a .pgn, progress bar, the
-      report with links to new entries, and FEN quick entry. The Log's empty state points to it.
-      _Done:_ `views/import.js` sends the pasted text or the file's raw bytes as
-      `application/x-chess-pgn` (so a cp1252 file is read by the server), checks the job every
-      500 ms, and shows the summary once the job ends (the new entries come at the end). A reload
-      picks the last job up again. The Re-test and Patterns empty states point to the tab too.
-      Checked in a browser with the fake UCI engine, including at 390 px wide.
-
-### M6 Sync (no network in tests)
-
-- [x] **6.1 API docs check.** Read the current official Lichess and Chess.com docs, then note the
-      endpoints and parameters at the top of each adapter.
-      _Done:_ checked 2026-11-05 (the Lichess OpenAPI spec, Chess.com's Published-Data API page).
-      Notes at the top of `sources/lichess.py` and `sources/chesscom.py`. Still `TODO(verify)`:
-      whether Lichess `since` compares with a game's start or end, whether Chess.com usernames
-      are case-sensitive in URLs, and the Link and clock headers in a real Chess.com download.
-- [x] **6.2 Lichess adapter.** `sources/base.py` + `sources/lichess.py`: streaming PGN, `since`,
-      clocks and openings, optional token (never logged), backs off on 429.
-      _Done:_ `LichessAdapter.fetch_new_pgn(since)` hands over one game at a time while the
-      download streams (`base.games_in` only cuts the text; `core.pgn` still parses it).
-      - **Request:** oldest first (`sort=dateAsc`), so a sync that stops halfway keeps its
-        progress. Standard chess only (`perfType`), `since` in milliseconds (a time with no
-        zone is UTC), and the defaults sent explicitly.
-      - **Token:** only in the `Authorization` header. It's not in the adapter's `repr`, and
-        it's replaced with `[token]` in error messages.
-      - **429:** waits 60 s (or a longer `Retry-After`) and tries again, three tries in all. A
-        `Retry-After` over 5 minutes stops the sync instead of hanging it.
-      - **Errors** are a `SyncError` with a plain message: unknown user, refused token, another
-        status, or the network. Games handed over before a broken stream stay handed over.
-      - **Tests** use `tests/fixtures/http/lichess_user_games.pgn` (hand-built,
-        `TODO(verify)`) through httpx `MockTransport`. A new autouse guard in `conftest.py`
-        makes any real request to a host other than this computer fail the test.
-- [x] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
-      Only the months from the last synced month onward are downloaded; no HTTP cache.
-      _Done:_ `ChesscomAdapter(username, contact).fetch_new_pgn(since)` reads the archive list,
-      then each month's `/pgn` from the month of `since` (in UTC) onward, oldest first, one
-      game per item.
-      - **Requests:** one at a time, each answered before the next. The User-Agent is
-        `Blunderbook/<version> (local chess mistake library; contact: <contact>)`. The sync
-        needs `[chesscom] contact`; it's never filled in for you. Usernames go in lowercased
-        (`TODO(verify)`).
-      - **Answers:** redirects are followed, and a 410 month is skipped. A 429 waits 60 s (or a
-        longer `Retry-After`), up to three tries, as for Lichess; that rule now lives in
-        `sources/base.py`. A month's bytes are decoded like a PGN file (UTF-8, else cp1252).
-      - **Errors** are a `SyncError`: unknown player, an archive list it can't read, another
-        status (naming the URL path), the network. Games handed over before a failed month
-        stay handed over.
-      - **Tests** use three hand-built fixtures in `tests/fixtures/http/` (`TODO(verify)`),
-        including a daily game. Also fixed a test that only passed on 2026-11-05: the re-test
-        queue fixture now makes its entries due on the day the test runs.
-- [x] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
-      updates, and `init` asks for the Lichess and Chess.com usernames. HTTP fixtures are
-      hand-built from the documented formats and marked `TODO(verify)`.
-      _Done when_ a failed sync records `last_error` and leaves existing data untouched.
-      - **`blunderbook sync [lichess|chesscom|all]`:** `all` (the default) is each site with a
-        username in config.toml. Then the daily backup, then the database, then each site in
-        turn: download, then import through the same code as `import` (`cli._analyse`). Games
-        you already have are counted in the summary but not listed. Exit 1 when a site fails.
-      - **How far it got:** `sync_state.last_synced` is when the newest game downloaded was
-        played (`core.source.game_time`: Chess.com's `EndDate`/`EndTime`, else
-        `UTCDate`/`UTCTime`). It only moves on after a run that worked, and never back. The
-        next run asks for games from then on. Another username starts again from the
-        beginning.
-      - **A failed run** records `last_error` and prints it, and `last_synced` stays. A failed
-        download imports nothing from that site. If analysis stops, the games saved so far
-        stay, and the next run downloads the rest again. The other site still syncs. The
-        token never appears in the output or the database.
-      - **`init`** asks for the Lichess and Chess.com usernames (Enter skips), and for the
-        Chess.com contact when you give a Chess.com username. The token stays in config.toml.
-      - **`repo.get_sync_state` / `record_sync`**, `sources.adapter_for`, and a `SyncState`
-        record. Tests (`test_cli_sync.py`) run the real adapters on `MockTransport` clients.
-
-### M7 Print + polish
-
-- [x] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
-      and `print --ids / --due --out`.
-      _Done:_ `blunderbook print --out FILE.html [--ids 3,12 | --due]` writes one HTML file that
-      works on its own: `printing.render()` fills `web/print.html` and inlines
-      `web/css/print.css`. Open it and print from the browser.
-      - **Each entry** (half a page): the move and its mark, entry number, players, ratings and
-        date; the board before your move from your side, with your move as an arrow (SVG from
-        python-chess, greys only); I played with the refutation, Best was with the line;
-        source, time control, result, opening, eval and your chances, clock and time on move
-        (`—` when unknown); the twelve causes ticked, with suggestions marked "(suggested)"
-        until you confirm any; What I was thinking and Lesson (ruled lines when empty, cut
-        with "…" past 700 characters); "Re-tested on ___ ☐ Solved ☐ Missed again" and the
-        current schedule.
-      - **Which entries:** all of them in the Log's order, `--ids` in the order given, or
-        `--due`. An unknown id, `--ids` with `--due`, no database or no entries writes nothing
-        and exits 1. Printing never creates or changes the database; the file is written
-        through a `.partial` and renamed.
-      - **Checked by hand** in a browser on a sample of three entries: two per sheet, the
-        board, causes, notes and the re-test line.
-- [x] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
-      _Done:_
-      - **`serve --open`** opens the page in your browser once the port is taken. The port
-        already listens, so the browser's first request waits for the server. No browser
-        found: it says so and keeps serving.
-      - **A Stockfish that macOS blocked.** A download from the internet carries macOS's
-        quarantine mark, and Gatekeeper stops the unsigned Stockfish release: a dialog
-        appears and the program never answers. When a program fails to start and has that
-        mark (read with `/usr/bin/xattr`), `init`, `engine set`, `doctor`, `import`, `fen`,
-        `sync` and the web import say so and show three fixes: `brew install stockfish`
-        then `blunderbook engine clear`, `xattr -d com.apple.quarantine PATH`, or Open
-        Anyway in System Settings > Privacy & Security.
-      - **Checked in a browser at 390 px** with a scratch database, empty and with entries:
-        Log list and detail, Re-test, Patterns and Import. Nothing scrolls sideways. Every
-        view already had its empty state. With the server stopped, each view says "Can't
-        reach Blunderbook. Is blunderbook serve still running?"
-- [x] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
-      ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
-      section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
-      aren't in backups).
-      _Done:_ the Install section: Blunderbook with `uv tool install .` (checked into a scratch
-      folder: the command, the web files and the migrations are all installed), Stockfish per
-      system (Homebrew or the official archive and the Gatekeeper fix on macOS, the zip or winget
-      on Windows, the archive or the distribution's package on Linux), then `init` and `doctor`,
-      and Moving to a new computer. The download page was checked on 2026-11-06 (Stockfish 19,
-      universal builds). The winget package isn't checked on Windows yet (`TODO(verify)`).
-
-**Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
-PWA.
-
----
+Then, in the browser, open an entry, confirm why it happened and write your lesson. Practise
+on the **Re-test** tab.
 
 ## Install
 
-You need **Python 3.15+** through [uv](https://docs.astral.sh/uv/) (0.13.7 or newer knows
-3.15 final; `uv` downloads Python for you), and **Stockfish 17 or newer**.
+You need:
+
+- **[uv](https://docs.astral.sh/uv/)** 0.13.7 or newer. It downloads Python 3.15 for you.
+- **Stockfish 17 or newer.** Older versions work, with a warning.
 
 ### 1. Blunderbook
 
 ```sh
 git clone https://github.com/ririyad/blunderbook.git
 cd blunderbook
-uv tool install .        # puts the blunderbook command on your PATH
+uv tool install .
 ```
 
 If uv says its tool folder isn't on your `PATH`, run `uv tool update-shell` and open a new
-terminal. To run it without installing, use `uv sync` once and then `uv run blunderbook ...`
-from this folder. After pulling a newer version, run `uv tool install --reinstall .`.
+terminal. To update later, `git pull`, then run `uv tool install --reinstall .`.
+
+To run it without installing, use `uv sync` once, then `uv run blunderbook ...` from this
+folder.
 
 ### 2. Stockfish
 
-**macOS.** Homebrew is the easy way:
+<details open>
+<summary><b>macOS</b></summary>
+
+Homebrew is the easiest way:
 
 ```sh
-brew install stockfish   # on PATH, so there's nothing to set
+brew install stockfish      # on PATH, so there's nothing to set
 ```
 
 Or download the macOS archive from [stockfishchess.org/download](https://stockfishchess.org/download/)
-and unpack it. macOS marks files from the internet, and it blocks the Stockfish release
-because it isn't signed: a dialog says Apple "could not verify" it, and Blunderbook says
-"macOS blocked it". Allow that one file, then tell Blunderbook where it is:
+and unpack it. macOS blocks programs downloaded from the internet that Apple hasn't checked,
+so allow this one, then tell Blunderbook where it is:
 
 ```sh
 xattr -d com.apple.quarantine ~/Downloads/stockfish/stockfish-macos-universal
 blunderbook engine set ~/Downloads/stockfish
 ```
 
-Or open System Settings > Privacy & Security after the dialog and click Open Anyway.
+You can also allow it in System Settings > Privacy & Security: click **Open Anyway** after
+macOS has refused it once.
+</details>
 
-**Windows.** Download the Windows x86-64 zip from
-[stockfishchess.org/download](https://stockfishchess.org/download/) (ARM64 for a Snapdragon
-PC), unzip it somewhere it can stay, and point Blunderbook at the folder:
+<details>
+<summary><b>Windows</b></summary>
+
+Download the Windows x86-64 zip from [stockfishchess.org/download](https://stockfishchess.org/download/)
+(ARM64 for a Snapdragon PC), unzip it somewhere it can stay, and point Blunderbook at the
+folder:
 
 ```powershell
 blunderbook engine set "C:\Users\you\Tools\stockfish"
 ```
 
-winget has it too (`winget install --id Stockfish.Stockfish -e`). <!-- TODO(verify): the
-winget version and whether it adds `stockfish` to PATH; not checked on a Windows machine. -->
-If `blunderbook engine show` doesn't find it afterwards, use `engine set` with the program's path.
+winget also has it: `winget install --id Stockfish.Stockfish -e`. If `blunderbook engine show`
+doesn't find it afterwards, run `engine set` with the program's path.
+<!-- TODO(verify): the winget version, and whether it puts `stockfish` on PATH. -->
+</details>
 
-**Linux.** Download the x86-64 (or ARM64) archive from
-[stockfishchess.org/download](https://stockfishchess.org/download/), then:
+<details>
+<summary><b>Linux</b></summary>
+
+Download the x86-64 (or ARM64) archive from [stockfishchess.org/download](https://stockfishchess.org/download/), then:
 
 ```sh
-tar -xf stockfish-*.tar* -C ~/.local/share   # unpacks to a stockfish folder
+tar -xf stockfish-*.tar* -C ~/.local/share      # unpacks to a stockfish folder
 blunderbook engine set ~/.local/share/stockfish
 ```
 
 Your distribution's package (`sudo apt install stockfish`, `sudo dnf install stockfish`) works
-too, but it's often older than 17. Blunderbook still uses it and warns you.
+too, but it's often older than 17.
+</details>
 
-`engine set` takes the program or the folder you unpacked (it looks one level down for a single
-`stockfish*` program), checks that it's Stockfish, and saves it. Check any time:
+`engine set` accepts the program itself or the folder you unpacked. It checks that the program
+really is Stockfish before it saves anything.
 
 ```sh
-blunderbook engine show    # which Stockfish, its version, and where the setting came from
-blunderbook engine clear   # forget the saved path; look on PATH again
+blunderbook engine show     # which Stockfish is used, its version, and where the setting came from
+blunderbook engine clear    # forget the saved path and look on PATH again
 ```
 
 ### 3. Set up
 
 ```sh
-blunderbook init      # your names, Stockfish (Enter = PATH), the backup folder, site usernames
-blunderbook doctor    # checks it all
+blunderbook init
 ```
 
-Then import a game (`blunderbook import FILE.pgn`) and run `blunderbook serve --open`.
+`init` asks for:
+- the names and usernames you play under, so it can tell which side you were;
+- the Stockfish path (press Enter to use the one on `PATH`);
+- a backup folder;
+- your Lichess and Chess.com usernames, if you want to sync.
 
-### Moving to a new computer
+Press Enter at any question to keep its default. Run `blunderbook doctor` any time to check
+that everything is in order.
 
-Backups hold your games and notes, not your settings, so:
+## Using Blunderbook
 
-1. Install Blunderbook and Stockfish as above.
-2. Run `blunderbook init`. Give the same names and usernames, and the same backup folder if it's
-   a synced one (your Lichess token, if you used one, goes back into config.toml by hand).
-3. Restore the newest backup. Names sort by time, so it's the last `blunderbook-….db` in the
-   folder. A name on its own is looked up in the backup folder:
-
-   ```sh
-   blunderbook restore blunderbook-2026-11-05_081756Z.db
-   ```
-
-   If your cloud drive keeps files online only, make it download that file first.
-
-`restore` checks the file and shows what it holds before it asks. Stop `blunderbook serve` first.
-
-## Usage
-
-Settings live in `config.toml` in your user config folder (on Windows,
-`%LOCALAPPDATA%\blunderbook\config.toml`). Your games and notes live in one file,
-`blunderbook.db`, in your user data folder (on Windows, the same folder). `blunderbook doctor`
-shows both paths. Stockfish is looked up in this order:
-
-1. `--stockfish PATH` on the command
-2. the `BLUNDERBOOK_STOCKFISH` environment variable
-3. `stockfish_path` in config.toml (set by `engine set`)
-4. `stockfish` on `PATH`
-
-If one of these is set but broken, you get an error saying which one. The app never quietly
-uses the next one.
-
-| Command | Does | Status |
-|---|---|---|
-| `blunderbook engine show\|set PATH\|clear` | Show, check and save, or clear the Stockfish path | Done (1.3) |
-| `blunderbook init` | Create config and the DB, ask for your names, Stockfish and the backup folder | Done (1.9, 2.1, 2.5) |
-| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the DB and the last backup (changes nothing) | Done (1.9, 2.1, 2.5) |
-| `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
-| `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
-| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4, 7.2) |
-| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Done (6.4) |
-| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Done (7.1) |
-| `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Done (2.5) |
-| `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Done (2.5) |
-
-### The web page
+### Import a PGN file
 
 ```sh
-blunderbook serve              # then open http://127.0.0.1:8732/ in your browser
-blunderbook serve --open       # the same, and opens it for you
-blunderbook serve --port 8733  # if 8732 is taken
+blunderbook import games.pgn
 ```
 
-It runs on this computer only (127.0.0.1): nothing else on your network can reach it, and it
-loads nothing from the internet. The Log lists your entries, newest first.
-- **Pick an entry:** see the position before your move, with your move and the best move as
-  arrows. Step through the whole game.
-- **Your part:** confirm the causes (dashed ones are suggestions) and write what you were
-  thinking and the lesson. Everything saves as you type.
-- **Stop it** with Ctrl+C. Keep importing with `blunderbook import` while it runs, and reload
-  the page to see the new entries.
+```text
+Analysing with Stockfish 19 at depth 14.
+
+Game 1 · Rashed vs Karim S. · 2026-10-12 · PGN file · you played White
+  No clock times in this PGN.
+  6. Nxd5??  Best was e3: 6. e3 Be7 7. Bd3 O-O 8. h3 b6
+      Refutation: 6... Nxd5 7. Bxd8 Bb4+ 8. Qd2 Bxd2+
+      Swing 0.41 · entry #1
+
+Game 2 · Rashed vs Tanvir H. · 2026-11-02 · Over the board · Dhaka Chess Club · you played White
+  No clock times in this PGN.
+  13. Nc3??  Best was h3: 13. h3 Ne2+ 14. Qxe2 Bxe2 15. Ne6 Bb6
+      Refutation: 13... Nf3+ 14. gxf3 Bxf3 15. Bf7+ Kxd8
+      Swing 0.47 · entry #2
+      Suggested: Missed their threat
+
+Game 3 · guest_4417 vs rashed_blitz · 2026-11-03 · Chess.com
+  Which side were you? Run again with --side white or --side black,
+  or add your name to my_names in config.toml.
+
+3 games read · 1 needs side · 2 blunders added
+```
+
+- **Your side** is found by matching the `White` and `Black` names against `my_names` and your
+  site usernames, ignoring case. A game that matches neither name, or both, is never guessed.
+  Add the name to `my_names`, or give the side for those games:
+
+  ```sh
+  blunderbook import games.pgn --side black
+  ```
+
+  `--side` only fills in games that need a side. It never overrides a name that matched.
+- **Importing again is safe.** Games you already have are skipped, so the same file twice adds
+  nothing:
+
+  ```text
+  3 games read · 2 skipped (duplicate) · 1 needs side · 0 blunders added
+  ```
+
+- **Any PGN works:** headers and clocks are optional. A bare move list, a game typed up from a
+  score sheet, or a file from ChessBase in the old Windows encoding all import. What's missing
+  shows as "—", and features that need it (such as the time-trouble hint) are skipped.
+- **Standard chess only.** Chess960 and other variants are reported and skipped. One bad game
+  never stops the rest of the file.
+- **Depth:** `--depth 20` analyses deeper than `engine_depth` for this import. It's slower.
+
+### Log a single position
+
+For a game you have no PGN of, log the position before your move and the move you played:
+
+```sh
+blunderbook fen "3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32" --move Rc7 --opponent endgame_eel --date 2026-11-01
+```
+
+```text
+FEN entry · Rashed vs endgame_eel · 2026-11-01 · you played White
+  32. Rc7??  Best was Qc4: 32. Qc4 g5 33. h4 Qf6 34. g3 Rd6
+      Refutation: 32... Qe1#
+      Swing 0.51 · entry #4
+      Suggested: Missed their threat
+
+Logged 32. Rc7?? as a blunder: entry #4.
+```
+
+You're the side to move. The move can be SAN (`Rc7`) or UCI (`c1c7`), and the date defaults to
+today. A FEN entry is logged even if it's only a mistake (`?`) or an inaccuracy (`?!`). If
+your move was the engine's own choice, or lost almost nothing, there's nothing to re-test, so
+it isn't logged.
+
+### Sync from Lichess and Chess.com
+
+Put your usernames in config.toml (`init` asks for them), then:
+
+```sh
+blunderbook sync             # every site with a username
+blunderbook sync lichess     # one site
+```
+
+```toml
+[lichess]
+username = 'your_lichess_name'
+token = ''                   # optional: a personal API token downloads faster
+
+[chesscom]
+username = 'your_chesscom_name'
+contact = 'you@example.com'  # required: Chess.com asks API users to say who they are
+```
+
+- Each sync downloads only the games played since the last good sync, then imports them like
+  `blunderbook import`. **The first sync downloads your whole history**, which can take a
+  while to analyse. You can stop it with Ctrl+C: the games analysed so far are kept, and the
+  next run skips them.
+- A failed sync changes nothing you already have and says what went wrong.
+- Your Lichess token is only sent to Lichess. It never appears in the output or the database.
+
+### The web app
+
+```sh
+blunderbook serve            # then open http://127.0.0.1:8732/
+blunderbook serve --open     # the same, and opens your browser
+blunderbook serve --port 8733
+```
+
+It runs on this computer only, at `127.0.0.1`. Nothing else on your network can reach it, and
+the page loads nothing from the internet. Stop it with Ctrl+C.
+
+- **Log** lists your entries, newest first, with filters for source, status and cause.
+  Opening an entry shows:
+  - the position before your move, with your move and (if you like) the best move as arrows,
+    and step controls to go through the whole game;
+  - what you played and the refutation, the best move and its line, and your winning chances
+    before and after;
+  - the game's details: source, time control, result, ratings, clock left and time on the
+    move;
+  - the cause chips (dashed ones are suggestions: click one to confirm it), and **What I was
+    thinking** and **Lesson**, which save as you type.
+- **Re-test** shows each position that's due, from your side. Tap a piece, then a square.
+  "Show a hint" lights up the square the best move starts from; "I don't know — show me" gives
+  the answer. You then see the best line, what you played in the game, your lesson and when
+  the position comes back.
+- **Patterns** shows your totals, the causes behind your blunders (solid for confirmed,
+  striped for suggested), blunders by time control, and your re-test history.
+- **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
+  position, and shows each game's result with links to the new entries. Games that need a side
+  must be imported on the command line with `--side`.
+
+### Print your Blunder Log
+
+```sh
+blunderbook print --out blunder-log.html            # every entry
+blunderbook print --due --out due.html              # only the ones due for a re-test
+blunderbook print --ids 3,12 --out two.html         # these entries, in this order
+```
+
+```text
+Wrote 4 entries (2 pages) to blunder-log.html
+Open it in your browser and print it on A4.
+```
+
+The page is one self-contained HTML file in black and white, two entries per A4 sheet. Each
+entry has the board, the game's details, I played / Best was, the causes ticked, your notes
+(or ruled lines to write on), and "Re-tested on ___ ☐ Solved ☐ Missed again".
 
 ### Backups
 
-Backups are copies of `blunderbook.db`, named like `blunderbook-2026-11-05_081756Z.db` (UTC).
-By default they go to a `backups` folder next to the database. For a copy off your computer,
-use a folder your cloud drive syncs: answer `%OneDrive%\Blunderbook` when `init` asks, or set
-it in config.toml:
+The database is backed up automatically once a day, before `import`, `fen`, `sync` and
+`serve`, and always before an upgrade or a restore. By hand:
 
-```toml
-[backup]
-dir = '%OneDrive%\Blunderbook'   # empty = the local backups folder
-keep = 14                         # newest backups kept
-auto = true                       # once a day, before import, fen and serve
+```sh
+blunderbook backup                   # into the backup folder
+blunderbook backup --to /Volumes/USB # a one-off copy somewhere else
+blunderbook restore blunderbook-2026-11-05_081756Z.db
 ```
 
-- **Daily:** `import`, `fen` and `serve` back up first when the newest backup is over a day
-  old.
-- **By hand:** `blunderbook backup`, or `blunderbook backup --to E:\USB` for a one-off copy.
-- **Safety copies:** before a restore (`-pre-restore`) and before an upgrade to a newer schema
-  (`-pre-migrate`). They count towards `keep` like any other backup.
-- **Restore:** stop `blunderbook serve`, then `blunderbook restore FILE`. FILE can be a full
-  path, or just a name from the backup folder. It shows what the backup holds and asks first.
-- **What's not backed up:** config.toml (and your Lichess token). On a new computer, install,
-  run `blunderbook init`, then `blunderbook restore` the newest backup.
+- Backups are named by their UTC time, like `blunderbook-2026-11-05_081756Z.db`, so the
+  newest sorts last. The 14 newest are kept (`keep` in config.toml).
+- **Off your computer:** point the backup folder at a folder your cloud drive syncs (for
+  example `%OneDrive%\Blunderbook` or `~/Dropbox/Blunderbook`). The database itself always
+  stays local.
+- **Restore** checks the file first, shows what it holds and asks before replacing anything.
+  It keeps a copy of your current database. Stop `blunderbook serve` first. A file name on its
+  own is looked up in the backup folder.
+- **Settings aren't in backups.** config.toml, and your Lichess token in it, stay out of them.
+
+### Moving to a new computer
+
+1. Install Blunderbook and Stockfish.
+2. Run `blunderbook init`. Give the same names, and the same backup folder if it's a synced
+   one. Put your Lichess token back into config.toml by hand if you used one.
+3. Restore the newest backup: `blunderbook restore <its file name>`. If your cloud drive keeps
+   files online only, make it download that file first.
+
+## How blunders are judged
+
+Blunderbook judges your moves by how much of your **winning chance** they lose, rather than by
+raw centipawns. A pawn dropped in a winning position matters less than one dropped in an equal
+position.
+
+1. Stockfish analyses every position of the game at `engine_depth` (16 by default).
+2. Each eval becomes winning chances with the Lichess formula
+   `w = 2 / (1 + exp(-0.00368208 × cp)) − 1`. A forced mate counts as ±10000 cp.
+3. The **swing** of your move is how much your winning chances fell, from 0 to 1.
+4. A move is logged when the swing reaches the blunder threshold and the move wasn't
+   Stockfish's own choice:
+
+   | Swing | Mark | Logged from imports |
+   |---|---|---|
+   | ≥ 0.15 | `??` blunder | yes |
+   | ≥ 0.10 | `?` mistake | no (FEN entries only) |
+   | ≥ 0.05 | `?!` inaccuracy | no (FEN entries only) |
+
+5. For each logged position, Stockfish looks at its top three moves. Any move within
+   `accept_margin_cp` (60 cp) of the best counts as a correct answer in the re-test.
+
+The engine's version and depth are saved with every game. Evals already in a PGN (`[%eval]`)
+are ignored, so every game is judged the same way.
+
+**Suggested causes** come from the data, and stay suggestions until you confirm them:
+
+| Suggestion | When |
+|---|---|
+| Time trouble | Less than 10% of the base time, or under 20 s, on your clock. |
+| Moved too fast | 3 s or less on the move while you still had more than 30% of your time. |
+| Missed their threat | After your move, the opponent has a forced mate. |
+| Hung a piece | You're 3 or more points of material down (P 1, N/B 3, R 5, Q 9) after the engine's reply line. |
+
+The time-based ones need clock times and a time control in the PGN. The full cause list is:
+Hung a piece, Missed their threat, Missed my tactic, Miscalculated a line, Time trouble, Moved
+too fast, Wrong plan, Opening gap, Endgame technique, Overconfident / tilt, Skipped blunder
+check, Other.
+
+**Re-test schedule:** a new entry is due the day it's logged. A correct answer brings it back
+after 1, 3, 7, 14, 30, then 60 days. A miss, or giving up, brings it back tomorrow and starts
+the run again.
+
+## Configuration
+
+All settings live in one file, `config.toml`, which `init` creates. There's no settings page in
+the web app.
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| Settings | `~/Library/Application Support/blunderbook/config.toml` | `%LOCALAPPDATA%\blunderbook\config.toml` | `~/.config/blunderbook/config.toml` |
+| Database | `~/Library/Application Support/blunderbook/blunderbook.db` | `%LOCALAPPDATA%\blunderbook\blunderbook.db` | `~/.local/share/blunderbook/blunderbook.db` |
+
+Backups go to a `backups` folder next to the database unless you choose another folder.
+`blunderbook doctor` prints the exact paths on your computer.
+
+```toml
+# Names and usernames used to work out which side you played.
+my_names = ['Rashed', 'rashed_blitz']
+
+# The Stockfish program, or empty to look for `stockfish` on PATH.
+stockfish_path = ''
+
+# First-pass search depth per position, and engine threads and hash.
+engine_depth = 16
+engine_threads = 2
+engine_hash_mb = 128
+
+# Swing thresholds, 0 to 1. Imports only log moves at or above `blunder`.
+# Re-tests accept moves within accept_margin_cp centipawns of the best move.
+[thresholds]
+inaccuracy = 0.05
+mistake = 0.1
+blunder = 0.15
+accept_margin_cp = 60
+
+[lichess]
+username = ''
+token = ''          # optional personal token; never share this file
+
+[chesscom]
+username = ''
+contact = ''        # sent in the User-Agent header, as Chess.com asks
+
+[backup]
+dir = ''            # empty = the local backups folder; may be a synced folder
+keep = 14           # how many of the newest backups to keep
+auto = true         # back up once a day before import, fen, sync and serve
+```
+
+Blunderbook rewrites this file when a command changes a setting, so comments you add aren't
+kept. Paths may use `~` and environment variables, and a relative path is relative to the
+settings folder.
+
+**Which Stockfish is used.** The first of these that's set wins:
+1. `--stockfish PATH` on the command;
+2. the `BLUNDERBOOK_STOCKFISH` environment variable;
+3. `stockfish_path` in config.toml;
+4. `stockfish` on `PATH`.
+
+If one of them is set but broken, you get an error naming it. Blunderbook never quietly falls
+back to the next one.
+
+## Command reference
+
+| Command | What it does |
+|---|---|
+| `blunderbook init` | Create config.toml and the database; asks for your names, Stockfish, the backup folder and site usernames. |
+| `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the database and the last backup. Changes nothing. |
+| `blunderbook import FILE [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and log your blunders. |
+| `blunderbook fen "FEN" --move MOVE [--opponent NAME] [--date YYYY-MM-DD] [--stockfish PATH]` | Log one position and the move you played. |
+| `blunderbook sync [lichess\|chesscom\|all]` | Download your new games, then import them. |
+| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1`. |
+| `blunderbook print --out FILE.html [--ids 1,2] [--due]` | Write the A4 print page. |
+| `blunderbook backup [--to FOLDER]` | Back up the database now. |
+| `blunderbook restore FILE [--yes]` | Replace the database with a backup, after checking it. |
+| `blunderbook engine show` | Show which Stockfish is used and where that setting came from. |
+| `blunderbook engine set PATH` | Check a Stockfish program (or its folder) and save it. |
+| `blunderbook engine clear` | Forget the saved path and look on `PATH` again. |
+
+Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
+`import` and `sync` exit with 1 only when they can't run at all, not because some games
+needed a side.
+
+## Troubleshooting
+
+**"macOS blocked it"** when Blunderbook starts Stockfish: the file came from the internet and
+macOS stopped it. The message shows the three fixes: `brew install stockfish`, the `xattr`
+command, or **Open Anyway** in System Settings > Privacy & Security.
+
+**"Which side were you?"**: none of your names matched the game's players (or both did). Add
+the name to `my_names`, or run `blunderbook import FILE --side white` (or `black`).
+
+**"Port 8732 is already in use"**: Blunderbook is probably running already. Use that window,
+or `blunderbook serve --port 8733`.
+
+**The page says "Can't reach Blunderbook"**: `blunderbook serve` has stopped. Start it again
+and reload the page.
+
+**Something else**: `blunderbook doctor` checks the setup and says what's wrong.
+
+## Privacy
+
+- Your games, notes and statistics live in one SQLite file on your computer.
+- There are no accounts and no telemetry. The web app only answers on `127.0.0.1` and loads
+  nothing from the internet.
+- Blunderbook goes online only when you run `blunderbook sync`, and then only to Lichess and
+  Chess.com.
+- Backups are local files. They leave your computer only if you put the backup folder inside
+  a folder your cloud drive syncs.
 
 ## Development
 
 ```sh
-uv sync                                   # install deps into .venv
-uv run pytest                             # all tests (engine tests skip without Stockfish)
-uv run pytest -m engine                   # engine tests only
+uv sync                                        # install dependencies into .venv
+uv run pytest                                  # all tests; engine tests skip without Stockfish
+uv run pytest -m engine                        # only the tests that run Stockfish
 uv run ruff check . && uv run ruff format --check .
-uv run mypy                               # whole package; strict on blunderbook/core
+uv run mypy                                    # strict on blunderbook/core
 ```
 
-Engine tests (`@pytest.mark.engine`) find Stockfish the same way the app does (environment
-variable, then your config.toml, read only, then `PATH`). So `blunderbook engine set PATH` once
-is enough. To point the tests at a different binary for one run:
+- **Stack:** Python 3.15, FastAPI, SQLite (no ORM), python-chess, Typer and httpx.
+- **Frontend:** plain HTML, CSS and JavaScript modules, with no build step and no frontend
+  dependencies.
+- **Tests:** they never call Lichess or Chess.com; sync tests use recorded responses in
+  `tests/fixtures/http/`.
 
-```sh
-BLUNDERBOOK_STOCKFISH="C:/path/to/stockfish.exe" uv run pytest -m engine          # Git Bash
-$env:BLUNDERBOOK_STOCKFISH = "C:\path\to\stockfish.exe"; uv run pytest -m engine   # PowerShell
-```
-
-Tests that only check how the engine is started and identified use a fake UCI engine
-(`tests/fixtures/fake_uci.py`), so they run without Stockfish. Tests never call Lichess or
-Chess.com. Sync tests use files in `tests/fixtures/http/`.
-
-python-chess 1.11.2 uses asyncio APIs that Python 3.16 will remove. That's harmless on 3.15,
-and the warnings are filtered in `pyproject.toml`. Check for a newer python-chess before
-moving to 3.16. Starlette's TestClient warns that it prefers `httpx2`. `httpx`, already a
-dependency, still works, so that warning is filtered too.
-
-## Open decisions
-
-None open.
-
-### Decided
-
-- **2026-11-04: Settings live in config.toml only.** The CLI reads and writes it. The DB never
-  stores settings. (On 2026-11-05 the settings and engine API routes and the DB `settings` table
-  were dropped from v1.) (CLAUDE.md §5, §6)
-- **2026-11-04: PGN encoding.** Read as `utf-8-sig`. If that fails, read as `cp1252` with bad
-  bytes replaced, and say "Read as Windows-1252" in the import report. An import never fails
-  over encoding. (CLAUDE.md §7.1)
-- **2026-11-04: Stockfish lookup and Python 3.15+.** See Install and Usage.
-  (CLAUDE.md §3, §6)
-- **2026-11-05: Backups (slice 2.5).**
-  - **How a backup is made.** A verified `VACUUM INTO` snapshot, never a plain file copy, which
-    could miss changes still in the WAL. It's written locally first, then copied into the
-    backup folder and renamed, so a sync client never sees a half-written file. The last 14 are
-    kept.
-  - **When.** Automatically once a day before commands that change data, and always before a
-    migration or a restore.
-  - **Where.** By default a local `backups` folder. Point `backup.dir` at a synced folder (for
-    example OneDrive) for an off-site copy. The live DB never goes there.
-  - **Restore** uses SQLite's backup API, so there are no `-wal`/`-shm` files to clean up.
-  - **What's not in it.** Backups don't include config.toml or the token. There's no `.dump`
-    text copy.
-  - **Settled while building it:**
-    - The daily check skips a database with no rows, so a fresh database doesn't use a slot.
-    - If the `-pre-migrate` copy fails, the database isn't upgraded.
-    - The `-pre-restore` copy doesn't rotate, so a restore never deletes the file it reads.
-      The next backup rotates.
-    - Two backups in the same second: the second takes the next second's name.
-    - A relative `backup.dir` is relative to the config folder, like `stockfish_path`. An unset
-      variable in it is an error.
-    - `doctor` warns (old backup, missing folder) without failing. Only problems exit 1.
-    - `init` won't use the database's own folder for backups.
-- **2026-11-05: The Log's API (slice 3.1).**
-  - The server works out your winning chances for the eval bar, so the maths lives in one
-    place.
-  - The step controls get the whole game, not only the moves up to the blunder.
-  - The Log's entry doesn't include the accepted re-test moves.
-  - PATCH leaves out-or-`null` fields alone, and `other_cause: ""` clears it.
-  - The API answers only `Host: 127.0.0.1` / `localhost` (no login, so this stops DNS
-    rebinding). `/docs` is off because it loads scripts from a CDN.
-  - The demo's "Re-tested N×" count arrives with the re-test attempts in M4.
-  - (CLAUDE.md §10)
-- **2026-11-05: The page shell (slice 3.2).**
-  - The brand reads "Blunderbook".
-  - The tabs are links (`aria-current`), not `role="tab"` buttons: they change the address.
-  - The badge is hidden at 0 rather than showing a red 0.
-  - A strict Content-Security-Policy: the page only runs its own script files, so text in a
-    PGN or a note can't run as code. Views never use inline scripts or `onclick=`.
-  - `.js` is always sent as `text/javascript`, whatever the Windows registry says.
-  - (CLAUDE.md §4, §11)
-- **2026-11-05: The Log view (slice 3.3).** Where it differs from the demo:
-  - The step controls go through the whole game, not only up to your move. Positions are
-    labelled "After 4. Bg5" rather than "Move 7 of the game".
-  - Each entry shows its own mark (`??`, `?`, `?!`), since FEN entries can be mistakes or
-    inaccuracies.
-  - "Delete this entry", which asks first: the API has it, and the page is the only place to
-    use it.
-  - A text box for "Other" (`other_cause`).
-  - Dates show the year when it isn't this year.
-  - "Re-test this one now" and "Re-tested N×" come with M4.
-  - (CLAUDE.md §11, §12)
-- **2026-11-05: `serve` (slice 3.4).**
-  - The port is taken before anything else, so a busy port changes nothing.
-  - On Windows the port is held exclusively.
-  - A missing database is created at start, so the page shows the empty state, not an
-    error.
-  - Ctrl+C exits 0.
-  - No access log.
-  - `--open` stays in 7.2 (6.2 before web import became M5).
-  - (CLAUDE.md §9)
-  - (CLAUDE.md §1.3, §4, §5, §6, §9, §14)
-- **2026-11-05: Keep it simple.** The goal is to find your blunders after a game and not
-  repeat them in the next one. Import stays on the CLI. The web page is for the Log (notes),
-  Re-test and Patterns. Dropped from v1: the web Import view and its background jobs, the
-  browser FEN board editor, the settings and engine pages, web Sync buttons, `chess.js`, the DB
-  `settings` table and the Chess.com HTTP cache. (CLAUDE.md §3, §4, §5, §6, §8, §10, §11, §13)
-  The web Import view came back the same day, below.
-- **2026-11-05: Web import in v1 (M5).** You want to paste a game straight from a site's
-  Share → PGN panel. The Import tab takes pasted text, a chosen or dropped .pgn, or a FEN and
-  your move. It runs the CLI's own import code in one background job at a time, with a
-  progress bar. Games with no name match are listed with what to do; a side picker stays for
-  later. It comes after M4, so Sync is now M6 and Print + polish M7. (CLAUDE.md §4, §9, §10,
-  §11, §13)
-- **2026-11-05: The 14 former open decisions.** Each built choice stays as built; each proposal
-  that added machinery was dropped. The rules are now in CLAUDE.md.
-  1. **M1/M2 boundary:** M1 prints the import report, M2 saves it.
-  2. **Chess.com cache:** none. Sync downloads only the months from the last synced month on. (§8)
-  3. **Positions from the API:** the blunder detail sends each ply's FEN, and each re-test item
-     sends its legal moves. No `chess.js`. (§10)
-  4. **HTTP fixtures:** hand-built from the documented formats, marked `TODO(verify)`. (§8)
-  5. **First move of a game from a FEN:** its time spent is unknown. (§7.7)
-  6. **Variants and null moves:** rejected with a plain reason. (§7.1)
-  7. **Unreadable movetext:** skipped text gives a warning, misread text rejects the game. (§7.1)
-  8. **Both players match your names:** needs side. (§7.3)
-  9. **Fingerprint of a FEN-start game:** the start FEN is added. (§7.4)
-  10. **Source detection:** whole-name "chess.com", place vs website, Lichess and Chess.com ids. (§7.5)
-  11. **Detection:** your blunder is never accepted, mates count ±10000 in the margin, swing is at
-      least 0, `mate 0` is lost, thresholds must go up. (§7.6)
-  12. **Analysis:** "Best was" comes from pass 1; finished positions skip the engine. No Cancel
-      button: there's no job queue, and Ctrl+C closes the engine. (§7.6)
-  13. **Suggested causes:** a negative time spent is unknown; "Hung a piece" compares with the
-      position before your move. (§7.7)
-  14. **Import:** duplicates within one file, `--side` never overrides a name match, exit codes,
-      engine tests at depth 12. (§7.3, §7.4, §9, §12)
-- **2026-11-06: A clearer board.** The Unicode pieces looked dim and changed with each
-  system's font, and the grey-brown squares blended with them. The board now draws
-  python-chess's SVG pieces (the print page's set; the server makes them at `/pieces/wK.svg`,
-  so no image files are copied in) on cream and blue squares (`#ebe9d8` / `#4c688d`). The move
-  highlights are a little stronger so they show on blue. (CLAUDE.md §11)
+Read these before changing anything:
+- [CLAUDE.md](CLAUDE.md) is the full specification: product rules, data model, analysis rules
+  and API.
+- [docs/ROADMAP.md](docs/ROADMAP.md) records how v1 was built and the decisions behind it.
+- [docs/reference-demo.html](docs/reference-demo.html) is the original UI prototype.

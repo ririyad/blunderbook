@@ -129,6 +129,8 @@ blunderbook/
 │   ├── fixtures/http/         # recorded Lichess / Chess.com responses
 │   └── test_*.py
 └── docs/
+    ├── ROADMAP.md             # status, roadmap slices, open decisions and the Decided log
+    ├── images/                # README screenshots
     └── reference-demo.html    # the HTML demo built during planning (UI reference only)
 ```
 
@@ -727,8 +729,9 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 - Read this file and the relevant view in `docs/reference-demo.html` before starting a task.
 - Work on one milestone at a time. Keep commits small, with messages like `core: swing maths + tests`.
-- When a roadmap slice is finished, tick it in `README.md`, update the Status table and
-  "Next up", and move any resolved Open decisions out.
+- When a roadmap slice is finished, tick it in `docs/ROADMAP.md`, update the Status table and
+  "Next up", and move any resolved Open decisions out. `README.md` is the user guide: update
+  it when a command, setting or behaviour a user sees changes.
 - Write or update tests in the same change as the code.
 - Keep `core/` pure and typed (mypy strict). I/O belongs in `db/`, `sources/`, `api/` and `cli.py`.
 - All data SQL goes in `db/repo.py`. Maintenance SQL (PRAGMAs, migrations, `VACUUM INTO`,
