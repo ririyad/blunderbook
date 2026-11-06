@@ -34,11 +34,12 @@ _Last updated: 2026-11-06_
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M7 Print + polish | In progress (2/3) | A4 print page, `serve --open`, install docs |
+| M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 
-**Next up:** M7.3 Install docs.
+**Next up:** v1 is complete. Before relying on sync, try one real `blunderbook sync` and record
+the responses (the fixtures are still hand-built, `TODO(verify)`).
 
-In place so far: all of M1 to M6, plus 7.1 and 7.2. `blunderbook import` reads a PGN file, finds your blunders
+In place: all of M1 to M7. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
 database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
 you have no PGN of. The database is backed up once a day before `import` and `fen`, and
@@ -497,31 +498,116 @@ Each item is one small commit, with its tests in the same change. Every commit m
         Log list and detail, Re-test, Patterns and Import. Nothing scrolls sideways. Every
         view already had its empty state. With the server stopped, each view says "Can't
         reach Blunderbook. Is blunderbook serve still running?"
-- [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
+- [x] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
       ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
       section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
       aren't in backups).
+      _Done:_ the Install section: Blunderbook with `uv tool install .` (checked into a scratch
+      folder: the command, the web files and the migrations are all installed), Stockfish per
+      system (Homebrew or the official archive and the Gatekeeper fix on macOS, the zip or winget
+      on Windows, the archive or the distribution's package on Linux), then `init` and `doctor`,
+      and Moving to a new computer. The download page was checked on 2026-11-06 (Stockfish 19,
+      universal builds). The winget package isn't checked on Windows yet (`TODO(verify)`).
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
 PWA.
 
 ---
 
-## Requirements
+## Install
 
-- **Python 3.15+**, managed with [uv](https://docs.astral.sh/uv/). `uv sync` downloads it if needed (uv 0.13.7+ knows 3.15 final).
-- **Stockfish 17+**, installed by you. Then tell Blunderbook where it is:
+You need **Python 3.15+** through [uv](https://docs.astral.sh/uv/) (0.13.7 or newer knows
+3.15 final; `uv` downloads Python for you), and **Stockfish 17 or newer**.
 
-  ```sh
-  blunderbook engine set "C:\Users\you\Downloads\stockfish"   # the program, or the unzipped folder
-  blunderbook engine show                                     # which Stockfish, and where that came from
-  blunderbook engine clear                                    # forget it; look on PATH again
-  ```
+### 1. Blunderbook
 
-  If `stockfish` is already on `PATH`, you don't need to set anything. Without Stockfish, the
-  app can't analyse games and engine tests are skipped.
+```sh
+git clone https://github.com/ririyad/blunderbook.git
+cd blunderbook
+uv tool install .        # puts the blunderbook command on your PATH
+```
 
-Full install steps arrive in M7.
+If uv says its tool folder isn't on your `PATH`, run `uv tool update-shell` and open a new
+terminal. To run it without installing, use `uv sync` once and then `uv run blunderbook ...`
+from this folder. After pulling a newer version, run `uv tool install --reinstall .`.
+
+### 2. Stockfish
+
+**macOS.** Homebrew is the easy way:
+
+```sh
+brew install stockfish   # on PATH, so there's nothing to set
+```
+
+Or download the macOS archive from [stockfishchess.org/download](https://stockfishchess.org/download/)
+and unpack it. macOS marks files from the internet, and it blocks the Stockfish release
+because it isn't signed: a dialog says Apple "could not verify" it, and Blunderbook says
+"macOS blocked it". Allow that one file, then tell Blunderbook where it is:
+
+```sh
+xattr -d com.apple.quarantine ~/Downloads/stockfish/stockfish-macos-universal
+blunderbook engine set ~/Downloads/stockfish
+```
+
+Or open System Settings > Privacy & Security after the dialog and click Open Anyway.
+
+**Windows.** Download the Windows x86-64 zip from
+[stockfishchess.org/download](https://stockfishchess.org/download/) (ARM64 for a Snapdragon
+PC), unzip it somewhere it can stay, and point Blunderbook at the folder:
+
+```powershell
+blunderbook engine set "C:\Users\you\Tools\stockfish"
+```
+
+winget has it too (`winget install --id Stockfish.Stockfish -e`). <!-- TODO(verify): the
+winget version and whether it adds `stockfish` to PATH; not checked on a Windows machine. -->
+If `blunderbook engine show` doesn't find it afterwards, use `engine set` with the program's path.
+
+**Linux.** Download the x86-64 (or ARM64) archive from
+[stockfishchess.org/download](https://stockfishchess.org/download/), then:
+
+```sh
+tar -xf stockfish-*.tar* -C ~/.local/share   # unpacks to a stockfish folder
+blunderbook engine set ~/.local/share/stockfish
+```
+
+Your distribution's package (`sudo apt install stockfish`, `sudo dnf install stockfish`) works
+too, but it's often older than 17. Blunderbook still uses it and warns you.
+
+`engine set` takes the program or the folder you unpacked (it looks one level down for a single
+`stockfish*` program), checks that it's Stockfish, and saves it. Check any time:
+
+```sh
+blunderbook engine show    # which Stockfish, its version, and where the setting came from
+blunderbook engine clear   # forget the saved path; look on PATH again
+```
+
+### 3. Set up
+
+```sh
+blunderbook init      # your names, Stockfish (Enter = PATH), the backup folder, site usernames
+blunderbook doctor    # checks it all
+```
+
+Then import a game (`blunderbook import FILE.pgn`) and run `blunderbook serve --open`.
+
+### Moving to a new computer
+
+Backups hold your games and notes, not your settings, so:
+
+1. Install Blunderbook and Stockfish as above.
+2. Run `blunderbook init`. Give the same names and usernames, and the same backup folder if it's
+   a synced one (your Lichess token, if you used one, goes back into config.toml by hand).
+3. Restore the newest backup. Names sort by time, so it's the last `blunderbook-….db` in the
+   folder. A name on its own is looked up in the backup folder:
+
+   ```sh
+   blunderbook restore blunderbook-2026-11-05_081756Z.db
+   ```
+
+   If your cloud drive keeps files online only, make it download that file first.
+
+`restore` checks the file and shows what it holds before it asks. Stop `blunderbook serve` first.
 
 ## Usage
 
@@ -632,7 +718,7 @@ None open.
 - **2026-11-04: PGN encoding.** Read as `utf-8-sig`. If that fails, read as `cp1252` with bad
   bytes replaced, and say "Read as Windows-1252" in the import report. An import never fails
   over encoding. (CLAUDE.md §7.1)
-- **2026-11-04: Stockfish lookup and Python 3.15+.** See Usage and Requirements.
+- **2026-11-04: Stockfish lookup and Python 3.15+.** See Install and Usage.
   (CLAUDE.md §3, §6)
 - **2026-11-05: Backups (slice 2.5).**
   - **How a backup is made.** A verified `VACUUM INTO` snapshot, never a plain file copy, which
