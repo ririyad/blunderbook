@@ -47,6 +47,9 @@ def ids(db_file: Path) -> dict[str, int]:
             saved = repo.add_game(conn, game, [blunder], now=NOW + timedelta(minutes=minutes))
             assert saved is not None
             made[name] = saved.blunder_ids[0]
+    # Due on the day the test runs, not NOW's date: the routes compare with today.
+    for blunder_id in made.values():
+        set_due(db_file, blunder_id, TODAY)
     return made
 
 
