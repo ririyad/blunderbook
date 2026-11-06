@@ -131,8 +131,58 @@ def test_design_colours_come_from_the_spec() -> None:
     css = (WEB / "css" / "app.css").read_text("utf-8")
     for colour in ("#f7f5f0", "#1b1b1b", "#5c5c5c", "#e3dfd6", "#b83227", "#1d7a52", "#9a6412"):
         assert colour in css
-    assert "#2a5d9f" in css and "#ece6d9" in css and "#a99f8b" in css
+    assert "#2a5d9f" in css and "--light:#ebe9d8" in css and "--dark:#4c688d" in css
     assert "Georgia" in css
+
+
+def luminance(hex_colour: str) -> float:
+    def channel(c: int) -> float:
+        v = c / 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(hex_colour[i : i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def test_board_coordinates_are_readable() -> None:
+    """Each square's coordinate is drawn in the other square's colour: at least 4.5:1."""
+    light, dark = sorted((luminance("#ebe9d8"), luminance("#4c688d")), reverse=True)
+    assert (light + 0.05) / (dark + 0.05) >= 4.5
+
+
+# ---------------------------------------------------------------- the pieces
+
+PIECE_NAMES = [c + k for c in "wb" for k in "KQRBNP"]
+
+
+@pytest.mark.parametrize("name", PIECE_NAMES)
+def test_every_piece_is_drawn(client: TestClient, name: str) -> None:
+    response = client.get(f"/pieces/{name}.svg")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert response.headers["content-security-policy"] == CONTENT_SECURITY_POLICY
+    assert response.headers["x-content-type-options"] == "nosniff"
+    colour = "white" if name[0] == "w" else "black"
+    kind = {"K": "king", "Q": "queen", "R": "rook", "B": "bishop", "N": "knight", "P": "pawn"}
+    assert response.text.startswith("<svg ")
+    assert f'class="{colour} {kind[name[1]]}"' in response.text
+
+
+@pytest.mark.parametrize("name", ["wX", "WK", "k", "wK.png", "..%2Fapp"])
+def test_no_other_pieces(client: TestClient, name: str) -> None:
+    assert client.get(f"/pieces/{name}.svg").status_code == 404
+
+
+def test_the_board_asks_for_those_pieces() -> None:
+    """board.js builds `/pieces/wK.svg`-style names; no Unicode glyphs are left."""
+    board = (WEB / "js" / "board.js").read_text("utf-8")
+    assert '`/pieces/${isWhite(piece) ? "w" : "b"}${piece.toUpperCase()}.svg`' in board
+    assert not re.search("[\u2654-\u265f]", board)
+
+
+def test_other_hosts_get_no_pieces(db_file: Path) -> None:
+    with TestClient(create_app(db_file), base_url="http://evil.example") as other:
+        assert other.get("/pieces/wK.svg").status_code == 400
 
 
 def test_api_still_comes_first(client: TestClient) -> None:

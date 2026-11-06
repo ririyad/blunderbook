@@ -814,3 +814,8 @@ None open.
       position before your move. (§7.7)
   14. **Import:** duplicates within one file, `--side` never overrides a name match, exit codes,
       engine tests at depth 12. (§7.3, §7.4, §9, §12)
+- **2026-11-06: A clearer board.** The Unicode pieces looked dim and changed with each
+  system's font, and the grey-brown squares blended with them. The board now draws
+  python-chess's SVG pieces (the print page's set; the server makes them at `/pieces/wK.svg`,
+  so no image files are copied in) on cream and blue squares (`#ebe9d8` / `#4c688d`). The move
+  highlights are a little stronger so they show on blue. (CLAUDE.md §11)

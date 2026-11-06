@@ -4,9 +4,7 @@
 //
 // Squares are numbered 0..63: a1 = 0, b1 = 1, ... h8 = 63.
 
-const GLYPH = { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
 const NAME = { k: "king", q: "queen", r: "rook", b: "bishop", n: "knight", p: "pawn" };
-const TEXT_STYLE = "︎"; // draw the glyph as text, never as an emoji
 const SVG = "http://www.w3.org/2000/svg";
 const ARROW = { red: "rgba(184,50,39,.85)", green: "rgba(29,122,82,.9)" };
 
@@ -68,11 +66,12 @@ export function renderBoard(el, fen, orient, opts = {}) {
       sq.addEventListener("click", () => click(i));
     }
     if (piece) {
-      const s = document.createElement("span");
-      s.className = "pc " + (isWhite(piece) ? "w" : "b");
-      s.textContent = GLYPH[piece.toLowerCase()] + TEXT_STYLE;
-      s.setAttribute("aria-hidden", "true");
-      sq.appendChild(s);
+      const img = document.createElement("img");
+      img.className = "pc";
+      img.src = pieceUrl(piece);
+      img.alt = ""; // the square's label (or the board's) says what's there
+      img.draggable = false;
+      sq.appendChild(img);
     }
     if (pos % 8 === 0) sq.appendChild(coord("r", String(r + 1)));
     if (pos >= 56) sq.appendChild(coord("f", "abcdefgh"[f]));
@@ -81,6 +80,9 @@ export function renderBoard(el, fen, orient, opts = {}) {
   el.appendChild(grid);
   if (arrows.length) el.appendChild(drawArrows(arrows, orient));
 }
+
+/** "N" -> "/pieces/wN.svg", "p" -> "/pieces/bP.svg" (drawn by the server). */
+export const pieceUrl = (piece) => `/pieces/${isWhite(piece) ? "w" : "b"}${piece.toUpperCase()}.svg`;
 
 function coord(kind, text) {
   const c = document.createElement("span");

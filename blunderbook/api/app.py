@@ -9,7 +9,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+import chess
+import chess.svg
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -53,6 +55,17 @@ WEB_HEADERS = {
 }
 
 
+# The board's pieces, drawn as SVG by python-chess (the set the print page uses too), by
+# name: "wK" is the white king, "bP" a black pawn. Made here, so no image files are copied in.
+PIECES = {
+    f"{color}{kind}": chess.svg.piece(
+        chess.Piece.from_symbol(kind if color == "w" else kind.lower())
+    )
+    for color in "wb"
+    for kind in "KQRBNP"
+}
+
+
 class _Web(StaticFiles):
     async def get_response(self, path: str, scope: Scope) -> Response:
         response = await super().get_response(path, scope)
@@ -85,6 +98,14 @@ def create_app(db_path: Path) -> FastAPI:
     app.include_router(routes_retest.router)
     app.include_router(routes_patterns.router)
     app.include_router(routes_import.router)
+
+    @app.get("/pieces/{name}.svg", include_in_schema=False)
+    def piece(name: str) -> Response:
+        svg = PIECES.get(name)
+        if svg is None:
+            raise HTTPException(status_code=404, detail="There's no such piece.")
+        return Response(svg, media_type="image/svg+xml", headers=WEB_HEADERS)
+
     app.mount("/", _Web(directory=WEB, html=True), name="web")  # last: /api comes first
 
     @app.exception_handler(StorageError)

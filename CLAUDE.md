@@ -649,8 +649,10 @@ Design language (from the demo and the paper template):
   solved, amber `#9a6412` = due / suggested, blue `#2a5d9f` = new / info.
 - Title in Georgia/serif, everything else system sans. No gradients, no emoji, no drop
   shadows beyond 1px.
-- Board: light `#ece6d9`, dark `#a99f8b`, Unicode chess glyphs with `︎`, coordinates
-  in the corners, SVG arrows with polygon heads. Board faces the side I played.
+- Board: light `#ebe9d8`, dark blue `#4c688d` (each square's coordinate in the other square's
+  colour, 4.5:1), drawn SVG pieces (python-chess's set, the one the print page uses, served at
+  `/pieces/wK.svg` … `/pieces/bP.svg`), coordinates in the corners, SVG arrows with polygon
+  heads. Board faces the side I played.
 - Accessibility: real `<button>`s (board squares in interactive mode are buttons with
   `aria-label` like "e4 white pawn"), visible focus, `aria-live` for saved and feedback
   messages, works at 390 px wide.
