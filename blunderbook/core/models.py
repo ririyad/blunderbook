@@ -341,3 +341,19 @@ class Totals:
 
     games: int  # imported games; a FEN entry's stand-in game doesn't count
     entries: int
+
+
+# ---------------------------------------------------------------- sync (CLAUDE.md §8)
+
+SyncSource = Literal["lichess", "chesscom"]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SyncState:
+    """How far `blunderbook sync` got with one site (a row of `sync_state`)."""
+
+    source: SyncSource
+    username: str  # the account synced; another one starts again from the beginning
+    last_synced: datetime | None  # when the newest game fetched was played (UTC)
+    last_run_at: datetime | None
+    last_error: str | None  # the last run's problem; None when it worked

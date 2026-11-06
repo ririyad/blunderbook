@@ -2,7 +2,7 @@
 
 Commands arrive milestone by milestone (see the README roadmap):
 engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
-serve (3.4) · sync (M5) · print (M6).
+serve (3.4) · sync (6.4) · print (7.1).
 """
 
 import errno
@@ -19,10 +19,12 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from blunderbook import __version__, config, importer
+from blunderbook import __version__, config, importer, sources
 from blunderbook.core import engine, pgn
-from blunderbook.core.models import Color, Totals
+from blunderbook.core.models import Color, SyncSource, Totals
+from blunderbook.core.source import game_time
 from blunderbook.db import backup, connection, repo
+from blunderbook.sources.base import SyncError, redact
 
 app = typer.Typer(
     name="blunderbook",
@@ -138,12 +140,15 @@ def init() -> None:
     stockfish_path = _ask_stockfish(cfg.stockfish_path)
 
     backup_dir = _ask_backup_folder(cfg.backup.dir)
+    lichess, chesscom = _ask_sync_accounts(cfg)
 
     cfg = replace(
         cfg,
         my_names=names,
         stockfish_path=stockfish_path,
         backup=replace(cfg.backup, dir=backup_dir),
+        lichess=lichess,
+        chesscom=chesscom,
     )
     saved = config.save(cfg)
     typer.echo(f"\nSaved to {saved}")
@@ -154,7 +159,10 @@ def init() -> None:
         pass
     if existed:
         typer.echo(f"Database {db}")
-    typer.echo("Next: blunderbook import FILE.pgn")
+    typer.echo(
+        "Next: blunderbook import FILE.pgn"
+        + (" or blunderbook sync" if (cfg.lichess.username or cfg.chesscom.username) else "")
+    )
 
 
 def _ask_stockfish(current: str) -> str:
@@ -222,6 +230,36 @@ def _ask_backup_folder(current: str) -> str:
             continue
         typer.echo(f"Backups go to {folder}")
         return setting
+
+
+def _ask_sync_accounts(cfg: config.Config) -> tuple[config.LichessConfig, config.ChesscomConfig]:
+    """Your Lichess and Chess.com usernames, for `blunderbook sync` (both optional). They
+    also tell Blunderbook which side you played."""
+    typer.echo("\nSync (optional): your usernames, for blunderbook sync. Enter skips one.")
+    lichess = _ask_text("Lichess username", cfg.lichess.username)
+    chesscom = _ask_text("Chess.com username", cfg.chesscom.username)
+    contact = cfg.chesscom.contact
+    if chesscom:
+        typer.echo(
+            "Chess.com asks apps to say how to reach the person using them: an email address\n"
+            "or a web page. It goes in each request to Chess.com, and nowhere else."
+        )
+        while True:
+            contact = _ask_text("Contact for Chess.com", contact)
+            if contact.isprintable():
+                break
+            typer.echo("Give it on one line.")
+            contact = ""
+    if lichess:
+        typer.echo("A Lichess token is optional (it only downloads faster): token under [lichess].")
+    return (
+        replace(cfg.lichess, username=lichess),
+        replace(cfg.chesscom, username=chesscom, contact=contact),
+    )
+
+
+def _ask_text(label: str, current: str) -> str:
+    return str(typer.prompt(label, default=current, show_default=bool(current))).strip()
 
 
 def _report_engine(path: Path) -> None:
@@ -408,39 +446,59 @@ def import_(
         if not queue:
             _fail(f"No games found in {path}.")
 
-        saved: dict[int, importer.SavedGame] = {}
-        if any(q.status == "ready" for q in queue):
-            found = _find_engine(stockfish, cfg, probe=False)
-            if found.problem is not None:
-                _fail(f"Can't analyse: {found.problem}")
-            assert found.path is not None
-            use_depth = depth or cfg.engine_depth
-            error: str | None = None
-            try:
-                with engine.Engine.open(
-                    [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
-                ) as sf:
-                    typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
-                    _version_notes(sf.info)
-                    result = importer.run(
-                        conn,
-                        queue,
-                        sf,
-                        depth=use_depth,
-                        thresholds=cfg.thresholds,
-                        progress_for=lambda q, k, n: _Progress(f"Game {q.number} ({k} of {n})"),
-                    )
-                    queue, saved, error = list(result.queue), result.saved, result.error
-            except engine.EngineError as exc:  # it couldn't start, or failed as it closed
-                error = str(exc)
-            if error is not None:
-                _print_report(queue, saved)
-                _fail(
-                    f"Analysis stopped: {error}\n"
-                    "Import the file again to analyse the rest. Games already saved are skipped."
-                )
-
+        try:
+            queue, saved, error = _analyse(conn, cfg, queue, stockfish=stockfish, depth=depth)
+        except _NoEngine as exc:
+            _fail(str(exc))
         _print_report(queue, saved)
+        if error is not None:
+            _fail(
+                f"Analysis stopped: {error}\n"
+                "Import the file again to analyse the rest. Games already saved are skipped."
+            )
+
+
+class _NoEngine(Exception):
+    """Some game is ready to analyse, but there's no Stockfish to use."""
+
+
+def _analyse(
+    conn: sqlite3.Connection,
+    cfg: config.Config,
+    queue: list[importer.QueuedGame],
+    *,
+    stockfish: str | None = None,
+    depth: int | None = None,
+) -> tuple[list[importer.QueuedGame], dict[int, importer.SavedGame], str | None]:
+    """Analyse and save the ready games, each as soon as it's done. Returns the queue, the
+    saved games and the engine's error (None when all went well). Raises _NoEngine."""
+    if not any(q.status == "ready" for q in queue):
+        return queue, {}, None
+    found = _find_engine(stockfish, cfg, probe=False)
+    if found.problem is not None:
+        raise _NoEngine(f"Can't analyse: {found.problem}")
+    assert found.path is not None
+    use_depth = depth or cfg.engine_depth
+    saved: dict[int, importer.SavedGame] = {}
+    error: str | None = None
+    try:
+        with engine.Engine.open(
+            [str(found.path)], threads=cfg.engine_threads, hash_mb=cfg.engine_hash_mb
+        ) as sf:
+            typer.echo(f"Analysing with {sf.name} at depth {use_depth}.")
+            _version_notes(sf.info)
+            result = importer.run(
+                conn,
+                queue,
+                sf,
+                depth=use_depth,
+                thresholds=cfg.thresholds,
+                progress_for=lambda q, k, n: _Progress(f"Game {q.number} ({k} of {n})"),
+            )
+            queue, saved, error = list(result.queue), result.saved, result.error
+    except engine.EngineError as exc:  # it couldn't start, or failed as it closed
+        error = str(exc)
+    return queue, saved, error
 
 
 def _open_database(problem: str, cfg: config.Config) -> sqlite3.Connection:
@@ -469,8 +527,15 @@ def _open_database(problem: str, cfg: config.Config) -> sqlite3.Connection:
     return conn
 
 
-def _print_report(queue: list[importer.QueuedGame], saved: dict[int, importer.SavedGame]) -> None:
+def _print_report(
+    queue: list[importer.QueuedGame],
+    saved: dict[int, importer.SavedGame],
+    *,
+    list_duplicates: bool = True,
+) -> None:
     for queued in queue:
+        if queued.status == "duplicate" and not list_duplicates:
+            continue  # a sync downloads games you have again; the summary counts them
         typer.echo("")
         typer.echo(_game_heading(queued))
         for warning in queued.warnings:
@@ -727,6 +792,124 @@ def _listen(port: int) -> socket.socket:
 
 _WSAEADDRINUSE = 10048  # Windows socket error codes
 _WSAEACCES = 10013
+
+
+# ---------------------------------------------------------------- sync
+
+
+class _SyncSite(StrEnum):
+    lichess = "lichess"
+    chesscom = "chesscom"
+    all = "all"
+
+
+@app.command()
+def sync(
+    site: Annotated[
+        _SyncSite,
+        typer.Argument(help="lichess, chesscom, or all: each site with a username in config.toml."),
+    ] = _SyncSite.all,
+) -> None:
+    """Download your new games from Lichess and Chess.com, then import them."""
+    cfg = _load_config()
+    choices: dict[_SyncSite, list[SyncSource]] = {
+        _SyncSite.lichess: ["lichess"],
+        _SyncSite.chesscom: ["chesscom"],
+        _SyncSite.all: ["lichess", "chesscom"],
+    }
+    names = choices[site]
+    chosen = [name for name in names if sources.username(name, cfg)]
+    if site is not _SyncSite.all and not chosen:
+        label = sources.SITES[names[0]]
+        _fail(f"Set your {label} username under [{names[0]}] in config.toml.")
+    if not chosen:
+        _fail(
+            "Nothing to sync: set your username under [lichess] or [chesscom] in config.toml,\n"
+            "or run blunderbook init."
+        )
+    _daily_backup(cfg)
+    failed = False
+    with closing(_open_database("Can't sync: the database can't be used.", cfg)) as conn:
+        for name in chosen:
+            failed |= not _sync_site(conn, cfg, name)
+    if failed:
+        raise typer.Exit(1)
+
+
+def _sync_site(conn: sqlite3.Connection, cfg: config.Config, name: SyncSource) -> bool:
+    """Download one site's new games and import them. A problem is recorded in
+    `sync_state.last_error` and printed; games saved before it stay. Returns False then."""
+    label, user = sources.SITES[name], sources.username(name, cfg)
+    state = repo.get_sync_state(conn, name)
+    since = None
+    if state is not None and state.username.casefold() == user.casefold():
+        since = state.last_synced
+    typer.echo("")
+    if since is None:
+        typer.echo(f"{label} ({user}): all your games.")
+    else:
+        typer.echo(f"{label} ({user}): games since {_local_time(since)}.")
+
+    def failed(problem: str) -> bool:
+        message = redact(problem, cfg.lichess.token)
+        repo.record_sync(conn, name, username=user, error=message)
+        typer.echo(f"{label}: {message}", err=True)
+        return False
+
+    texts: list[str] = []
+    try:
+        adapter = sources.adapter_for(name, cfg)
+        with _Counting(f"{label}: downloading") as count:
+            for text in adapter.fetch_new_pgn(since):
+                texts.append(text)
+                count(len(texts))
+    except SyncError as exc:
+        return failed(f"{exc} Nothing was imported from {label}.")
+    if not texts:
+        typer.echo("No new games.")
+        repo.record_sync(conn, name, username=user)
+        return True
+    typer.echo(f"Downloaded {_plural(len(texts), 'game')}.")
+
+    queue = list(
+        importer.prepare(
+            "\n\n".join(texts), config.all_names(cfg), known=repo.known_fingerprints(conn)
+        )
+    )
+    try:
+        queue, saved, error = _analyse(conn, cfg, queue)
+    except _NoEngine as exc:
+        return failed(f"{exc} Nothing was imported from {label}.")
+    _print_report(queue, saved, list_duplicates=False)
+    if error is not None:
+        return failed(
+            f"Analysis stopped: {error} Run the sync again to analyse the rest. "
+            "Games already saved are skipped."
+        )
+    times = [t for q in queue if (t := game_time(q.headers)) is not None]
+    repo.record_sync(conn, name, username=user, newest=max(times, default=None))
+    return True
+
+
+class _Counting:
+    """Games downloaded so far, redrawn on one line when the output is a terminal."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.live = sys.stderr.isatty()
+
+    def __enter__(self) -> _Counting:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self.live:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
+
+    def __call__(self, n: int) -> None:
+        if self.live:
+            sys.stderr.write(f"\r{self.label}: {_plural(n, 'game')}")
+            sys.stderr.flush()
 
 
 # ---------------------------------------------------------------- backup, restore

@@ -7,9 +7,12 @@
 
 import re
 from collections.abc import Mapping
+from contextlib import suppress
+from datetime import UTC, datetime, time
 from typing import Final
 
 from blunderbook.core.models import SourceInfo, header_value
+from blunderbook.core.pgn import parse_date
 
 # Lichess game ids are 8 letters/digits. A 12-character "full id" adds a 4-character player
 # suffix, and links may end in /white or /black. Exports put https://lichess.org/<id> in Site.
@@ -64,3 +67,25 @@ def detect_source(headers: Mapping[str, str]) -> SourceInfo:
     if site and not _URL.match(site) and not _DOMAIN.fullmatch(site):
         return SourceInfo("otb", f"Over the board · {site}")
     return SourceInfo("pgn", "PGN file")
+
+
+_TIME: Final = re.compile(r"(\d{1,2}):(\d{2}):(\d{2})")
+
+
+def game_time(headers: Mapping[str, str]) -> datetime | None:
+    """When a site game was played, in UTC, for `sync_state.last_synced` (CLAUDE.md §8):
+    Chess.com's ``EndDate`` / ``EndTime``, else ``UTCDate`` / ``UTCTime`` (Lichess, and
+    Chess.com's start). A date without a time is its midnight. None when neither is there.
+    TODO(verify): Chess.com's EndTime is UTC (its exports carry [Timezone "UTC"]).
+    """
+    for day_name, time_name in (("EndDate", "EndTime"), ("UTCDate", "UTCTime")):
+        day = parse_date(header_value(headers, day_name))
+        if day is None:
+            continue
+        match = _TIME.fullmatch((header_value(headers, time_name) or "").strip())
+        at = time(0)
+        if match is not None:
+            with suppress(ValueError):  # "25:61:00"
+                at = time(int(match[1]), int(match[2]), int(match[3]))
+        return datetime.combine(day, at, tzinfo=UTC)
+    return None

@@ -31,6 +31,8 @@ from blunderbook.core.models import (
     Source,
     Speed,
     Status,
+    SyncSource,
+    SyncState,
     Totals,
 )
 from blunderbook.db.connection import transaction
@@ -394,6 +396,65 @@ def next_due_after(conn: sqlite3.Connection, day: date) -> date | None:
     return _date_or_none(row[0])
 
 
+def get_sync_state(conn: sqlite3.Connection, source: SyncSource) -> SyncState | None:
+    """How far `blunderbook sync` got with one site, or None before its first run."""
+    row = conn.execute(
+        "SELECT source, username, last_synced, last_run_at, last_error FROM sync_state"
+        " WHERE source = ?",
+        (source,),
+    ).fetchone()
+    if row is None:
+        return None
+    return SyncState(
+        source=row["source"],
+        username=row["username"],
+        last_synced=_moment_or_none(row["last_synced"]),
+        last_run_at=_moment_or_none(row["last_run_at"]),
+        last_error=row["last_error"],
+    )
+
+
+def record_sync(
+    conn: sqlite3.Connection,
+    source: SyncSource,
+    *,
+    username: str,
+    newest: datetime | None = None,
+    error: str | None = None,
+    now: datetime | None = None,
+) -> SyncState:
+    """Store one sync run. A run that worked (no `error`) moves `last_synced` on to `newest`
+    (never back) and clears the last error. A failed run keeps `last_synced` and records
+    the error. Another username starts again from the beginning: its `last_synced` isn't
+    the old account's."""
+    if newest is not None and newest.tzinfo is None:
+        raise ValueError("newest must be timezone-aware.")
+    ran = _moment(now)
+    with transaction(conn):
+        before = get_sync_state(conn, source)
+        same = before is not None and before.username.casefold() == username.casefold()
+        last = before.last_synced if same and before is not None else None
+        if error is None and newest is not None and (last is None or newest > last):
+            last = newest
+        conn.execute(
+            "INSERT INTO sync_state (source, username, last_synced, last_run_at, last_error)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT (source) DO UPDATE SET username = excluded.username,"
+            " last_synced = excluded.last_synced, last_run_at = excluded.last_run_at,"
+            " last_error = excluded.last_error",
+            (
+                source,
+                username,
+                None if last is None else _timestamp(last),
+                _timestamp(ran),
+                error,
+            ),
+        )
+        state = get_sync_state(conn, source)
+    assert state is not None
+    return state
+
+
 def delete_blunder(conn: sqlite3.Connection, blunder_id: int) -> bool:
     """Delete one entry and its re-test history. Its game stays, so importing the game again
     is still skipped. Returns False when there was no such entry."""
@@ -501,6 +562,10 @@ def _moment(now: datetime | None) -> datetime:
 
 def _timestamp(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def _moment_or_none(value: str | None) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(value)
 
 
 def _date_or_none(value: str | None) -> date | None:

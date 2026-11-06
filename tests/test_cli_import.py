@@ -71,7 +71,7 @@ def newer_db(path: Path) -> None:
 
 def test_init_saves_names_and_stockfish(tmp_path: Path, cfg_file: Path, probes: list) -> None:
     exe = program(tmp_path / "sf")
-    result = runner.invoke(app, ["init"], input=f" Rashed, rashed_blitz ,Rashed\n{exe}\n\n")
+    result = runner.invoke(app, ["init"], input=f" Rashed, rashed_blitz ,Rashed\n{exe}\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Creating {cfg_file}." in result.output
     assert f"Found Stockfish 17.1 at\n  {exe}" in result.output
@@ -82,7 +82,7 @@ def test_init_saves_names_and_stockfish(tmp_path: Path, cfg_file: Path, probes: 
 
 
 def test_init_enter_means_path(cfg_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert "No Stockfish on PATH yet" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -93,7 +93,7 @@ def test_init_finds_stockfish_on_path(
 ) -> None:
     exe = program(tmp_path / "bin")
     monkeypatch.setattr("shutil.which", lambda _: str(exe))
-    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Found Stockfish 17.1 on PATH at\n  {exe}" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -102,7 +102,7 @@ def test_init_finds_stockfish_on_path(
 def test_init_asks_again_after_a_bad_path(tmp_path: Path, cfg_file: Path, probes: list) -> None:
     exe = program(tmp_path / "sf")
     missing = tmp_path / "nowhere" / "stockfish.exe"
-    result = runner.invoke(app, ["init"], input=f"Rashed\n{missing}\n{exe}\n\n")
+    result = runner.invoke(app, ["init"], input=f"Rashed\n{missing}\n{exe}\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Nothing found at {missing}." in result.output
     assert "Try again, or press Enter to look on PATH." in result.output
@@ -118,7 +118,7 @@ def test_init_rejects_a_program_that_isnt_stockfish(
         raise EngineError("This is Lc0, not Stockfish. Blunderbook only uses Stockfish.")
 
     monkeypatch.setattr(engine, "probe", refuse)
-    result = runner.invoke(app, ["init"], input=f"Rashed\n{exe}\n\n\n")
+    result = runner.invoke(app, ["init"], input=f"Rashed\n{exe}\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert "not Stockfish" in result.output
     assert config.load(cfg_file).stockfish_path == ""
@@ -129,7 +129,7 @@ def test_init_keeps_existing_values_on_enter(tmp_path: Path, cfg_file: Path, pro
     config.save(
         config.Config(my_names=("Rashed",), stockfish_path=str(exe), engine_depth=20), cfg_file
     )
-    result = runner.invoke(app, ["init"], input="\n\n\n")
+    result = runner.invoke(app, ["init"], input="\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Updating {cfg_file}." in result.output
     saved = config.load(cfg_file)
@@ -137,14 +137,14 @@ def test_init_keeps_existing_values_on_enter(tmp_path: Path, cfg_file: Path, pro
 
 
 def test_init_without_names(cfg_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input=" , \n\n\n")
+    result = runner.invoke(app, ["init"], input=" , \n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert "No names set. Every game will ask which side you played." in result.output
     assert config.load(cfg_file).my_names == ()
 
 
 def test_init_creates_the_database(cfg_file: Path, db_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Created the database {db_file}\nNext: blunderbook import FILE.pgn" in result.output
     with closing(connection.connect(db_file, mode="ro")) as conn:
@@ -152,10 +152,10 @@ def test_init_creates_the_database(cfg_file: Path, db_file: Path, probes: list) 
 
 
 def test_init_again_keeps_the_data(cfg_file: Path, db_file: Path, probes: list) -> None:
-    assert runner.invoke(app, ["init"], input="Rashed\n\n\n").exit_code == 0
+    assert runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n").exit_code == 0
     with closing(connection.open_db(db_file)) as conn:
         conn.execute("INSERT INTO sync_state (source, username) VALUES ('lichess', 'rashed')")
-    result = runner.invoke(app, ["init"], input="\n\n\n")
+    result = runner.invoke(app, ["init"], input="\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Database {db_file}\n" in result.output
     with closing(connection.open_db(db_file)) as conn:
@@ -164,7 +164,7 @@ def test_init_again_keeps_the_data(cfg_file: Path, db_file: Path, probes: list) 
 
 def test_init_with_a_database_from_a_newer_app(cfg_file: Path, db_file: Path, probes: list) -> None:
     newer_db(db_file)
-    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n")
     assert result.exit_code == 1
     assert "Your settings are saved, but the database isn't ready." in result.output
     assert "made by a newer Blunderbook (schema 99;" in result.output
@@ -667,7 +667,7 @@ def test_init_asks_for_the_backup_folder(
     tmp_path: Path, cfg_file: Path, db_file: Path, probes: list
 ) -> None:
     target = tmp_path / "cloud" / "Blunderbook"
-    result = runner.invoke(app, ["init"], input=f"Rashed\n\n{target}\n")
+    result = runner.invoke(app, ["init"], input=f"Rashed\n\n{target}\n\n\n")
     assert result.exit_code == 0, result.output
     default = db_file.parent / "backups"
     assert f"Press Enter to keep them in\n  {default}\nor give a folder." in result.output
@@ -678,7 +678,7 @@ def test_init_asks_for_the_backup_folder(
 
 
 def test_init_enter_keeps_backups_next_to_the_database(cfg_file: Path, probes: list) -> None:
-    result = runner.invoke(app, ["init"], input="Rashed\n\n\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert "Backups go to" not in result.output
     assert config.load(cfg_file).backup == config.BackupConfig()
@@ -689,7 +689,7 @@ def test_init_suggests_onedrive(
     tmp_path: Path, cfg_file: Path, probes: list, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OneDrive", str(tmp_path / "OneDrive"))
-    result = runner.invoke(app, ["init"], input="Rashed\n\n%OneDrive%\\Blunderbook\n")
+    result = runner.invoke(app, ["init"], input="Rashed\n\n%OneDrive%\\Blunderbook\n\n\n")
     assert result.exit_code == 0, result.output
     assert "OneDrive is set up here, so %OneDrive%\\Blunderbook works." in result.output
     assert config.load(cfg_file).backup.dir == "%OneDrive%\\Blunderbook"  # kept portable
@@ -700,7 +700,7 @@ def test_init_asks_again_for_a_bad_backup_folder(
     cfg_file: Path, db_file: Path, probes: list, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("BB_MISSING", raising=False)
-    answers = f"Rashed\n\n$BB_MISSING/bk\n{db_file.parent}\n\n"
+    answers = f"Rashed\n\n$BB_MISSING/bk\n{db_file.parent}\n\n\n\n"
     result = runner.invoke(app, ["init"], input=answers)
     assert result.exit_code == 0, result.output
     assert "backup.dir uses $BB_MISSING, which isn't set on this computer" in result.output
@@ -715,7 +715,7 @@ def test_init_keeps_the_backup_folder_on_enter(
     config.save(
         config.Config(my_names=("Rashed",), backup=config.BackupConfig(dir=target)), cfg_file
     )
-    result = runner.invoke(app, ["init"], input="\n\n\n")
+    result = runner.invoke(app, ["init"], input="\n\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert f"Backup folder [{target}]:" in result.output
     assert config.load(cfg_file).backup.dir == target

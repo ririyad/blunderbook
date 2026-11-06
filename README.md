@@ -33,12 +33,12 @@ _Last updated: 2026-11-05_
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
-| M6 Sync | In progress (3/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
+| M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M6.4 Wiring (`sync` command).
+**Next up:** M7.1 Print.
 
-In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
+In place so far: all of M1 to M6. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
 database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
 you have no PGN of. The database is backed up once a day before `import` and `fen`, and
@@ -48,6 +48,9 @@ entries, step through the game, confirm causes and write your notes. Re-test sho
 position facing your side: tap a piece and a square, take a hint or give up, and see the
 answer, your lesson and the next date. Patterns shows your causes, time controls and re-test
 history. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
+The Import tab imports a pasted or dropped PGN, or one FEN position, on the page.
+`blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
+against hand-built responses only; no real download has been checked yet).
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -434,10 +437,27 @@ Each item is one small commit, with its tests in the same change. Every commit m
       - **Tests** use three hand-built fixtures in `tests/fixtures/http/` (`TODO(verify)`),
         including a daily game. Also fixed a test that only passed on 2026-11-05: the re-test
         queue fixture now makes its entries due on the day the test runs.
-- [ ] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
+- [x] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
       updates, and `init` asks for the Lichess and Chess.com usernames. HTTP fixtures are
       hand-built from the documented formats and marked `TODO(verify)`.
       _Done when_ a failed sync records `last_error` and leaves existing data untouched.
+      - **`blunderbook sync [lichess|chesscom|all]`:** `all` (the default) is each site with a
+        username in config.toml. Then the daily backup, then the database, then each site in
+        turn: download, then import through the same code as `import` (`cli._analyse`). Games
+        you already have are counted in the summary but not listed. Exit 1 when a site fails.
+      - **How far it got:** `sync_state.last_synced` is when the newest game downloaded was
+        played (`core.source.game_time`: Chess.com's `EndDate`/`EndTime`, else
+        `UTCDate`/`UTCTime`). It only moves on after a run that worked, and never back. The
+        next run asks for games from then on. Another username starts again from the
+        beginning.
+      - **A failed run** records `last_error` and prints it, and `last_synced` stays. A failed
+        download imports nothing from that site. If analysis stops, the games saved so far
+        stay, and the next run downloads the rest again. The other site still syncs. The
+        token never appears in the output or the database.
+      - **`init`** asks for the Lichess and Chess.com usernames (Enter skips), and for the
+        Chess.com contact when you give a Chess.com username. The token stays in config.toml.
+      - **`repo.get_sync_state` / `record_sync`**, `sources.adapter_for`, and a `SyncState`
+        record. Tests (`test_cli_sync.py`) run the real adapters on `MockTransport` clients.
 
 ### M7 Print + polish
 
