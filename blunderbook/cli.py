@@ -728,6 +728,9 @@ def serve(
     port: Annotated[
         int, typer.Option(min=1, max=65535, help="The port on 127.0.0.1 to serve on.")
     ] = DEFAULT_PORT,
+    open_: Annotated[
+        bool, typer.Option("--open", help="Open the page in your browser once it's running.")
+    ] = False,
 ) -> None:
     """Start the web app on this computer: read your blunders and write your notes.
 
@@ -752,13 +755,31 @@ def serve(
                 timeout_graceful_shutdown=5,
             )
         )
-        typer.echo(f"Blunderbook is running at http://{HOST}:{port}/")
-        typer.echo("Open that address in your browser. Press Ctrl+C to stop.")
+        url = f"http://{HOST}:{port}/"
+        typer.echo(f"Blunderbook is running at {url}")
+        if open_:
+            sock.listen()  # the browser's first request waits here until the server is up
+            if _open_browser(url):
+                typer.echo("Opened it in your browser. Press Ctrl+C to stop.")
+            else:
+                typer.echo("Couldn't open a browser. Open that address yourself.")
+                typer.echo("Press Ctrl+C to stop.")
+        else:
+            typer.echo("Open that address in your browser. Press Ctrl+C to stop.")
         with suppress(KeyboardInterrupt):  # uvicorn stops cleanly, then raises Ctrl+C again
             server.run(sockets=[sock])
     finally:
         sock.close()
     typer.echo("Stopped.")
+
+
+def _open_browser(url: str) -> bool:
+    import webbrowser
+
+    try:
+        return webbrowser.open(url)
+    except webbrowser.Error:
+        return False
 
 
 def _listen(port: int) -> socket.socket:

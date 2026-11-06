@@ -23,7 +23,7 @@ is ported in M5 without its in-browser analysis: the server analyses.
 
 ## Status
 
-_Last updated: 2026-11-05_
+_Last updated: 2026-11-06_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -34,11 +34,11 @@ _Last updated: 2026-11-05_
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M7 Print + polish | In progress (1/3) | A4 print page, `serve --open`, install docs |
+| M7 Print + polish | In progress (2/3) | A4 print page, `serve --open`, install docs |
 
-**Next up:** M7.2 Polish.
+**Next up:** M7.3 Install docs.
 
-In place so far: all of M1 to M6. `blunderbook import` reads a PGN file, finds your blunders
+In place so far: all of M1 to M6, plus 7.1 and 7.2. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
 database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
 you have no PGN of. The database is backed up once a day before `import` and `fen`, and
@@ -51,6 +51,7 @@ history. All nine §12 fixtures flag their expected blunder under `uv run pytest
 The Import tab imports a pasted or dropped PGN, or one FEN position, on the page.
 `blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
 against hand-built responses only; no real download has been checked yet).
+`blunderbook print` writes the A4 Blunder Log page, and `serve --open` opens the page for you.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -480,7 +481,22 @@ Each item is one small commit, with its tests in the same change. Every commit m
         through a `.partial` and renamed.
       - **Checked by hand** in a browser on a sample of three entries: two per sheet, the
         board, causes, notes and the re-test line.
-- [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
+- [x] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
+      _Done:_
+      - **`serve --open`** opens the page in your browser once the port is taken. The port
+        already listens, so the browser's first request waits for the server. No browser
+        found: it says so and keeps serving.
+      - **A Stockfish that macOS blocked.** A download from the internet carries macOS's
+        quarantine mark, and Gatekeeper stops the unsigned Stockfish release: a dialog
+        appears and the program never answers. When a program fails to start and has that
+        mark (read with `/usr/bin/xattr`), `init`, `engine set`, `doctor`, `import`, `fen`,
+        `sync` and the web import say so and show three fixes: `brew install stockfish`
+        then `blunderbook engine clear`, `xattr -d com.apple.quarantine PATH`, or Open
+        Anyway in System Settings > Privacy & Security.
+      - **Checked in a browser at 390 px** with a scratch database, empty and with entries:
+        Log list and detail, Re-test, Patterns and Import. Nothing scrolls sideways. Every
+        view already had its empty state. With the server stopped, each view says "Can't
+        reach Blunderbook. Is blunderbook serve still running?"
 - [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
       ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"
       section: install, `blunderbook init`, then `blunderbook restore <latest backup>` (settings
@@ -529,9 +545,9 @@ uses the next one.
 | `blunderbook doctor [--stockfish PATH]` | Check config, Stockfish, the DB and the last backup (changes nothing) | Done (1.9, 2.1, 2.5) |
 | `blunderbook import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file, save your blunders, and print the report | Done (1.9, 2.3) |
 | `blunderbook fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Log a single position and the move you played | Done (2.4) |
-| `blunderbook serve [--port 8732]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4); `--open` in 7.2 |
-| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Planned (M6) |
-| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Planned (M7) |
+| `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1`: read your blunders, write your notes | Done (3.4, 7.2) |
+| `blunderbook sync [lichess\|chesscom\|all]` | Download new games, then import them | Done (6.4) |
+| `blunderbook print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page | Done (7.1) |
 | `blunderbook backup [--to FOLDER]` | Take a verified snapshot of the DB now | Done (2.5) |
 | `blunderbook restore FILE [--yes]` | Bring back a backup (keeps a copy of the current DB) | Done (2.5) |
 
@@ -539,6 +555,7 @@ uses the next one.
 
 ```sh
 blunderbook serve              # then open http://127.0.0.1:8732/ in your browser
+blunderbook serve --open       # the same, and opens it for you
 blunderbook serve --port 8733  # if 8732 is taken
 ```
 

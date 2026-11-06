@@ -10,6 +10,9 @@ Scores leave this module as :class:`Eval` from White's point of view.
 """
 
 import re
+import shlex
+import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import TracebackType
@@ -182,14 +185,58 @@ def _popen(command: str | Sequence[str], timeout: float) -> chess.engine.SimpleE
         return chess.engine.SimpleEngine.popen_uci(cmd, timeout=timeout)
     except FileNotFoundError:
         raise EngineError("The program wasn't found.") from None
-    except PermissionError:
-        raise EngineError("You don't have permission to run this program.") from None
-    except TimeoutError:
-        raise EngineError(
-            f"It didn't answer within {timeout:g} s, so it may not be a chess engine."
-        ) from None
-    except chess.engine.EngineError, chess.engine.EngineTerminatedError, OSError:
-        raise EngineError("It didn't respond like a UCI chess engine.") from None
+    except (
+        PermissionError,
+        TimeoutError,
+        chess.engine.EngineError,
+        chess.engine.EngineTerminatedError,
+        OSError,
+    ) as exc:
+        program = cmd if isinstance(cmd, str) else cmd[0]
+        if quarantined(program):  # the usual reason a fresh download won't start on a Mac
+            raise EngineError(macos_blocked(program)) from None
+        raise EngineError(_start_failure(exc, timeout)) from None
+
+
+def _start_failure(exc: BaseException, timeout: float) -> str:
+    if isinstance(exc, PermissionError):
+        return "You don't have permission to run this program."
+    if isinstance(exc, TimeoutError):
+        return f"It didn't answer within {timeout:g} s, so it may not be a chess engine."
+    return "It didn't respond like a UCI chess engine."
+
+
+def quarantined(program: str) -> bool:
+    """True when macOS marked the file as downloaded from the internet.
+
+    Gatekeeper then stops an unsigned program such as the Stockfish release: it shows a
+    dialog and the program never answers. Python can't read extended attributes on macOS,
+    so this asks the system's ``xattr`` tool.
+    """
+    if sys.platform != "darwin":
+        return False
+    try:
+        done = subprocess.run(
+            ["/usr/bin/xattr", "-p", "com.apple.quarantine", program],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except OSError, subprocess.SubprocessError:
+        return False
+    return done.returncode == 0
+
+
+def macos_blocked(program: str) -> str:
+    """What to do when macOS won't let a downloaded Stockfish run."""
+    return (
+        "macOS blocked it: it was downloaded from the internet and Apple couldn't check it.\n"
+        "Any one of these fixes it:\n"
+        "  - Install Stockfish with Homebrew: brew install stockfish\n"
+        "    then use that one: blunderbook engine clear\n"
+        f"  - Allow this file: xattr -d com.apple.quarantine {shlex.quote(program)}\n"
+        "  - Or open System Settings > Privacy & Security and click Open Anyway."
+    )
 
 
 def _identify(name: str) -> EngineInfo:

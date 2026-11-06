@@ -5,6 +5,7 @@ the real server in a thread and talks to it over HTTP."""
 import socket
 import threading
 import time
+import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import replace
@@ -64,6 +65,22 @@ def runs(monkeypatch: pytest.MonkeyPatch) -> Runs:
     return seen
 
 
+@pytest.fixture(autouse=True)
+def opened(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Addresses `--open` handed to the browser; a test never opens a real one."""
+    urls: list[str] = []
+
+    def fake_open(url: str, *args: Any, **kwargs: Any) -> bool:
+        host, port = url.removeprefix("http://").rstrip("/").split(":")
+        with closing(socket.create_connection((host, int(port)), timeout=2)):
+            pass  # already listening, so the browser's request waits for the server
+        urls.append(url)
+        return True
+
+    monkeypatch.setattr(webbrowser, "open", fake_open)
+    return urls
+
+
 def add_game(db: Path) -> None:
     game = NewGame(
         fingerprint="fp",
@@ -102,6 +119,39 @@ def test_serves_on_localhost(cfg_file: Path, db_file: Path, runs: Runs, port: in
     assert result.output.endswith("Stopped.\n")
     with closing(socket.socket()) as again:  # the port is let go
         again.bind(("127.0.0.1", port))
+
+
+def test_does_not_open_a_browser_unless_asked(
+    cfg_file: Path, runs: Runs, port: int, opened: list[str]
+) -> None:
+    assert serve(port).exit_code == 0
+    assert opened == []
+
+
+def test_open_shows_the_page_in_the_browser(
+    cfg_file: Path, runs: Runs, port: int, opened: list[str]
+) -> None:
+    result = runner.invoke(app, ["serve", "--port", str(port), "--open"])
+    assert result.exit_code == 0, result.output
+    assert opened == [f"http://127.0.0.1:{port}/"]
+    assert "Opened it in your browser. Press Ctrl+C to stop.\n" in result.output
+    assert runs.addresses == [("127.0.0.1", port)]
+
+
+@pytest.mark.parametrize("failure", ["no browser", "error"])
+def test_open_without_a_browser_still_serves(
+    cfg_file: Path, runs: Runs, port: int, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    def no_browser(url: str, *args: Any, **kwargs: Any) -> bool:
+        if failure == "error":
+            raise webbrowser.Error("could not locate runnable browser")
+        return False
+
+    monkeypatch.setattr(webbrowser, "open", no_browser)
+    result = runner.invoke(app, ["serve", "--port", str(port), "--open"])
+    assert result.exit_code == 0, result.output
+    assert "Couldn't open a browser. Open that address yourself.\n" in result.output
+    assert len(runs.servers) == 1
 
 
 def test_default_port(cfg_file: Path, runs: Runs) -> None:
