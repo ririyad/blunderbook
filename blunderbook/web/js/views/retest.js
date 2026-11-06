@@ -106,11 +106,12 @@ function renderPuzzle() {
   <div class="panel rt">
     <div>
       <div class="board" id="rtBoard"></div>
-      <p class="small" style="margin-top:8px">Tap a piece, then tap where it should go.</p>
+      <p class="small boardnote">Tap a piece, then tap where it should go.</p>
     </div>
     <div class="prompt">
+      <div class="rtprog" aria-hidden="true"><i style="width:${Math.round((100 * index) / queue.length)}%"></i></div>
       <span class="small">Puzzle ${index + 1} of ${queue.length}${practising ? " (practice)" : ""} · ${game}</span>
-      <h2 style="margin-top:6px">${side} to move — find the best move</h2>
+      <h2>${side} to move — find the best move</h2>
       <p class="q">Move ${item.move_no}. In the game you went wrong here. Take your time and check your opponent's threats first.</p>
       <div class="rt-actions">
         <button class="btn ghost" id="rtHint" type="button">Show a hint</button>

@@ -65,6 +65,7 @@ function build(section) {
         <label class="sr" for="fCause">Cause</label>
         <select id="fCause"><option value="">Any cause</option>${CAUSES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
       </div>
+      <p class="count" id="count" aria-live="polite"></p>
       <ul class="list" id="list" aria-label="Entries"></ul>
     </aside>
     <article class="panel" id="detail" aria-label="Entry"></article>
@@ -131,18 +132,21 @@ function renderList() {
   if (!items.length) {
     const text = filtering() ? "No blunders match these filters." : "No entries yet.";
     ul.innerHTML = `<li class="empty">${text}</li>`;
+    $("count").textContent = "";
     return;
   }
+  $("count").textContent = items.length === 1 ? "1 entry" : `${items.length} entries`;
   for (const item of items) {
-    const parts = [esc(item.opponent ? "vs " + item.opponent : "vs Unknown")];
-    if (item.source !== "fen") parts.push(esc(timeControl(item.speed, item.tc_label) || "No time control"));
-    if (item.played_on) parts.push(esc(fmtDate(item.played_on)));
+    const when = [];
+    if (item.source !== "fen") when.push(esc(timeControl(item.speed, item.tc_label) || "No time control"));
+    if (item.played_on) when.push(esc(fmtDate(item.played_on)));
     const li = document.createElement("li");
     li.innerHTML = `<button class="item" type="button" aria-current="${item.id === currentId}">`
       + `<span class="pill p-blunder">${MARK[item.judgment]}</span>`
       + `<span class="mv">${esc(moveLabel(item.move_no, item.my_color) + item.played_san)}</span>`
       + statusPill(item.status, item.due_on)
-      + `<span class="sub">${sourceTag(item.source)} ${parts.join(" · ")}</span></button>`;
+      + `<span class="sub">${sourceTag(item.source)} <span class="opp">vs ${esc(item.opponent || "Unknown")}</span></span>`
+      + `<span class="when">${when.join(" · ")}</span></button>`;
     li.firstChild.addEventListener("click", () => pick(item.id));
     ul.appendChild(li);
   }
@@ -238,10 +242,9 @@ function renderDetail() {
         <div class="mvbox good"><div class="k">Best was</div><div class="v">${esc(e.best_san)}</div><div class="line">${esc(e.best_line_san)}</div></div>
       </div>
       <div class="evalrow">
-        <div class="evalbar"><span>Eval ${fmtEval(e.eval_before)} → <b class="bad-text">${fmtEval(e.eval_after)}</b></span>
-          <div class="bar" role="img" aria-label="Your winning chances fell from ${before}% to ${after}%"><div class="before" style="width:${before}%"></div><div class="after" style="width:${after}%"></div></div>
-          <span>${before}% → ${after}%</span></div>
-        <div class="small">Your winning chances (engine). Eval shown from White's side, like on Lichess.</div>
+        <div class="evalhead"><span>Your winning chances</span><span class="num">${before}% → <b class="bad-text">${after}%</b></span></div>
+        <div class="bar" role="img" aria-label="Your winning chances fell from ${before}% to ${after}%"><div class="before" style="width:${before}%"></div><div class="after" style="width:${after}%"></div></div>
+        <div class="small">Eval ${fmtEval(e.eval_before)} → ${fmtEval(e.eval_after)}, from White's side, like on Lichess.</div>
       </div>
       <div class="grid">
         <div class="cell"><div class="k">Source</div><div class="v">${esc(g.site_label || SOURCE_NAME[g.source])}</div></div>
@@ -258,9 +261,10 @@ function renderDetail() {
       <div class="sec"><label class="lbl" for="tLesson">Lesson — the rule I'll follow next time</label>
         <textarea id="tLesson" placeholder="One rule you can check during a game.">${esc(e.lesson)}</textarea>
         <div class="saved" id="savedMsg" aria-live="polite"></div></div>
-      <div class="sec rtrow">${statusPill(e.status, e.due_on)}
-        <span class="small">Next re-test ${due}</span></div>
-      <div class="sec"><button class="btn ghost danger" type="button" id="delBtn">Delete this entry</button></div>
+      <div class="dfoot">
+        <div class="rtrow">${statusPill(e.status, e.due_on)}<span class="small">Next re-test ${due}</span></div>
+        <button class="btn ghost danger" type="button" id="delBtn">Delete this entry</button>
+      </div>
     </div>
   </div>`;
   drawBoard();
