@@ -34,9 +34,9 @@ _Last updated: 2026-11-05_
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
+| M7 Print + polish | In progress (1/3) | A4 print page, `serve --open`, install docs |
 
-**Next up:** M7.1 Print.
+**Next up:** M7.2 Polish.
 
 In place so far: all of M1 to M6. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -461,8 +461,25 @@ Each item is one small commit, with its tests in the same change. Every commit m
 
 ### M7 Print + polish
 
-- [ ] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
+- [x] **7.1 Print.** `print.html` (A4, black and white, two entries per page, laid out like the paper log)
       and `print --ids / --due --out`.
+      _Done:_ `blunderbook print --out FILE.html [--ids 3,12 | --due]` writes one HTML file that
+      works on its own: `printing.render()` fills `web/print.html` and inlines
+      `web/css/print.css`. Open it and print from the browser.
+      - **Each entry** (half a page): the move and its mark, entry number, players, ratings and
+        date; the board before your move from your side, with your move as an arrow (SVG from
+        python-chess, greys only); I played with the refutation, Best was with the line;
+        source, time control, result, opening, eval and your chances, clock and time on move
+        (`—` when unknown); the twelve causes ticked, with suggestions marked "(suggested)"
+        until you confirm any; What I was thinking and Lesson (ruled lines when empty, cut
+        with "…" past 700 characters); "Re-tested on ___ ☐ Solved ☐ Missed again" and the
+        current schedule.
+      - **Which entries:** all of them in the Log's order, `--ids` in the order given, or
+        `--due`. An unknown id, `--ids` with `--due`, no database or no entries writes nothing
+        and exits 1. Printing never creates or changes the database; the file is written
+        through a `.partial` and renamed.
+      - **Checked by hand** in a browser on a sample of three entries: two per sheet, the
+        board, causes, notes and the re-test line.
 - [ ] **7.2 Polish.** `serve --open`, empty states, clear error messages, check at 390 px wide.
 - [ ] **7.3 Install docs.** Stockfish install steps for macOS, Windows and Linux in this README,
       ending with `blunderbook engine set <program or folder>`. A "Moving to a new computer"

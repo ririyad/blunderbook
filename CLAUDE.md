@@ -98,6 +98,7 @@ blunderbook/
 │   │   ├── patterns.py        # aggregates for the Patterns page
 │   │   └── models.py          # dataclasses: Game, Blunder, Eval, Attempt, ...
 │   ├── importer.py            # orchestrates: PGN text -> games -> analysis -> blunders
+│   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
 │   ├── sources/
 │   │   ├── base.py            # SourceAdapter protocol: fetch_new_pgn(since) -> str
 │   │   ├── lichess.py
@@ -114,6 +115,7 @@ blunderbook/
 │   └── web/                   # static frontend (no build)
 │       ├── index.html
 │       ├── css/app.css
+│       ├── css/print.css      # A4 styles, inlined by `blunderbook print`
 │       ├── js/app.js          # router (hash-based: #log, #retest, #patterns)
 │       ├── js/api.js          # fetch helper: JSON in and out, the server's error message
 │       ├── js/ui.js           # esc(), toast, the error line

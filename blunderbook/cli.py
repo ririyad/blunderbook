@@ -19,7 +19,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from blunderbook import __version__, config, importer, sources
+from blunderbook import __version__, config, importer, printing, sources
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Color, SyncSource, Totals
 from blunderbook.core.source import game_time
@@ -792,6 +792,63 @@ def _listen(port: int) -> socket.socket:
 
 _WSAEADDRINUSE = 10048  # Windows socket error codes
 _WSAEACCES = 10013
+
+
+# ---------------------------------------------------------------- print
+
+
+@app.command("print")
+def print_(
+    out: Annotated[
+        Path, typer.Option("--out", help="The .html file to write. Open it and print it on A4.")
+    ],
+    ids: Annotated[
+        str | None,
+        typer.Option(help="Only these entries, by number, in this order: --ids 3,12."),
+    ] = None,
+    due: Annotated[bool, typer.Option("--due", help="Only entries due for a re-test.")] = False,
+) -> None:
+    """Write your entries as an A4 page to print, two per page, like the paper Blunder Log."""
+    if ids is not None and due:
+        _fail("Use --ids or --due, not both.")
+    wanted = _entry_ids(ids) if ids is not None else None
+    cfg = _load_config()
+    if not config.db_path().exists():
+        _fail("Nothing to print yet: import a PGN first (blunderbook import FILE.pgn).")
+    with closing(_open_database("Can't print: the database can't be used.", cfg)) as conn:
+        if wanted is not None:
+            entries = []
+            for blunder_id in wanted:
+                entry = repo.get_entry(conn, blunder_id)
+                if entry is None:
+                    _fail(f"No entry #{blunder_id}. Nothing was written.")
+                entries.append(entry)
+        else:
+            entries = repo.list_entries(conn, due_by=date.today() if due else None)
+    if not entries:
+        _fail("Nothing is due for a re-test." if due else "No entries to print yet.")
+
+    page = printing.render(entries, today=date.today())
+    if not out.parent.is_dir():
+        _fail(f"There's no folder {out.parent}. Nothing was written.")
+    partial = out.with_name(out.name + ".partial")
+    try:
+        partial.write_text(page, "utf-8")
+        partial.replace(out)
+    except OSError as exc:
+        partial.unlink(missing_ok=True)
+        _fail(f"Can't write {out}: {exc.strerror or exc}")
+    pages = -(-len(entries) // printing.PER_PAGE)
+    typer.echo(f"Wrote {_plural(len(entries), 'entry')} ({_plural(pages, 'page')}) to {out}")
+    typer.echo("Open it in your browser and print it on A4.")
+
+
+def _entry_ids(raw: str) -> list[int]:
+    """``"3, 12,3"`` -> ``[3, 12]``."""
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if not parts or not all(p.isdigit() for p in parts):
+        _fail("--ids takes entry numbers separated by commas, e.g. --ids 3,12.")
+    return list(dict.fromkeys(int(p) for p in parts))
 
 
 # ---------------------------------------------------------------- sync

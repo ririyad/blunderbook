@@ -1,0 +1,68 @@
+/* The A4 Blunder Log (CLAUDE.md §11): black and white, two entries per page, laid out like
+   the paper diary page. `blunderbook print` inlines this file into the page it writes. */
+
+@page { size: A4; margin: 10mm; }
+
+:root { --ink: #1b1b1b; --muted: #5c5c5c; --line: #8c8c8c; --hair: #c8c8c8; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: #e9e7e2; color: var(--ink);
+  font: 9pt/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+h1, .serif { font-family: Georgia, "Times New Roman", serif; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* On screen: each sheet is a white A4 page. */
+.intro { max-width: 190mm; margin: 12mm auto 0; font-size: 10.5pt; }
+.intro h1 { font-size: 18pt; margin: 0 0 2mm; }
+.intro p { margin: 0 0 1.5mm; color: var(--muted); }
+.sheet {
+  width: 210mm; height: 297mm; margin: 8mm auto; padding: 10mm; background: #fff;
+  border: 1px solid var(--hair); display: flex; flex-direction: column; gap: 6mm;
+}
+
+@media print {
+  body { background: #fff; }
+  .screen-only { display: none; }
+  .sheet { width: auto; height: 277mm; margin: 0; padding: 0; border: 0; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+}
+
+/* One entry: half a page. */
+.entry {
+  flex: 1 1 0; min-height: 0; border: 1px solid var(--ink); padding: 4mm 5mm;
+  display: flex; flex-direction: column; gap: 2.5mm; overflow: hidden;
+}
+.entry header { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm;
+  border-bottom: 1px solid var(--ink); padding-bottom: 1.5mm; }
+.entry header h2 { font: 700 13pt/1.1 Georgia, "Times New Roman", serif; margin: 0; }
+.entry header .meta { color: var(--muted); text-align: right; font-size: 8pt; }
+
+.top { display: grid; grid-template-columns: 58mm 1fr; gap: 5mm; }
+.board svg { width: 58mm; height: 58mm; display: block; }
+.facts { display: flex; flex-direction: column; gap: 1.8mm; min-width: 0; }
+.box { border: 1px solid var(--line); padding: 1.5mm 2.5mm; }
+.box .k { font-size: 7pt; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.box .v { font-weight: 700; font-size: 11pt; }
+.box .line { font-size: 8.5pt; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; }
+.grid { display: grid; grid-template-columns: auto 1fr; gap: .4mm 3mm; font-size: 8pt; }
+.grid dt { color: var(--muted); }
+.grid dd { margin: 0; }
+
+.causes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6mm 3mm; font-size: 8.5pt; }
+.causes .tick { display: inline-block; width: 4mm; }
+.causes .sugg { font-size: 7pt; font-style: italic; color: var(--muted); }
+
+.write { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; flex: 1 1 auto; min-height: 0; }
+.write section { display: flex; flex-direction: column; min-height: 0; }
+.write h3 { font-size: 8pt; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 1mm; }
+.write .text { flex: 1 1 auto; min-height: 0; overflow: hidden; white-space: pre-wrap;
+  border-bottom: 1px solid var(--line); }
+.write .rule { border-bottom: 1px solid var(--hair); height: 6mm; }
+
+.retest { display: flex; justify-content: space-between; gap: 4mm; font-size: 9pt;
+  border-top: 1px solid var(--ink); padding-top: 1.5mm; }
+.retest .blank { display: inline-block; width: 32mm; border-bottom: 1px solid var(--ink); }
+.retest .status { color: var(--muted); font-size: 8pt; }
