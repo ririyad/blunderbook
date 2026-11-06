@@ -3,11 +3,17 @@ the rest, so a site changing its API only breaks its own adapter."""
 
 from collections.abc import Iterable, Iterator
 from datetime import datetime
-from typing import Protocol
+from typing import Final, Protocol
+
+import httpx
 
 from blunderbook import __version__
 
-USER_AGENT = f"Blunderbook/{__version__} (local chess mistake library)"
+USER_AGENT: Final = f"Blunderbook/{__version__} (local chess mistake library)"
+# HTTP 429: both sites' docs say to slow down. Lichess: "waiting one minute before retrying".
+WAIT_429_S: Final = 60.0
+LONGEST_WAIT_S: Final = 300.0  # a longer Retry-After stops the sync instead of hanging it
+TRIES: Final = 3  # requests in all, for one URL
 
 
 class SyncError(Exception):
@@ -56,3 +62,12 @@ def games_in(lines: Iterable[str]) -> Iterator[str]:
 
 def _joined(lines: list[str]) -> str:
     return "\n".join(lines).strip() + "\n"
+
+
+def wait_for(response: httpx.Response) -> float:
+    """How long to wait after a 429: Retry-After if it says longer, else one minute."""
+    try:
+        asked = float(response.headers.get("Retry-After", "0"))
+    except ValueError:
+        asked = 0.0
+    return max(WAIT_429_S, asked)

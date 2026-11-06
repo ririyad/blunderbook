@@ -33,10 +33,10 @@ _Last updated: 2026-11-05_
 | M3 API + Log view | Done (4/4) | FastAPI, blunder routes, web shell, Log view, `serve` |
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
-| M6 Sync | In progress (2/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
+| M6 Sync | In progress (3/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Not started | A4 print page, `serve --open`, install docs |
 
-**Next up:** M6.3 Chess.com adapter.
+**Next up:** M6.4 Wiring (`sync` command).
 
 In place so far: all of M1 to M4. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -416,8 +416,24 @@ Each item is one small commit, with its tests in the same change. Every commit m
       - **Tests** use `tests/fixtures/http/lichess_user_games.pgn` (hand-built,
         `TODO(verify)`) through httpx `MockTransport`. A new autouse guard in `conftest.py`
         makes any real request to a host other than this computer fail the test.
-- [ ] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
+- [x] **6.3 Chess.com adapter.** Monthly archives, one request at a time, descriptive User-Agent.
       Only the months from the last synced month onward are downloaded; no HTTP cache.
+      _Done:_ `ChesscomAdapter(username, contact).fetch_new_pgn(since)` reads the archive list,
+      then each month's `/pgn` from the month of `since` (in UTC) onward, oldest first, one
+      game per item.
+      - **Requests:** one at a time, each answered before the next. The User-Agent is
+        `Blunderbook/<version> (local chess mistake library; contact: <contact>)`. The sync
+        needs `[chesscom] contact`; it's never filled in for you. Usernames go in lowercased
+        (`TODO(verify)`).
+      - **Answers:** redirects are followed, and a 410 month is skipped. A 429 waits 60 s (or a
+        longer `Retry-After`), up to three tries, as for Lichess; that rule now lives in
+        `sources/base.py`. A month's bytes are decoded like a PGN file (UTF-8, else cp1252).
+      - **Errors** are a `SyncError`: unknown player, an archive list it can't read, another
+        status (naming the URL path), the network. Games handed over before a failed month
+        stay handed over.
+      - **Tests** use three hand-built fixtures in `tests/fixtures/http/` (`TODO(verify)`),
+        including a daily game. Also fixed a test that only passed on 2026-11-05: the re-test
+        queue fixture now makes its entries due on the day the test runs.
 - [ ] **6.4 Wiring.** `sync` command (CLI only; runs the daily backup check), `sync_state`
       updates, and `init` asks for the Lichess and Chess.com usernames. HTTP fixtures are
       hand-built from the documented formats and marked `TODO(verify)`.

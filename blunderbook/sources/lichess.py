@@ -54,14 +54,19 @@ from urllib.parse import quote
 
 import httpx
 
-from blunderbook.sources.base import USER_AGENT, SyncError, games_in, redact
+from blunderbook.sources.base import (
+    LONGEST_WAIT_S,
+    TRIES,
+    USER_AGENT,
+    SyncError,
+    games_in,
+    redact,
+    wait_for,
+)
 
 BASE_URL: Final = "https://lichess.org"
 # Standard chess only: the importer rejects variants anyway (CLAUDE.md §7.1).
 STANDARD: Final = "ultraBullet,bullet,blitz,rapid,classical,correspondence"
-WAIT_429_S: Final = 60.0  # the spec: "waiting one minute before retrying"
-LONGEST_WAIT_S: Final = 300.0  # a longer Retry-After stops the sync instead of hanging it
-TRIES: Final = 3
 TIMEOUT: Final = httpx.Timeout(60.0, connect=10.0)  # read = the longest gap in the stream
 
 
@@ -129,7 +134,7 @@ class LichessAdapter:
                         self._check(response)
                         yield from games_in(response.iter_lines())
                         return
-                    wait = _wait_for(response)
+                    wait = wait_for(response)
             except httpx.HTTPError as exc:
                 message = f"Can't download your Lichess games: {exc}"
                 raise SyncError(redact(message, self._token)) from None
@@ -158,12 +163,3 @@ def since_ms(since: datetime) -> int:
     if since.tzinfo is None:
         since = since.replace(tzinfo=UTC)
     return int(since.timestamp() * 1000)
-
-
-def _wait_for(response: httpx.Response) -> float:
-    """How long to wait after a 429: Retry-After if it says longer, else one minute."""
-    try:
-        asked = float(response.headers.get("Retry-After", "0"))
-    except ValueError:
-        asked = 0.0
-    return max(WAIT_429_S, asked)
