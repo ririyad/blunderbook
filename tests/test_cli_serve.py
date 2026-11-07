@@ -16,6 +16,7 @@ import chess
 import httpx
 import pytest
 import uvicorn
+from conftest import LATEST, with_next_migration
 from typer.testing import CliRunner
 
 from blunderbook import config
@@ -225,27 +226,19 @@ def test_no_daily_backup_when_off(cfg_file: Path, db_file: Path, runs: Runs, por
     assert backup.list_backups(db_file.parent / "backups") == []
 
 
-def two_migrations() -> tuple[connection.Migration, ...]:
-    real = connection.MIGRATIONS.joinpath("0001_init.sql").read_text("utf-8")
-    return (
-        connection.Migration(1, "0001_init.sql", real),
-        connection.Migration(2, "0002_extra.sql", "CREATE TABLE extra (x INTEGER);"),
-    )
-
-
 def test_upgrade_at_start_is_backed_up(
     cfg_file: Path, db_file: Path, runs: Runs, port: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     add_game(db_file)
     set_backup(cfg_file, auto=False)
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     result = serve(port)
     assert result.exit_code == 0, result.output
     (made,) = backup.list_backups(db_file.parent / "backups")
     assert made.reason == "pre-migrate"
     assert "Backed up the database before upgrading it" in result.output
     with closing(connection.connect(db_file, mode="ro")) as conn:
-        assert connection.user_version(conn) == 2
+        assert connection.user_version(conn) == LATEST + 1
 
 
 def test_no_start_without_the_safety_copy(
@@ -260,7 +253,7 @@ def test_no_start_without_the_safety_copy(
     blocker = tmp_path / "a file"
     blocker.write_bytes(b"")
     set_backup(cfg_file, dir=str(blocker / "bk"), auto=False)
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     result = serve(port)
     assert result.exit_code == 1
     assert "Can't start: the database can't be used.\nCan't back up the database" in result.output

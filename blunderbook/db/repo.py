@@ -23,6 +23,7 @@ from blunderbook.core.models import (
     Color,
     Entry,
     Eval,
+    Explanation,
     Game,
     Judgment,
     NewBlunder,
@@ -459,6 +460,55 @@ def delete_blunder(conn: sqlite3.Connection, blunder_id: int) -> bool:
     """Delete one entry and its re-test history. Its game stays, so importing the game again
     is still skipped. Returns False when there was no such entry."""
     return conn.execute("DELETE FROM blunders WHERE id = ?", (blunder_id,)).rowcount > 0
+
+
+def get_explanation(conn: sqlite3.Connection, blunder_id: int) -> Explanation | None:
+    """The saved AI explanation of an entry, or None."""
+    row = conn.execute(
+        "SELECT blunder_id, text, model, prompt_version, created_at FROM explanations"
+        " WHERE blunder_id = ?",
+        (blunder_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Explanation(
+        blunder_id=row["blunder_id"],
+        text=row["text"],
+        model=row["model"],
+        prompt_version=row["prompt_version"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def save_explanation(
+    conn: sqlite3.Connection,
+    blunder_id: int,
+    *,
+    text: str,
+    model: str,
+    prompt_version: int,
+    now: datetime | None = None,
+) -> Explanation | None:
+    """Save an entry's AI explanation, replacing the one before. None when the entry no
+    longer exists (deleted while the model was writing)."""
+    try:
+        conn.execute(
+            "INSERT INTO explanations (blunder_id, text, model, prompt_version, created_at)"
+            " VALUES (:id, :text, :model, :version, :at)"
+            " ON CONFLICT (blunder_id) DO UPDATE SET text = excluded.text,"
+            " model = excluded.model, prompt_version = excluded.prompt_version,"
+            " created_at = excluded.created_at",
+            {
+                "id": blunder_id,
+                "text": text,
+                "model": model,
+                "version": prompt_version,
+                "at": _timestamp(_moment(now)),
+            },
+        )
+    except sqlite3.IntegrityError:
+        return None
+    return get_explanation(conn, blunder_id)
 
 
 def _blunder_params(game_id: int, b: NewBlunder, stamp: str, due: date) -> dict[str, Any]:

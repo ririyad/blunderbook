@@ -1,5 +1,6 @@
 """The Log's routes (CLAUDE.md §10): list, one entry with its game, your notes, delete."""
 
+import sqlite3
 from datetime import date
 from typing import Annotated
 
@@ -9,7 +10,7 @@ from blunderbook.core import detect, pgn
 from blunderbook.core.models import Color, Entry, Game, Source, Status
 from blunderbook.db import repo
 
-from .common import Db, found, not_found, opponent, tc_label
+from .common import Db, explanation_out, found, not_found, opponent, tc_label
 from .schemas import Cause, EntryOut, EntrySummary, GameOut, MoveOut, NotesIn
 
 router = APIRouter(prefix="/api/blunders", tags=["blunders"])
@@ -37,7 +38,7 @@ def list_blunders(
 
 @router.get("/{blunder_id}")
 def get_blunder(blunder_id: int, conn: Db) -> EntryOut:
-    return _detail(found(repo.get_entry(conn, blunder_id), blunder_id))
+    return _detail(conn, found(repo.get_entry(conn, blunder_id), blunder_id))
 
 
 @router.patch("/{blunder_id}")
@@ -50,7 +51,7 @@ def update_blunder(blunder_id: int, notes: NotesIn, conn: Db) -> EntryOut:
         thinking=notes.thinking,
         lesson=notes.lesson,
     )
-    return _detail(found(entry, blunder_id))
+    return _detail(conn, found(entry, blunder_id))
 
 
 @router.delete("/{blunder_id}", status_code=204)
@@ -122,7 +123,7 @@ def _game(game: Game) -> GameOut:
     )
 
 
-def _detail(entry: Entry) -> EntryOut:
+def _detail(conn: sqlite3.Connection, entry: Entry) -> EntryOut:
     b, g = entry.blunder, entry.game
     me = g.my_color
     them: Color = "black" if me == "white" else "white"
@@ -156,4 +157,5 @@ def _detail(entry: Entry) -> EntryOut:
         created_at=b.created_at,
         updated_at=b.updated_at,
         game=_game(g),
+        explanation=explanation_out(repo.get_explanation(conn, b.id)),
     )

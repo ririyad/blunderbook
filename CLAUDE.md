@@ -100,6 +100,7 @@ blunderbook/
 │   │   ├── explain.py         # facts and prompt for the optional AI explanation
 │   │   └── models.py          # dataclasses: Game, Blunder, Eval, Attempt, ...
 │   ├── importer.py            # orchestrates: PGN text -> games -> analysis -> blunders
+│   ├── ai.py                  # OpenRouter client for the optional AI explanation (§7.10)
 │   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
 │   ├── sources/
 │   │   ├── base.py            # SourceAdapter protocol: fetch_new_pgn(since) -> str
@@ -113,6 +114,7 @@ blunderbook/
 │   │   ├── routes_blunders.py
 │   │   ├── routes_retest.py
 │   │   ├── routes_patterns.py
+│   │   ├── routes_explain.py  # the optional AI explanation
 │   │   └── schemas.py         # pydantic request/response models
 │   └── web/                   # static frontend (no build)
 │       ├── index.html
@@ -214,6 +216,14 @@ CREATE TABLE retest_attempts (
   used_hint    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX retest_attempts_blunder ON retest_attempts (blunder_id);  -- SQLite doesn't index FKs
+
+CREATE TABLE explanations (                    -- optional AI explanations (§7.10)
+  blunder_id      INTEGER PRIMARY KEY REFERENCES blunders(id) ON DELETE CASCADE,
+  text            TEXT NOT NULL,
+  model           TEXT NOT NULL,               -- the OpenRouter model that wrote it
+  prompt_version  INTEGER NOT NULL,            -- core/explain.py PROMPT_VERSION
+  created_at      TEXT NOT NULL
+);
 
 CREATE TABLE sync_state (
   source        TEXT PRIMARY KEY,             -- 'lichess' | 'chesscom'
@@ -574,6 +584,11 @@ POST   /api/import                the PGN as raw bytes (Content-Type: applicatio
                                   -> 202 {job_id}; 409 while another import runs
 GET    /api/import/{job_id}       status, positions done / total, one row per game, summary
 POST   /api/fen                   {fen, move, opponent?, date?} -> the entry, or why it isn't logged
+
+GET    /api/ai                    {enabled, model}: enabled = on, with a key and a model. Never the key
+GET    /api/blunders/{id}/explanation/prompt   {model, system, user}: exactly what would be sent
+POST   /api/blunders/{id}/explanation          asks OpenRouter, saves it (replacing the one before)
+                                  -> {text, model, created_at}
 ```
 
 Settings, the engine path and syncs go through the CLI only. There are no routes for them in
@@ -617,8 +632,17 @@ its own domain name at 127.0.0.1 (DNS rebinding) gets nothing. The `/docs` pages
 they load scripts from a CDN. Each request opens its own connection
 (`connection.connect(any_thread=True)`).
 
-Re-test queue responses must **not** include `best_uci`, `accept_uci`, the played move or
-the lesson. Each item does carry its legal moves (`legal_uci`) for tap-to-move: they don't
+AI explanation (§7.10):
+- config.toml is read on each request, so `blunderbook ai on` works without a restart.
+- The POST refuses another website's `Origin` (403), like the import routes. AI off, or no
+  key or model, is a 503 with the reason and sends nothing. An OpenRouter problem is a 502
+  with a plain message (no key in it), and nothing is saved.
+- The entry detail and the attempt answer carry `explanation` (`null` when there's none).
+- `ai.py` sends `provider.data_collection = "deny"` and no attribution headers. It never
+  retries on its own: each call costs money.
+
+Re-test queue responses must **not** include `best_uci`, `accept_uci`, the played move,
+the lesson or the explanation. Each item does carry its legal moves (`legal_uci`) for tap-to-move: they don't
 give the answer away. The answer comes only from the attempt endpoint, and the server checks
 every attempt.
 

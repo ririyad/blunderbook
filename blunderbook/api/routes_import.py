@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from blunderbook import config
 
-from .common import Db
+from .common import Db, same_origin
 from .jobs import Busy, CantStart, ImportJobs
 from .schemas import FenIn, FenOut, ImportJobOut, ImportStarted
 
@@ -24,14 +24,6 @@ router = APIRouter(prefix="/api", tags=["import"])
 def jobs(request: Request) -> ImportJobs:
     found: ImportJobs = request.app.state.jobs
     return found
-
-
-def same_origin(request: Request) -> None:
-    """Only the page itself may start an import. Browsers send ``Origin`` with every POST;
-    a request without one isn't from a web page."""
-    origin = request.headers.get("origin")
-    if origin is not None and origin != f"{request.url.scheme}://{request.headers.get('host')}":
-        raise HTTPException(status_code=403, detail="Only the Blunderbook page can do this.")
 
 
 @router.post("/import", status_code=202)

@@ -22,7 +22,7 @@ from starlette.types import Scope
 from blunderbook import __version__
 from blunderbook.db.connection import StorageError
 
-from . import routes_blunders, routes_import, routes_patterns, routes_retest
+from . import routes_blunders, routes_explain, routes_import, routes_patterns, routes_retest
 from .jobs import ImportJobs
 
 WEB = Path(__file__).parent.parent / "web"
@@ -98,6 +98,7 @@ def create_app(db_path: Path) -> FastAPI:
     app.include_router(routes_retest.router)
     app.include_router(routes_patterns.router)
     app.include_router(routes_import.router)
+    app.include_router(routes_explain.router)
 
     @app.get("/pieces/{name}.svg", include_in_schema=False)
     def piece(name: str) -> Response:

@@ -14,7 +14,7 @@ from blunderbook.core import retest
 from blunderbook.core.models import Entry
 from blunderbook.db import repo
 
-from .common import Db, found, not_found, opponent
+from .common import Db, explanation_out, found, not_found, opponent
 from .schemas import AttemptIn, AttemptOut, HintOut, RetestItem, RetestQueue
 
 router = APIRouter(prefix="/api/retest", tags=["retest"])
@@ -79,6 +79,7 @@ def attempt(blunder_id: int, body: AttemptIn, conn: Db) -> AttemptOut:
         streak=b.streak,
         due_on=b.due_on,
         next_in_days=(b.due_on - today).days,
+        explanation=explanation_out(repo.get_explanation(conn, b.id)),
     )
 
 

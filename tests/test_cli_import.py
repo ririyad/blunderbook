@@ -13,6 +13,7 @@ from typing import Any
 
 import chess
 import pytest
+from conftest import LATEST, with_next_migration
 from typer.testing import CliRunner
 
 from blunderbook import config
@@ -860,30 +861,21 @@ def test_fen_takes_the_daily_backup_first(ready: Path, stub: StubEngine, db_file
     assert f"Daily backup: {made.path}\n" in result.output
 
 
-def two_migrations() -> tuple[connection.Migration, ...]:
-    """The real migrations plus a made-up next one."""
-    real = connection.MIGRATIONS.joinpath("0001_init.sql").read_text("utf-8")
-    return (
-        connection.Migration(1, "0001_init.sql", real),
-        connection.Migration(2, "0002_extra.sql", "CREATE TABLE extra (x INTEGER);"),
-    )
-
-
 def test_import_backs_up_before_upgrading(
     ready: Path, stub: StubEngine, db_file: Path, cfg_file: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     set_backup(cfg_file, auto=False)  # the safety copy doesn't depend on daily backups
     assert import_fixture("qgd_elephant.pgn").exit_code == 0
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     result = import_fixture("blackburne_shilling.pgn")
     assert result.exit_code == 0, result.output
     (made,) = backups(db_file)
     assert made.reason == "pre-migrate"
     assert f"Backed up the database before upgrading it:\n  {made.path}\n" in result.output
     with closing(connection.connect(made.path, mode="ro")) as conn:
-        assert connection.user_version(conn) == 1
+        assert connection.user_version(conn) == LATEST
     with closing(connection.connect(db_file, mode="ro")) as conn:
-        assert connection.user_version(conn) == 2
+        assert connection.user_version(conn) == LATEST + 1
 
 
 def test_no_upgrade_without_the_safety_copy(
@@ -898,7 +890,7 @@ def test_no_upgrade_without_the_safety_copy(
     blocker = tmp_path / "a file"
     blocker.write_bytes(b"")
     set_backup(cfg_file, dir=str(blocker / "bk"), auto=False)
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     result = import_fixture("blackburne_shilling.pgn")
     assert result.exit_code == 1
     assert (
@@ -907,4 +899,4 @@ def test_no_upgrade_without_the_safety_copy(
         "Can't create the backup folder"
     ) in result.output
     with closing(connection.connect(db_file, mode="ro")) as conn:
-        assert connection.user_version(conn) == 1
+        assert connection.user_version(conn) == LATEST

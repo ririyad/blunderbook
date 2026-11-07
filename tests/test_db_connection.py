@@ -12,7 +12,7 @@ from blunderbook.db import connection
 from blunderbook.db.connection import StorageError
 
 CLAUDE_MD = Path(__file__).parent.parent / "CLAUDE.md"
-TABLES = {"games", "blunders", "retest_attempts", "sync_state"}
+TABLES = {"games", "blunders", "retest_attempts", "sync_state", "explanations"}
 
 
 def tables(conn: sqlite3.Connection) -> set[str]:
@@ -44,8 +44,11 @@ def write_migrations(folder: Path, files: dict[str, str]) -> Path:
 
 def test_migrations_shipped_with_the_app() -> None:
     migrations = connection.load_migrations()
-    assert [(m.number, m.name) for m in migrations] == [(1, "0001_init.sql")]
-    assert connection.latest_version() == 1
+    assert [(m.number, m.name) for m in migrations] == [
+        (1, "0001_init.sql"),
+        (2, "0002_explanations.sql"),
+    ]
+    assert connection.latest_version() == 2
     for migration in migrations:
         assert not re.search(r"^\s*(BEGIN|COMMIT)\b", migration.sql, re.I | re.M)
 
@@ -314,3 +317,24 @@ def test_any_thread_lets_another_thread_use_the_connection(db_file: Path) -> Non
         assert pool.submit(lambda: shared.execute(query).fetchone()[0]).result() == 0
         with pytest.raises(sqlite3.ProgrammingError):
             pool.submit(lambda: plain.execute(query)).result()
+
+
+def test_a_v1_database_with_data_is_upgraded_after_a_safety_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 0002 upgrade a v1 user gets: the hook (the -pre-migrate backup) runs first, the
+    explanations table arrives, and the data stays."""
+    path = tmp_path / "blunderbook.db"
+    first = connection.load_migrations()[:1]
+    with monkeypatch.context() as patch:
+        patch.setattr(connection, "load_migrations", lambda *_: first)
+        with closing(connection.open_db(path, create=True)) as conn:
+            assert connection.user_version(conn) == 1
+            conn.execute("INSERT INTO sync_state (source, username) VALUES ('lichess', 'rashed')")
+
+    calls: list[int] = []
+    with closing(connection.open_db(path, before_migrate=lambda: calls.append(1))) as conn:
+        assert calls == [1]
+        assert connection.user_version(conn) == 2
+        assert "explanations" in tables(conn)
+        assert conn.execute("SELECT username FROM sync_state").fetchone()[0] == "rashed"

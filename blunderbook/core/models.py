@@ -327,6 +327,17 @@ class AttemptStats:
     last_at: datetime
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Explanation:
+    """A saved AI explanation of one entry (CLAUDE.md §7.10)."""
+
+    blunder_id: int
+    text: str
+    model: str  # the OpenRouter model that wrote it
+    prompt_version: int
+    created_at: datetime
+
+
 @dataclass(frozen=True, slots=True)
 class SavedIds:
     """The ids a saved game and its entries got, entries in the order they were given."""

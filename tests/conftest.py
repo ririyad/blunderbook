@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from blunderbook import config
+from blunderbook.db import connection
 
 FAKE_UCI = Path(__file__).parent / "fixtures" / "fake_uci.py"
 
@@ -79,3 +80,17 @@ def fake_engine() -> Callable[..., list[str]]:
         return [sys.executable, "-I", str(FAKE_UCI), *args]
 
     return command
+
+
+# ---------------------------------------------------------------- a newer app
+
+_REAL_MIGRATIONS = connection.load_migrations()
+LATEST = connection.latest_version()
+
+
+def with_next_migration(*_: object) -> tuple[connection.Migration, ...]:
+    """The real migrations plus a made-up next one, as a newer Blunderbook would ship.
+    Patch it over ``connection.load_migrations`` to test an upgrade."""
+    n = LATEST + 1
+    extra = connection.Migration(n, f"{n:04}_extra.sql", "CREATE TABLE extra (x INTEGER);")
+    return (*_REAL_MIGRATIONS, extra)

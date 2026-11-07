@@ -337,3 +337,53 @@ def test_delete_an_entry(conn: sqlite3.Connection, log: dict) -> None:
     assert conn.execute("SELECT count(*) FROM retest_attempts").fetchone()[0] == 0
     assert "fp-elephant" in repo.known_fingerprints(conn)  # importing it again is skipped
     assert ids(repo.list_entries(conn)) == [log["b1"], log["a2"]]
+
+
+# ---------------------------------------------------------------- AI explanations
+
+
+def test_explanation_save_get_replace(conn: sqlite3.Connection) -> None:
+    saved = repo.add_game(conn, new_game(), [new_blunder()], now=NOW)
+    assert saved is not None
+    (blunder_id,) = saved.blunder_ids
+    assert repo.get_explanation(conn, blunder_id) is None
+
+    text = "You played 6. Nxd5.\n\nStockfish's 6. e3 keeps it.  "
+    first = repo.save_explanation(
+        conn, blunder_id, text=text, model="deepseek/deepseek-chat", prompt_version=1, now=NOW
+    )
+    assert first is not None
+    assert first.text == text  # kept exactly
+    assert (first.model, first.prompt_version, first.created_at) == (
+        "deepseek/deepseek-chat",
+        1,
+        NOW,
+    )
+    assert repo.get_explanation(conn, blunder_id) == first
+
+    second = repo.save_explanation(
+        conn, blunder_id, text="Again.", model="other/model", prompt_version=2, now=LATER
+    )
+    assert second is not None
+    assert (second.text, second.model, second.prompt_version, second.created_at) == (
+        "Again.",
+        "other/model",
+        2,
+        LATER,
+    )
+    assert conn.execute("SELECT count(*) FROM explanations").fetchone()[0] == 1
+
+
+def test_explanation_for_a_missing_entry_isnt_saved(conn: sqlite3.Connection) -> None:
+    assert repo.save_explanation(conn, 99, text="x", model="m", prompt_version=1) is None
+    assert conn.execute("SELECT count(*) FROM explanations").fetchone()[0] == 0
+
+
+def test_deleting_an_entry_deletes_its_explanation(conn: sqlite3.Connection) -> None:
+    saved = repo.add_game(conn, new_game(), [new_blunder()], now=NOW)
+    assert saved is not None
+    (blunder_id,) = saved.blunder_ids
+    repo.save_explanation(conn, blunder_id, text="x", model="m", prompt_version=1)
+    assert repo.delete_blunder(conn, blunder_id)
+    assert repo.get_explanation(conn, blunder_id) is None
+    assert conn.execute("SELECT count(*) FROM explanations").fetchone()[0] == 0

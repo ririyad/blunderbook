@@ -17,9 +17,9 @@ _Last updated: 2026-11-07_
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
-| M8 AI explanations | In progress (2/4) | Optional "Explain this blunder" via OpenRouter, your own key |
+| M8 AI explanations | In progress (3/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 
-**Next up:** 8.3, the OpenRouter client, storage and API for AI explanations. v1 is complete. Before relying
+**Next up:** 8.4, the AI explanation on the page (Log and Re-test), and the README. v1 is complete. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
@@ -530,8 +530,23 @@ never writes your thinking or lesson and never confirms a cause.
         and a queen trade, 2 points down mid-exchange), Scholar's mate and the back rank
         (mate in 1), and Légal's trap (a queen won, then mated).
       - CLAUDE.md §7.10 holds the rules.
-- [ ] **8.3 Client, storage, API.** `ai.py` (OpenRouter, checked against its docs), migration
+- [x] **8.3 Client, storage, API.** `ai.py` (OpenRouter, checked against its docs), migration
       `0002_explanations.sql`, `GET /api/ai`, `GET|POST /api/blunders/{id}/explanation[/prompt]`.
+      _Done:_
+      - **OpenRouter docs checked 2026-11-07** and noted at the top of `ai.py`:
+        `max_completion_tokens` (`max_tokens` is deprecated), `provider.data_collection =
+        "deny"` so only providers that don't collect your data answer, no leaderboard
+        headers, and errors that can arrive inside an HTTP 200. Each error gets a plain
+        message with the key redacted. No automatic retry.
+      - **Storage:** `0002_explanations.sql`, one row per entry, deleted with it. A v1
+        database gets the `-pre-migrate` backup before it's upgraded (tested).
+        `repo.get_explanation` / `save_explanation` (replaces the one before).
+      - **API:** `GET /api/ai`, the "What's sent" prompt, and the POST that asks and saves.
+        The entry detail and the Re-test attempt answer carry the explanation; the queue
+        doesn't. `same_origin` moved to `api/common.py` for both POSTs.
+      - Tests use hand-built OpenRouter responses (`tests/fixtures/http/openrouter_*.json`,
+        `TODO(verify)`) on `MockTransport`. The "newer app" upgrade tests now add a made-up
+        migration after the latest, via `conftest.with_next_migration`.
 - [ ] **8.4 Page.** The explanation block in the Log and on the Re-test result (after an
       attempt only), "What's sent", README.
 

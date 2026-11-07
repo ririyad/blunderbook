@@ -73,6 +73,29 @@ class GameOut(BaseModel):
     moves: list[MoveOut]  # the whole mainline; empty if the stored PGN can't be read
 
 
+class ExplanationOut(BaseModel):
+    """A saved AI explanation (CLAUDE.md §7.10)."""
+
+    text: str
+    model: str
+    created_at: datetime
+
+
+class AiOut(BaseModel):
+    """Whether the page shows "Explain this blunder". Never the key."""
+
+    enabled: bool  # on, with a key and a model
+    model: str | None
+
+
+class PromptOut(BaseModel):
+    """Exactly what "Explain this blunder" would send ("What's sent")."""
+
+    model: str | None
+    system: str
+    user: str
+
+
 class EntryOut(BaseModel):
     """One entry with its game, as the Log's detail panel shows it."""
 
@@ -105,6 +128,7 @@ class EntryOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     game: GameOut
+    explanation: ExplanationOut | None = None
 
 
 class NotesIn(BaseModel):
@@ -173,6 +197,7 @@ class AttemptOut(BaseModel):
     streak: int
     due_on: date
     next_in_days: int
+    explanation: ExplanationOut | None = None  # after the attempt only, like the answer
 
 
 class HintOut(BaseModel):

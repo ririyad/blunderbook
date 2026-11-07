@@ -197,6 +197,7 @@ def test_a_solve_is_recorded_and_rescheduled(
         "streak": 1,
         "due_on": (TODAY + timedelta(days=1)).isoformat(),
         "next_in_days": 1,
+        "explanation": None,
     }
     (tried,) = attempts(db_file, ids["elephant"])
     assert (tried.move_uci, tried.solved, tried.used_hint) == ("e2e3", True, False)

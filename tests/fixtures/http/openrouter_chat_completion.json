@@ -1,0 +1,23 @@
+{
+  "id": "gen-1762500000-AbCdEfGhIjKlMnOp",
+  "object": "chat.completion",
+  "created": 1762500000,
+  "model": "deepseek/deepseek-chat",
+  "system_fingerprint": null,
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "You played 6. Nxd5, but that knight on d5 was not defended. After 6... Nxd5 7. Bxd8 Bb4+ 8. Qd2 Bxd2+, the queens come off and you end up a knight for a pawn down.\n\nStockfish's 6. e3 keeps the tension and your material."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 512,
+    "completion_tokens": 74,
+    "total_tokens": 586,
+    "cost": 0.00009
+  }
+}

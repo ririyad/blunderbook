@@ -4,11 +4,11 @@ pre-migrate hook in connection.open_db. Real temp databases, no engine."""
 import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
-from importlib.resources.abc import Traversable
 from pathlib import Path
 
 import chess
 import pytest
+from conftest import LATEST, with_next_migration
 
 from blunderbook.core.models import NewGame
 from blunderbook.db import backup, connection, repo
@@ -376,24 +376,15 @@ def test_restore_stops_when_the_safety_copy_fails(db: Path, tmp_path: Path) -> N
     assert fingerprints(db) == {"first", "second"}
 
 
-def two_migrations(folder: Traversable = connection.MIGRATIONS) -> tuple[connection.Migration, ...]:
-    """The real migrations plus a made-up next one."""
-    real = connection.MIGRATIONS.joinpath("0001_init.sql").read_text("utf-8")
-    return (
-        connection.Migration(1, "0001_init.sql", real),
-        connection.Migration(2, "0002_extra.sql", "CREATE TABLE extra (x INTEGER);"),
-    )
-
-
 def test_restore_upgrades_an_older_backup(
     db: Path, folder: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    saved = backup.take(db, folder, keep=14, now=NOW).backup.path  # schema 1
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    saved = backup.take(db, folder, keep=14, now=NOW).backup.path  # the current schema
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     result = backup.restore(saved, db, folder, now=NOW + timedelta(hours=1))
-    assert (result.version, result.upgraded) == (1, (2,))
+    assert (result.version, result.upgraded) == (LATEST, (LATEST + 1,))
     with closing(connection.connect(db, mode="ro")) as conn:
-        assert connection.user_version(conn) == 2
+        assert connection.user_version(conn) == LATEST + 1
 
 
 # ---------------------------------------------------------------- before_migrate
@@ -421,20 +412,20 @@ def test_open_db_calls_before_migrate_only_for_data_that_needs_upgrading(
     empty = tmp_path / "empty.db"
     with closing(connection.open_db(empty, create=True)):
         pass
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
     with closing(connection.open_db(empty, before_migrate=hook)):
         pass
     assert calls == []  # nothing to lose
 
     with closing(connection.open_db(db, before_migrate=hook)) as conn:
-        assert connection.user_version(conn) == 2
+        assert connection.user_version(conn) == LATEST + 1
     assert calls == [1]
 
 
 def test_a_failing_before_migrate_stops_the_upgrade(
     db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(connection, "load_migrations", two_migrations)
+    monkeypatch.setattr(connection, "load_migrations", with_next_migration)
 
     def hook() -> None:
         raise connection.StorageError("no backup")
@@ -442,4 +433,4 @@ def test_a_failing_before_migrate_stops_the_upgrade(
     with pytest.raises(connection.StorageError, match="no backup"):
         connection.open_db(db, before_migrate=hook)
     with closing(connection.connect(db, mode="ro")) as conn:
-        assert connection.user_version(conn) == 1
+        assert connection.user_version(conn) == LATEST
