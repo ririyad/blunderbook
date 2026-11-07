@@ -1,0 +1,16 @@
+kind = "tactic"
+name = "Smothered mate"
+side = "white"
+fen = "6rk/6pp/8/6N1/8/8/6PP/6K1 w - - 0 1"
+
+idea = """
+A king hemmed in by its own pieces can be mated by a lone knight, which can't be blocked.
+In the corner, behind a rook and pawns, the king has no square at all."""
+
+[[next]]
+move = "Nf7#"
+says = "The knight checks from f7. The king's own rook and pawns take every square."
+
+[[practise]]
+answers = ["Nf7#"]
+prompt = "Black's king is boxed in by its own pieces. Find the mate."

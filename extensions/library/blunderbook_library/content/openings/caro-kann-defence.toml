@@ -1,0 +1,31 @@
+kind = "opening"
+name = "Caro-Kann Defence"
+eco = "B18"
+side = "black"
+moves = "1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4"
+
+idea = """
+c6 prepares d5, so you fight for the centre without blocking your light-squared bishop,
+which can come out to f5 before e6. Solid, with few weaknesses."""
+
+[[next]]
+move = "4... Bf5"
+line = "5. Ng3 Bg6 6. h4 h6"
+says = "The classical line: the bishop comes out, then steps back to g6 when chased."
+
+[[next]]
+move = "4... Nd7"
+line = "5. Qe2"
+says = "Also good, but after 5. Qe2 don't play Ngf6: 6. Nd6 is mate (see the Caro-Kann smothered mate)."
+
+[[practise]]
+after = "1. e4"
+answers = ["c6"]
+
+[[practise]]
+after = "2. d4"
+answers = ["d5"]
+
+[[practise]]
+answers = ["Bf5", "Nd7", "Nf6"]
+prompt = "White's knight has taken on e4. Develop a piece."

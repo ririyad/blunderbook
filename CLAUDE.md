@@ -137,6 +137,11 @@ blunderbook/
 │       ├── js/board.js        # board renderer (ported from the demo)
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
+├── extensions/
+│   └── library/               # the Library extension (§15): its own package, content and tests
+│       ├── blunderbook_library/   # __init__.py (the Extension, commands), content.py,
+│       │                          #   content/{openings,traps,tactics}/*.toml
+│       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
 │   ├── fixtures/http/         # recorded Lichess / Chess.com responses
@@ -808,6 +813,8 @@ Design language (from the demo and the paper template):
 ## 12. Testing
 
 - `uv run pytest` must pass before every commit. `uv run ruff check . && uv run ruff format --check .` too.
+  It runs each extension's tests as well (`testpaths`): the dev environment installs the
+  workspace's extensions.
 - Tests needing Stockfish are marked `@pytest.mark.engine` and skipped when no binary is
   found. Engine tests use a fixed depth (12, one thread) and assert **which move gets
   flagged**, never exact centipawn values. Where the table names a best move, the test checks

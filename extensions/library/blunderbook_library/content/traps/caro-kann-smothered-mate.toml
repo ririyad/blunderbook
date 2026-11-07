@@ -1,0 +1,26 @@
+kind = "trap"
+name = "Caro-Kann smothered mate"
+opening = "Caro-Kann Defence"
+eco = "B17"
+side = "black"
+moves = "1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Nd7 5. Qe2"
+
+idea = """
+White's queen on e2 lines up with your king on the e-file. Bringing the other knight to
+f6 shuts in your king: d7 is taken by your own knight, and the e-pawn can't take on d6.
+The knight jumps to d6 with mate."""
+
+[[next]]
+move = "5... Ngf6"
+line = "6. Nd6#"
+says = "Looks natural, but it takes the king's last square: the knight mates on d6."
+loses = true
+
+[[next]]
+move = "5... Ndf6"
+line = "6. Nxf6+ Nxf6"
+says = "Puts the d7 knight on f6 instead, so d7 stays free. The game is level."
+
+[[practise]]
+answers = ["Ndf6"]
+prompt = "White's queen has come to e2. Find a move that doesn't let a knight mate you."

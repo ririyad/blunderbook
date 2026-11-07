@@ -1,0 +1,26 @@
+[project]
+name = "blunderbook-library"
+version = "0.1.0"
+description = "A Blunderbook extension: openings, traps and tactics to study and practise."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.15"
+dependencies = [
+    "blunderbook",
+    "chess>=1.11.2",
+]
+
+# How Blunderbook finds it (CLAUDE.md §15). The name is the extension's.
+[project.entry-points."blunderbook.extensions"]
+library = "blunderbook_library:extension"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blunderbook_library"
+module-root = ""
+
+[tool.uv.sources]
+blunderbook = { workspace = true }

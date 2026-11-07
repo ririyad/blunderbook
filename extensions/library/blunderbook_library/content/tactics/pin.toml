@@ -1,0 +1,23 @@
+kind = "tactic"
+name = "Pin to the king"
+side = "white"
+fen = "4k3/8/3p4/4n3/8/8/5P2/4R1K1 w - - 0 1"
+
+idea = """
+A piece that stands between an attacker and its king can't move: it's pinned. Attack it
+again, with a pawn if you can, and it's lost. Here the knight on e5 is pinned by your rook,
+and taking it at once loses the rook to the d6 pawn."""
+
+[[next]]
+move = "f4"
+says = "Attacks the pinned knight with a pawn. It can't move, so you win it next move."
+
+[[next]]
+move = "Rxe5+"
+line = "dxe5"
+says = "Takes too soon: the pawn on d6 takes back, and you've lost your rook for a knight."
+loses = true
+
+[[practise]]
+answers = ["f4"]
+prompt = "The knight on e5 is pinned. Find the move that wins it."

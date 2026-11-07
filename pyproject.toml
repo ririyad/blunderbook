@@ -26,6 +26,14 @@ build-backend = "uv_build"
 module-name = "blunderbook"
 module-root = ""
 
+# Extensions are their own packages in this repo (CLAUDE.md §15). The dev environment
+# installs them, so their tests run with `uv run pytest`; the app never imports them.
+[tool.uv.workspace]
+members = ["extensions/*"]
+
+[tool.uv.sources]
+blunderbook-library = { workspace = true }
+
 # ---------------------------------------------------------------- ruff
 
 [tool.ruff]
@@ -43,13 +51,13 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.mypy]
 python_version = "3.15"
-files = ["blunderbook"]
+files = ["blunderbook", "extensions/library/blunderbook_library"]
 warn_unused_configs = true
 warn_redundant_casts = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["blunderbook.core", "blunderbook.core.*"]
+module = ["blunderbook.core", "blunderbook.core.*", "blunderbook_library.content"]
 disallow_any_generics = true
 disallow_subclassing_any = true
 disallow_untyped_calls = true
@@ -65,7 +73,7 @@ extra_checks = true
 # ---------------------------------------------------------------- pytest
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "extensions/library/tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "engine: needs a Stockfish binary; skipped when none is found",
@@ -81,6 +89,7 @@ filterwarnings = [
 
 [dependency-groups]
 dev = [
+    "blunderbook-library",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",

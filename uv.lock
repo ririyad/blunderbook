@@ -2,6 +2,12 @@ version = 1
 revision = 5
 requires-python = ">=3.15"
 
+[manifest]
+members = [
+    "blunderbook",
+    "blunderbook-library",
+]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -92,6 +98,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "blunderbook-library" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -109,9 +116,25 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "blunderbook-library", editable = "extensions/library" },
     { name = "mypy", specifier = ">=2.4.1" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "ruff", specifier = ">=0.17.3" },
+]
+
+[[package]]
+name = "blunderbook-library"
+version = "0.1.0"
+source = { editable = "extensions/library" }
+dependencies = [
+    { name = "blunderbook" },
+    { name = "chess" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "blunderbook", editable = "." },
+    { name = "chess", specifier = ">=1.11.2" },
 ]
 
 [[package]]

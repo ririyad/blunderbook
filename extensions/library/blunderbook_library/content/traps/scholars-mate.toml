@@ -1,0 +1,25 @@
+kind = "trap"
+name = "Scholar's mate"
+opening = "Bishop's Opening"
+eco = "C23"
+side = "black"
+moves = "1. e4 e5 2. Bc4 Nc6 3. Qh5"
+
+idea = """
+The queen and bishop both aim at f7, which only your king defends. The queen also hits
+the e5 pawn, so defending that with a natural move can leave f7 to fall with mate."""
+
+[[next]]
+move = "3... Nf6"
+line = "4. Qxf7#"
+says = "Attacks the queen but leaves f7: the queen takes it with mate."
+loses = true
+
+[[next]]
+move = "3... g6"
+line = "4. Qf3 Nf6"
+says = "Chases the queen. When it comes back to f3, the knight blocks it and you're fine."
+
+[[practise]]
+answers = ["g6", "Qe7"]
+prompt = "White's queen and bishop both aim at f7. Find a move that keeps your king safe."

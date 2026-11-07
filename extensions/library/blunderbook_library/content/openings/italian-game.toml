@@ -1,0 +1,33 @@
+kind = "opening"
+name = "Italian Game"
+eco = "C50"
+side = "white"
+moves = "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5"
+
+idea = """
+You take the centre with e4, attack the e5 pawn with the knight, and put the bishop on
+c4, where it aims at f7, the square next to Black's king that only the king defends.
+Then you castle and prepare d4 with c3."""
+
+[[next]]
+move = "4. c3"
+line = "4... Nf6 5. d3"
+says = "The Giuoco Piano: c3 prepares d4, and d3 keeps the e4 pawn defended."
+
+[[next]]
+move = "4. b4"
+line = "4... Bxb4 5. c3"
+says = "The Evans Gambit: a pawn for quick development and the centre."
+
+[[practise]]
+after = "1... e5"
+answers = ["Nf3"]
+
+[[practise]]
+after = "2... Nc6"
+answers = ["Bc4"]
+prompt = "Develop the bishop to its Italian square."
+
+[[practise]]
+answers = ["c3", "O-O", "d3"]
+prompt = "Black has mirrored you with 3... Bc5. Play a calm move of the main line."

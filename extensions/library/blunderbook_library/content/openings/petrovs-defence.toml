@@ -1,0 +1,23 @@
+kind = "opening"
+name = "Petrov's Defence"
+eco = "C42"
+side = "black"
+moves = "1. e4 e5 2. Nf3 Nf6 3. Nxe5 d6 4. Nf3 Nxe4 5. d4 d5"
+
+idea = """
+Instead of defending e5 you attack e4. If White takes on e5, chase the knight back with
+d6 first and only then take on e4: taking at once lets White's queen come to e2."""
+
+[[practise]]
+after = "2. Nf3"
+answers = ["Nf6", "Nc6"]
+
+[[practise]]
+after = "3. Nxe5"
+answers = ["d6"]
+prompt = "White took on e5. Chase the knight first: don't take on e4 yet."
+
+[[practise]]
+after = "4. Nf3"
+answers = ["Nxe4"]
+prompt = "The knight has gone back. Now win your pawn back."

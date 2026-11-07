@@ -1,0 +1,26 @@
+kind = "trap"
+name = "Légal's trap"
+opening = "Philidor Defence"
+eco = "C41"
+side = "black"
+moves = "1. e4 e5 2. Nf3 d6 3. Bc4 Bg4 4. Nc3 g6 5. Nxe5"
+
+idea = """
+Your bishop on g4 pins White's knight to the queen, so the knight seems stuck. White
+moves it anyway with 5. Nxe5 and leaves the queen to be taken. Taking it loses at once:
+the bishop checks on f7 and the other knight mates on d5."""
+
+[[next]]
+move = "5... Bxd1"
+line = "6. Bxf7+ Ke7 7. Nd5#"
+says = "Takes the queen. The bishop and both knights mate your king in two moves."
+loses = true
+
+[[next]]
+move = "5... dxe5"
+line = "6. Qxg4"
+says = "Takes the knight. White wins the bishop back and is a pawn up, but the game goes on."
+
+[[practise]]
+answers = ["dxe5"]
+prompt = "White has just played 5. Nxe5 and left the queen on d1. Find the move that doesn't lose."

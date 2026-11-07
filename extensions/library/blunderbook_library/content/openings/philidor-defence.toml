@@ -1,0 +1,23 @@
+kind = "opening"
+name = "Philidor Defence"
+eco = "C41"
+side = "black"
+moves = "1. e4 e5 2. Nf3 d6 3. d4 exd4 4. Nxd4 Nf6 5. Nc3 Be7"
+
+idea = """
+You defend e5 with the d-pawn: solid, but your bishop on f8 is shut in for a while.
+When White strikes with d4, take on d4 and develop quickly: knight to f6, bishop to e7,
+then castle."""
+
+[[practise]]
+after = "2. Nf3"
+answers = ["d6", "Nc6"]
+
+[[practise]]
+after = "3. d4"
+answers = ["exd4", "Nf6", "Nd7"]
+
+[[practise]]
+after = "4. Nxd4"
+answers = ["Nf6"]
+prompt = "White's knight is back in the centre. Develop and hit the e4 pawn."

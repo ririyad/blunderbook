@@ -362,6 +362,28 @@ blunderbook ai off                     # hides the button; keeps the key and wha
   tried. An explanation costs a fraction of a cent on most models; check prices on
   openrouter.ai.
 
+### Extensions
+
+Extensions are separate packages that add to Blunderbook: a tab, commands, a database of
+their own. They can read your Log but never change it. Install one with the app, then turn
+it on:
+
+```sh
+uv tool install --reinstall . --with ./extensions/library
+blunderbook ext enable library
+```
+
+`blunderbook ext list` shows what's installed and on; `blunderbook ext disable NAME` turns
+one off and keeps its data.
+
+**Library** (in progress) holds openings, traps and tactics to study and practise. Its tab
+and practise come later; for now it has its starter set of 15 entries and two commands:
+
+- `blunderbook library list` lists them.
+- `blunderbook library check [FOLDER]` checks every entry: its fields, and that every line
+  and every practise answer is a legal move. Each entry is a TOML file, described in
+  [extensions/library/README.md](extensions/library/README.md).
+
 ### Print your Blunder Log
 
 ```sh
@@ -543,6 +565,8 @@ back to the next one.
 | `blunderbook ai on` / `off` | Show or hide the "Explain this blunder" button. |
 | `blunderbook ext list` | Show installed extensions and which are on. |
 | `blunderbook ext enable NAME` / `disable NAME` | Turn an extension on or off; restart `serve` to see it. Turning one off keeps its data. |
+| `blunderbook library list` | List the Library's entries (with the Library on). |
+| `blunderbook library check [FOLDER]` | Check the Library's entries, or a folder of your own. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games
@@ -583,8 +607,8 @@ providers that may keep requests. Pick another with `blunderbook ai model NAME`.
 ## Development
 
 ```sh
-uv sync                                        # install dependencies into .venv
-uv run pytest                                  # all tests; engine tests skip without Stockfish
+uv sync                                        # install dependencies (and the extensions) into .venv
+uv run pytest                                  # all tests, the extensions' too; engine tests skip without Stockfish
 uv run pytest -m engine                        # only the tests that run Stockfish
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                                    # strict on blunderbook/core
@@ -595,6 +619,8 @@ uv run mypy                                    # strict on blunderbook/core
   dependencies.
 - **Tests:** they never call Lichess or Chess.com; sync tests use recorded responses in
   `tests/fixtures/http/`.
+- **Extensions** live in `extensions/<name>/`, each its own package in a uv workspace, with its
+  own tests in `extensions/<name>/tests/`.
 
 Read these before changing anything:
 - [CLAUDE.md](CLAUDE.md) is the full specification: product rules, data model, analysis rules

@@ -1,0 +1,18 @@
+kind = "tactic"
+name = "Knight fork"
+side = "white"
+fen = "r3k3/8/8/3N4/8/8/4PPP1/4K3 w - - 0 1"
+
+idea = """
+A knight attacks squares that can't attack it back along lines, so a check from a knight
+that also hits another piece wins that piece. Look for squares that touch the king and a
+rook or queen at once."""
+
+[[next]]
+move = "Nc7+"
+line = "Kd7 Nxa8"
+says = "Checks the king and attacks the rook. The king moves, and the rook falls: you are a knight and three pawns up."
+
+[[practise]]
+answers = ["Nc7+"]
+prompt = "Find the knight move that wins the rook."

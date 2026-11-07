@@ -20,10 +20,10 @@ _Last updated: 2026-11-07_
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
-| M11 Library | Not started | Extension: openings, traps and tactics to study and practise |
+| M11 Library | In progress (1/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 11.1, the Library extension's package, content format and starter entries. Still
+**Next up:** 11.2, the Library's API and page: the index and an entry's view. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -47,7 +47,8 @@ against hand-built responses only; no real download has been checked yet).
 "Explain this blunder" asks OpenRouter, with your own key, to put Stockfish's lines into words
 (off until you turn it on). Extensions can be installed and turned on: each adds its own tab,
 routes, commands and database, is backed up with yours, and can read your Log but never change
-it. None ships yet: Library (M11) and Collection (M12) are the first.
+it. The first, Library (M11), has its content and its `check` and `list` commands; its page
+and practise come next. Collection (M12) follows.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -730,7 +731,39 @@ that steps through the whole game with your blunders marked. No delete in this m
 
 ### M11 Library (extension)
 
-- [ ] **11.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
+- [x] **11.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
+      _Done:_
+      - **The package:** `extensions/library/`, its own `pyproject.toml` with the
+        `blunderbook.extensions` entry point. The repo is now a uv workspace: the dev
+        environment installs it, so `uv run pytest` runs its tests (`testpaths`) and mypy
+        checks it (strict on `content.py`). It imports only the host API (a test checks).
+        No new third-party dependency.
+      - **The format** (`extensions/library/README.md`): one TOML file per entry in
+        `content/openings`, `traps` or `tactics`, its name the entry's id. `kind`, `name`,
+        `side` (the side you practise as), `opening` and `eco` (optional), `idea`, then
+        `moves` and/or a start `fen`; `[[next]]` replies at the end of the line (`move`,
+        `line`, `says`, `loses`); at least one `[[practise]]` (`after`, `answers`, `prompt`).
+      - **The checker** (`content.py`, pure): plays every line with python-chess. Moves must
+        be legal and written as python-chess writes them (`Bxf7+`, `Nd5#`, so a mate claim is
+        checked too). Move numbers are optional, and checked when given. Each practise
+        position has your side to move, its answers are legal, the line's own next move is one
+        of them, and no move marked `loses` is. Unknown fields, a bad ECO code or FEN, a file in
+        the wrong folder or a repeated name are problems too. Each problem names the file and
+        the place: "traps/legal-trap.toml: next 1: 7. Nd6# isn't legal after 6... Ke7."
+      - **15 starter entries:** 5 openings (Italian, QGD, Petrov, Philidor, Caro-Kann), 6 traps
+        (Légal, Blackburne Shilling, Elephant, Petrov's queen trap, Scholar's mate, Caro-Kann
+        smothered mate: each is a blunder from a §12 fixture game, for 11.4) and 4 tactics
+        (back-rank mate, pin, knight fork, smothered mate).
+      - **Checked with Stockfish** (depth 18, by hand, not in the tests): every answer is
+        sound and every `loses` move loses or throws the position away. That took out
+        5. Ng4 (−4.9) from the Blackburne Shilling answers and 5... e6 (−0.7) from the
+        smothered mate's, gave the knight fork three pawns (it was a drawn ending), and made
+        the Petrov line's text say White is a little better.
+      - **Commands:** `blunderbook library check [FOLDER]` (exit 1 on a problem) and
+        `blunderbook library list`. No page yet, so no tab: `/api/extensions` lists only
+        extensions with a page.
+      - **Checked by hand:** `uv tool install . --with ./extensions/library` in a scratch
+        tool folder, then `ext list`, `ext enable library` and both commands.
 - [ ] **11.2** API, index and entry views (board through the mainline and each consequence).
 - [ ] **11.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
 - [ ] **11.4** "Your entries in this opening", read from your Log.
@@ -925,6 +958,18 @@ None open.
   - The game collection is general, for anyone's games, so it's not "GM analysis". On
     2026-11-07 it was renamed Collection, as Games became a core tab (below).
   - (CLAUDE.md §1.7, §15)
+- **2026-11-07: The Library's content (11.1).**
+  - One TOML file per entry, so you can read, edit and add entries without code. The
+    checker runs before anything uses them, and on demand (`blunderbook library check`).
+  - `side` is the side you practise as, and the board faces it: for a trap, the side that
+    must avoid it.
+  - Practise answers are listed by hand, not asked of Stockfish when you practise: the
+    Library works without an engine, and its answers stay the same. They were checked with
+    Stockfish when written; more than one can count as right.
+  - `loses` marks a reply that falls into the trap or throws the position away.
+  - The extension lives in this repo as a uv workspace member, installed in the dev
+    environment so one `uv run pytest` runs everything.
+  - (CLAUDE.md §4, §12, §15)
 - **2026-11-07: A Games tab in core (M10).**
   - Your own imported games are about your own mistakes, so they're core, not an extension.
   - Grouped by the import they came from, which the database now remembers (`imports`), or

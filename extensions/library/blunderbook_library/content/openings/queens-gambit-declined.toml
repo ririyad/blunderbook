@@ -1,0 +1,32 @@
+kind = "opening"
+name = "Queen's Gambit Declined"
+eco = "D53"
+side = "white"
+moves = "1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O"
+
+idea = """
+You offer the c-pawn to pull Black's d-pawn away from the centre. Black declines with
+e6 and keeps d5. Your knight and bishop pressure d5 and the knight on f6; then you
+develop with e3 and Nf3 and castle."""
+
+[[next]]
+move = "6. Nf3"
+line = "6... h6 7. Bh4"
+says = "Develops the last minor piece and keeps the pin after h6."
+
+[[practise]]
+after = "1... d5"
+answers = ["c4"]
+
+[[practise]]
+after = "2... e6"
+answers = ["Nc3", "Nf3"]
+
+[[practise]]
+after = "3... Nf6"
+answers = ["Bg5", "Nf3", "cxd5"]
+
+[[practise]]
+after = "4... Be7"
+answers = ["e3", "Nf3"]
+prompt = "Black has unpinned with Be7. Keep developing, and don't take on d5 yet."
