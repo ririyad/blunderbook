@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 
 from blunderbook import config
-from blunderbook.config import BackupConfig, ChesscomConfig, Config, LichessConfig, Thresholds
+from blunderbook.config import (
+    AiConfig,
+    BackupConfig,
+    ChesscomConfig,
+    Config,
+    LichessConfig,
+    Thresholds,
+)
 
 
 def test_missing_file_gives_defaults(tmp_path: Path) -> None:
@@ -96,6 +103,7 @@ def test_save_then_load_round_trip(tmp_path: Path, stockfish_path: str) -> None:
         lichess=LichessConfig(username="rashed", token="lip_secret"),
         chesscom=ChesscomConfig(username="rashed_blitz", contact="me@example.com"),
         backup=BackupConfig(dir=r"%OneDrive%\Blunderbook", keep=30, auto=False),
+        ai=AiConfig(enabled=True, model="deepseek/deepseek-chat", key="sk-or-v1-secret"),
     )
     path = config.save(cfg, tmp_path / "nested" / "config.toml")
     assert path.read_text("utf-8").startswith("# Blunderbook settings.")
@@ -109,6 +117,7 @@ def test_rendered_defaults_parse_and_use_literal_strings_for_paths() -> None:
     data = tomllib.loads(text)
     assert data["thresholds"]["blunder"] == 0.15
     assert data["backup"] == {"dir": "", "keep": 14, "auto": True}
+    assert data["ai"] == {"enabled": False, "model": "", "key": ""}
 
 
 def test_backup_defaults(tmp_path: Path) -> None:
@@ -182,3 +191,36 @@ def test_token_never_in_repr_or_str() -> None:
     assert "lip_secret" not in repr(cfg)
     assert "lip_secret" not in str(cfg)
     assert "lip_secret" not in repr(cfg.lichess)
+
+
+def test_ai_key_never_in_repr_or_str() -> None:
+    cfg = Config(ai=AiConfig(enabled=True, model="m", key="sk-or-v1-secret"))
+    assert "sk-or-v1-secret" not in repr(cfg)
+    assert "sk-or-v1-secret" not in str(cfg)
+    assert "sk-or-v1-secret" not in repr(cfg.ai)
+
+
+def test_ai_values_are_trimmed_and_checked(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[ai]\nenabled = true\nmodel = " m/x "\nkey = " k "\n', "utf-8")
+    assert config.load(path).ai == AiConfig(enabled=True, model="m/x", key="k")
+    path.write_text('[ai]\nenabled = "yes"\n', "utf-8")
+    with pytest.raises(config.ConfigError, match=r"ai\.enabled must be true or false"):
+        config.load(path)
+
+
+@pytest.mark.parametrize(
+    ("ai", "problem"),
+    [
+        (AiConfig(), "AI explanations are off."),
+        (AiConfig(enabled=True, model="m"), "No OpenRouter key is set."),
+        (AiConfig(enabled=True, key="k"), "No model is set."),
+        (AiConfig(enabled=True, model="m", key="k"), None),
+    ],
+)
+def test_ai_problem(ai: AiConfig, problem: str | None) -> None:
+    found = config.ai_problem(Config(ai=ai))
+    if problem is None:
+        assert found is None
+    else:
+        assert found is not None and found.startswith(problem)

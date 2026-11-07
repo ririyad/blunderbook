@@ -22,8 +22,9 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
    evals, best line, game metadata, clock data and *suggested* causes. It never writes
    "What I was thinking" or "Lesson", and never confirms a cause on the user's behalf.
 3. **Local-first and private.** All data lives in one SQLite file on the user's machine.
-   No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, and
-   only when the user runs a sync. Backups are local files too: the app never uploads them.
+   No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, when
+   the user runs a sync, and in the optional AI explanation (off by default), when the user
+   presses its button. Backups are local files too: the app never uploads them.
    For an off-site copy, the user points the backup folder at a folder their cloud drive syncs.
 4. **Degrade gracefully.** Missing headers, ratings or clock times are normal (OTB games,
    typed-up score sheets). Show "—", skip the features that need the missing data, never fail
@@ -59,7 +60,7 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
 - **FastAPI + Uvicorn**: local web server and JSON API.
 - **SQLite** via the stdlib `sqlite3` module, plus plain numbered SQL migrations. No ORM.
 - **Typer**: CLI.
-- **httpx**: HTTP in sync adapters only.
+- **httpx**: HTTP in sync adapters and the optional AI explanation (`ai.py`) only.
 - **platformdirs**: config and data locations.
 - **pytest**, **ruff** (lint and format), **mypy** (strict on `blunderbook/core`).
 - Frontend: vanilla HTML/CSS/JS (ES modules). No frontend dependencies: the API sends the
@@ -79,7 +80,7 @@ blunderbook/
 ├── blunderbook/
 │   ├── __init__.py
 │   ├── cli.py                 # Typer app: init, doctor, engine, import, fen, sync, serve,
-│   │                          #   print, backup, restore
+│   │                          #   print, backup, restore, ai
 │   ├── config.py              # load/save config.toml, paths via platformdirs, Stockfish lookup
 │   ├── db/
 │   │   ├── connection.py      # sqlite3 connection, PRAGMAs, migration runner
@@ -276,9 +277,15 @@ contact = ""                          # used in the User-Agent header Chess.com 
 dir = ""                              # empty = <data folder>/backups; may be a synced folder
 keep = 14                             # newest backups kept (1 or more)
 auto = true                           # back up once a day before commands that change data
+
+[ai]                                  # optional "Explain this blunder" (see §7.10)
+enabled = false
+model = ""                            # an OpenRouter model id; no default
+key = ""                              # OpenRouter API key; never commit, never log
 ```
 
-Never print the Lichess token, never write it to the DB, and redact it from error messages.
+Never print the Lichess token or the OpenRouter key, never write them to the DB, and redact
+them from error messages.
 
 The app writes config.toml from a fixed, commented template (stdlib `tomllib` can only read).
 Your own comments aren't kept, and strings are written as TOML literal strings when possible,
@@ -500,6 +507,10 @@ They return **PGN text only**. The importer does everything else.
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` opens the page in the browser once the port listens; no browser is a message, not a failure. Imports started on the page run inside it. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
+| `ai show` | AI explanations on or off, the model, and whether a key is set (never the key). |
+| `ai set-key` | Ask for the OpenRouter key with hidden input and save it. Empty input removes it. |
+| `ai model NAME` | Save the OpenRouter model id. No network check. |
+| `ai on` / `ai off` | `on` refuses while the key or model is missing. `off` keeps the key, the model and saved explanations. |
 | `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
 
@@ -510,7 +521,8 @@ Exit codes: `import` exits 1 only when it can't run (the file can't be read, it 
 games, the database can't be used, there's no Stockfish while some game is ready, or the
 engine fails; in that last case the games done so far are saved and reported first, and
 importing the file again finishes the rest). A report with needs-side games or errors exits 0.
-`doctor` exits 1 when it finds a problem. Warnings (an old backup, a missing backup folder)
+`doctor` exits 1 when it finds a problem (AI on with no key or model is one; it never calls
+OpenRouter). Warnings (an old backup, a missing backup folder)
 are shown but don't change the exit code. `serve` exits 1 only when it can't start (bad
 config, busy port, a database it can't use).
 

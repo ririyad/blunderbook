@@ -109,6 +109,13 @@ class BackupConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AiConfig:
+    enabled: bool = False  # off until you turn it on with `blunderbook ai on`
+    model: str = ""  # an OpenRouter model id; no default, you choose
+    key: str = field(default="", repr=False)  # OpenRouter API key: never printed, never logged
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     my_names: tuple[str, ...] = ()
     stockfish_path: str = ""
@@ -119,6 +126,19 @@ class Config:
     lichess: LichessConfig = field(default_factory=LichessConfig)
     chesscom: ChesscomConfig = field(default_factory=ChesscomConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
+    ai: AiConfig = field(default_factory=AiConfig)
+
+
+def ai_problem(config: Config) -> str | None:
+    """Why AI explanations can't run, in plain words, or None when they can."""
+    ai = config.ai
+    if not ai.enabled:
+        return "AI explanations are off. Turn them on with: blunderbook ai on"
+    if not ai.key.strip():
+        return "No OpenRouter key is set. Set it with: blunderbook ai set-key"
+    if not ai.model.strip():
+        return "No model is set. Set it with: blunderbook ai model NAME"
+    return None
 
 
 # ---------------------------------------------------------------- load
@@ -163,6 +183,7 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
     li = root.table("lichess")
     cc = root.table("chesscom")
     bk = root.table("backup")
+    ai = root.table("ai")
     d = Config()
     dt = d.thresholds
     thresholds = Thresholds(
@@ -186,6 +207,11 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
             dir=bk.text("dir", d.backup.dir),
             keep=bk.whole("keep", d.backup.keep, minimum=1),
             auto=bk.flag("auto", d.backup.auto),
+        ),
+        ai=AiConfig(
+            enabled=ai.flag("enabled", d.ai.enabled),
+            model=ai.text("model", d.ai.model).strip(),
+            key=ai.text("key", d.ai.key).strip(),
         ),
     )
 
@@ -255,6 +281,7 @@ def save(config: Config, path: Path | None = None) -> Path:
 def render(config: Config) -> str:
     """The full config.toml text for ``config``. Comments come from this template."""
     t, li, cc, bk = config.thresholds, config.lichess, config.chesscom, config.backup
+    ai = config.ai
     lines = [
         "# Blunderbook settings.",
         "# The app rewrites this file when you change a setting, so comments you add",
@@ -299,6 +326,17 @@ def render(config: Config) -> str:
         f"keep = {bk.keep}",
         "# Back up once a day before import, fen, sync and serve.",
         f"auto = {'true' if bk.auto else 'false'}",
+        "",
+        "# Optional AI explanations of a blunder, through OpenRouter (openrouter.ai), with",
+        '# your own key. Off by default. Nothing is sent until you press "Explain this',
+        "# blunder\" on the page: the position and Stockfish's lines, never names or notes.",
+        "# Set with: blunderbook ai set-key, blunderbook ai model NAME, blunderbook ai on",
+        "[ai]",
+        f"enabled = {'true' if ai.enabled else 'false'}",
+        "# An OpenRouter model id, as listed on openrouter.ai/models.",
+        f"model = {_toml_str(ai.model)}",
+        "# Your OpenRouter API key. Never commit or share this file.",
+        f"key = {_toml_str(ai.key)}",
     ]
     return "\n".join(lines) + "\n"
 

@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-06_
+_Last updated: 2026-11-07_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -17,9 +17,11 @@ _Last updated: 2026-11-06_
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
+| M8 AI explanations | In progress (1/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 
-**Next up:** v1 is complete. Before relying on sync, try one real `blunderbook sync` and record
-the responses (the fixtures are still hand-built, `TODO(verify)`).
+**Next up:** 8.2, the facts and prompt for an AI explanation. v1 is complete. Before relying
+on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
+hand-built, `TODO(verify)`).
 
 In place: all of M1 to M7. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
@@ -491,8 +493,37 @@ Each item is one small commit, with its tests in the same change. Every commit m
       and Moving to a new computer. The download page was checked on 2026-11-06 (Stockfish 19,
       universal builds). The winget package isn't checked on Windows yet (`TODO(verify)`).
 
-**Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings page, opt-in LLM "coach" explanation, Anki / Lichess-study export, mobile
-PWA.
+### M8 AI explanations (optional, off by default)
+
+An "Explain this blunder" button that turns what Blunderbook already knows (the position,
+Stockfish's lines, board facts from python-chess) into 3–4 plain sentences, through OpenRouter
+with your own key and a model you choose. The model only explains the facts it's given; it
+never writes your thinking or lesson and never confirms a cause.
+
+- [x] **8.1 Config + CLI.** `[ai]` in config.toml (`enabled`, `model`, `key`), and
+      `blunderbook ai show | set-key | model NAME | on | off`.
+      _Done:_
+      - **The key** is handled like the Lichess token: not in `repr`, never printed (`ai show`
+        and `doctor` only say "set"), typed hidden by `ai set-key` so it isn't in your shell
+        history. Empty input removes it.
+      - **No default model:** you pick one. `ai model` saves it without a network check.
+      - **`ai on`** refuses while the key or model is missing; `ai off` keeps both.
+        `config.ai_problem()` gives the plain reason, for the CLI now and the API in 8.3.
+      - **`doctor`** shows an AI row: off, or on with the model. On with no key or model is a
+        problem. It never calls OpenRouter.
+      - CLAUDE.md principle #3, §3, §6 and §9 now name the AI explanation as the one other place
+        that makes a network call, only when you press its button.
+- [ ] **8.2 Facts + prompt.** `core/explain.py` (pure): the facts sent (refutation played out
+      with each capture, pieces left hanging, mate threats, the best move, evals in words,
+      clock) and the prompt. Never player names, ratings or your notes.
+- [ ] **8.3 Client, storage, API.** `ai.py` (OpenRouter, checked against its docs), migration
+      `0002_explanations.sql`, `GET /api/ai`, `GET|POST /api/blunders/{id}/explanation[/prompt]`.
+- [ ] **8.4 Page.** The explanation block in the Log and on the Re-test result (after an
+      attempt only), "What's sent", README.
+
+**Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
+page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
+digest), Anki / Lichess-study export, mobile PWA.
 
 ---
 
@@ -649,3 +680,14 @@ None open.
   paper Blunder Log it replaces), how to install and use it, with real example output, how
   blunders are judged, the settings and the commands. The status, roadmap and decisions moved
   here, to `docs/ROADMAP.md`. Screenshots are in `docs/images/`. (CLAUDE.md §4, §14)
+- **2026-11-07: AI explanations (M8).**
+  - Optional and off by default, through OpenRouter with your own key, so any model works by
+    changing one string. Set up on the CLI (`blunderbook ai …`); the page has no settings.
+  - The model gets engine facts only: the position, the moves, Stockfish's lines, evals, the
+    clock and board facts python-chess works out. Never player names, ratings or your notes.
+  - It explains; it doesn't analyse. It's told to use only the lines it's given.
+  - One saved explanation per entry, so each is paid for once. "Explain again" replaces it.
+  - Shown in the Log, and on the Re-test result only after your attempt.
+  - The page shows exactly what will be sent ("What's sent") before you press the button.
+    No confirm dialog.
+  - (CLAUDE.md §1.3, §6, §9)

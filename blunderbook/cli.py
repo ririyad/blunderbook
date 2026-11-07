@@ -2,7 +2,7 @@
 
 Commands arrive milestone by milestone (see the README roadmap):
 engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
-serve (3.4) · sync (6.4) · print (7.1).
+serve (3.4) · sync (6.4) · print (7.1) · ai (8.1).
 """
 
 import errno
@@ -38,6 +38,12 @@ engine_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(engine_app, name="engine")
+
+ai_app = typer.Typer(
+    help="Set up the optional AI explanations (OpenRouter, your own key).",
+    no_args_is_help=True,
+)
+app.add_typer(ai_app, name="ai")
 
 
 def _show_version(value: bool) -> None:
@@ -111,6 +117,85 @@ def engine_clear() -> None:
         config.save(replace(cfg, stockfish_path=""))
         typer.echo("Cleared. Blunderbook will look for stockfish on PATH.")
     _env_override_note()
+
+
+# ---------------------------------------------------------------- ai
+
+
+@ai_app.command("show")
+def ai_show() -> None:
+    """Show whether AI explanations are on, the model, and whether a key is set."""
+    cfg = _load_config()
+    typer.echo(f"AI explanations  {'on' if cfg.ai.enabled else 'off'}")
+    typer.echo(f"Model            {cfg.ai.model or 'not set'}")
+    typer.echo(f"OpenRouter key   {'set' if cfg.ai.key else 'not set'}")
+    problem = config.ai_problem(cfg)
+    if cfg.ai.enabled and problem is not None:
+        typer.echo(f"\n{problem}")
+
+
+@ai_app.command("set-key")
+def ai_set_key() -> None:
+    """Save your OpenRouter API key to config.toml. It's typed hidden, so it isn't in your
+    shell history. Press Enter on an empty line to remove the key."""
+    cfg = _load_config()
+    key = typer.prompt(
+        "OpenRouter key (hidden; Enter alone removes it)",
+        default="",
+        show_default=False,
+        hide_input=True,
+    ).strip()
+    saved = config.save(replace(cfg, ai=replace(cfg.ai, key=key)))
+    if key:
+        typer.echo(f"Key saved to {saved}")
+        if not cfg.ai.model:
+            typer.echo("Next: blunderbook ai model NAME")
+        elif not cfg.ai.enabled:
+            typer.echo("Next: blunderbook ai on")
+    else:
+        typer.echo(f"Key removed from {saved}")
+
+
+@ai_app.command("model")
+def ai_model(
+    name: Annotated[
+        str,
+        typer.Argument(help="An OpenRouter model id, as listed on openrouter.ai/models."),
+    ],
+) -> None:
+    """Save the model that writes the explanations."""
+    cfg = _load_config()
+    model = name.strip()
+    if not model:
+        _fail("The model name is empty. Nothing was saved.")
+    saved = config.save(replace(cfg, ai=replace(cfg.ai, model=model)))
+    typer.echo(f"Model {model} saved to {saved}")
+    if not cfg.ai.key:
+        typer.echo("Next: blunderbook ai set-key")
+    elif not cfg.ai.enabled:
+        typer.echo("Next: blunderbook ai on")
+
+
+@ai_app.command("on")
+def ai_on() -> None:
+    """Show the "Explain this blunder" button on the page."""
+    cfg = _load_config()
+    turned_on = replace(cfg, ai=replace(cfg.ai, enabled=True))
+    problem = config.ai_problem(turned_on)
+    if problem is not None:
+        _fail(f"{problem}\nAI explanations stay off.")
+    config.save(turned_on)
+    typer.echo(f"AI explanations are on, with {cfg.ai.model}.")
+    typer.echo('Nothing is sent until you press "Explain this blunder" on the page.')
+
+
+@ai_app.command("off")
+def ai_off() -> None:
+    """Hide the AI button. Your key, model and saved explanations stay."""
+    cfg = _load_config()
+    if cfg.ai.enabled:
+        config.save(replace(cfg, ai=replace(cfg.ai, enabled=False)))
+    typer.echo("AI explanations are off. Saved explanations still show in the Log.")
 
 
 # ---------------------------------------------------------------- init
@@ -320,6 +405,7 @@ def doctor(
     problems += _doctor_database(config.db_path())
     backup_problems, warnings = _doctor_backups(cfg)
     problems += backup_problems
+    problems += _doctor_ai(cfg)
 
     typer.echo("")
     if problems:
@@ -387,6 +473,19 @@ def _doctor_backups(cfg: config.Config) -> tuple[int, int]:
     if not cfg.backup.auto:
         _row("", "Daily backups are off ([backup] auto in config.toml).")
     return 0, warnings
+
+
+def _doctor_ai(cfg: config.Config) -> int:
+    """Print the AI row; return the number of problems. Never calls OpenRouter."""
+    if not cfg.ai.enabled:
+        _row("AI", "off")
+        return 0
+    problem = config.ai_problem(cfg)
+    if problem is not None:
+        _row("AI", f"Problem: {problem}")
+        return 1
+    _row("AI", f"on \N{MIDDLE DOT} {cfg.ai.model} \N{MIDDLE DOT} OpenRouter key set")
+    return 0
 
 
 def _row(label: str, text: str) -> None:
