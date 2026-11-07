@@ -34,6 +34,10 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
    way everywhere. Store the engine version and depth with each analysis.
 6. **No build step for the frontend.** Plain HTML, CSS and ES modules served by the
    backend. No React, no bundler, no npm toolchain for the app itself.
+7. **Extensions are separate.** Bigger features that aren't about your own mistakes (a game
+   collection, a library of openings and tactics) are extensions: separate packages, found
+   when installed and turned on (§15). Core never imports one. They use only the host API,
+   follow these same principles, and can only read your Log, never change it.
 
 ---
 
@@ -101,6 +105,7 @@ blunderbook/
 │   │   └── models.py          # dataclasses: Game, Blunder, Eval, Attempt, ...
 │   ├── importer.py            # orchestrates: PGN text -> games -> analysis -> blunders
 │   ├── ai.py                  # OpenRouter client for the optional AI explanation (§7.10)
+│   ├── ext.py                 # the extension contract, discovery and loading (§15)
 │   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
 │   ├── sources/
 │   │   ├── base.py            # SourceAdapter protocol: fetch_new_pgn(since) -> str
@@ -294,6 +299,9 @@ auto = true                           # back up once a day before commands that 
 enabled = false
 model = ""                            # an OpenRouter model id; no default
 key = ""                              # OpenRouter API key; never commit, never log
+
+[extensions]
+enabled = []                          # extension names, e.g. ["library"]; lowercase letters
 ```
 
 Never print the Lichess token or the OpenRouter key, never write them to the DB, and redact
@@ -545,6 +553,10 @@ They return **PGN text only**. The importer does everything else.
 | `ai set-key` | Ask for the OpenRouter key with hidden input and save it. Empty input removes it. |
 | `ai model NAME` | Save the OpenRouter model id. No network check. |
 | `ai on` / `ai off` | `on` refuses while the key or model is missing. `off` keeps the key, the model and saved explanations. |
+| `ext list` | Installed extensions, which are on, and why any that's on can't be used. |
+| `ext enable NAME` | Load and check an installed extension, then turn it on. Changes nothing if it can't be used. Restart `serve` to see it. |
+| `ext disable NAME` | Turn it off. Its data stays. |
+| `NAME ...` | An extension's own commands, when it's on and has some. |
 | `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
 
@@ -556,7 +568,7 @@ games, the database can't be used, there's no Stockfish while some game is ready
 engine fails; in that last case the games done so far are saved and reported first, and
 importing the file again finishes the rest). A report with needs-side games or errors exits 0.
 `doctor` exits 1 when it finds a problem (AI on with no key or model is one; it never calls
-OpenRouter). Warnings (an old backup, a missing backup folder)
+OpenRouter; an extension that's on but missing or broken is one too). Warnings (an old backup, a missing backup folder)
 are shown but don't change the exit code. `serve` exits 1 only when it can't start (bad
 config, busy port, a database it can't use).
 

@@ -116,6 +116,11 @@ class AiConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtensionsConfig:
+    enabled: tuple[str, ...] = ()  # extension names, turned on with `blunderbook ext enable`
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     my_names: tuple[str, ...] = ()
     stockfish_path: str = ""
@@ -127,6 +132,7 @@ class Config:
     chesscom: ChesscomConfig = field(default_factory=ChesscomConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
     ai: AiConfig = field(default_factory=AiConfig)
+    extensions: ExtensionsConfig = field(default_factory=ExtensionsConfig)
 
 
 def ai_problem(config: Config) -> str | None:
@@ -184,6 +190,7 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
     cc = root.table("chesscom")
     bk = root.table("backup")
     ai = root.table("ai")
+    ext = root.table("extensions")
     d = Config()
     dt = d.thresholds
     thresholds = Thresholds(
@@ -213,7 +220,17 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
             model=ai.text("model", d.ai.model).strip(),
             key=ai.text("key", d.ai.key).strip(),
         ),
+        extensions=ExtensionsConfig(enabled=_extension_names(ext.names("enabled", ()))),
     )
+
+
+def _extension_names(names: tuple[str, ...]) -> tuple[str, ...]:
+    for name in names:
+        if not re.fullmatch(r"[a-z]+", name):
+            raise ConfigError(
+                f"extensions.enabled: {name!r} isn't an extension name (lowercase letters only)"
+            )
+    return tuple(dict.fromkeys(names))
 
 
 class _Table:
@@ -337,6 +354,10 @@ def render(config: Config) -> str:
         f"model = {_toml_str(ai.model)}",
         "# Your OpenRouter API key. Never commit or share this file.",
         f"key = {_toml_str(ai.key)}",
+        "",
+        "# Extensions turned on, by name. Set with: blunderbook ext enable NAME",
+        "[extensions]",
+        f"enabled = {_toml_list(config.extensions.enabled)}",
     ]
     return "\n".join(lines) + "\n"
 

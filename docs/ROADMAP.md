@@ -18,9 +18,12 @@ _Last updated: 2026-11-07_
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
+| M9 Extensions | In progress (1/4) | Separate packages that add a tab, routes, commands and their own database |
+| M10 Library | Not started | Extension: openings, traps and tactics to study and practise |
+| M11 Games | Not started | Extension: your game collection (anyone's games), analysed |
 
-**Next up:** try one real explanation with your key (`ai set-key`, `ai model`, `ai on`), and
-check the Log and Re-test at 390 px wide. v1 and M8 are complete. Before relying
+**Next up:** 9.2, a database of its own for each extension, in the backups. Still to check
+from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
@@ -568,6 +571,53 @@ never writes your thinking or lesson and never confirms a cause.
       - README: the AI explanations section (setup, what's sent and what isn't, who sees it,
         cost), the commands, settings, privacy and a troubleshooting line.
 
+### M9 Extensions
+
+Extensions are separate packages in `extensions/` (a uv workspace), found through the
+`blunderbook.extensions` entry-point group when they're installed and turned on. Core never
+imports one. Each may bring routes, a tab, commands and its own database, and may read your
+Log but never change it. Turned on with `blunderbook ext enable NAME`, then a restart of
+`serve`.
+
+- [x] **9.1 Contract + discovery.** `blunderbook/ext.py`: `Extension`, `HOST_API`, `load()`,
+      `[extensions] enabled` in config.toml, `ext list | enable | disable`, doctor.
+      _Done:_
+      - **`Extension`** names a slug, a tab title, the host API it was written for, and
+        optionally a router, web folder, migrations and Typer commands. `HOST_API = 1`.
+      - **`ext.load()`** never raises. An extension that's on but not installed, fails to
+        import, isn't an `Extension`, has a name that doesn't match its entry point, uses a
+        name Blunderbook needs (`log`, `import`, `ai`, …) or was made for another host API is
+        left out with one plain reason; the others still load.
+      - **`ext enable`** loads and checks the extension first, and changes nothing if it
+        can't be used. `ext disable` keeps its data. `ext list` shows what's installed and on.
+      - **Commands:** the program now starts through `cli.run()`, which adds
+        `blunderbook NAME ...` for each extension that's on and has commands.
+      - **`doctor`** lists the extensions that are on; a missing or broken one is a problem.
+      - Tests load sample extensions (`tests/ext_samples.py`) through hand-made entry points.
+      - Checked: uv 0.13.7 has `uv tool install --with <requirement>` (a local path works as
+        a requirement) and `uv sync --all-packages`. The workspace itself arrives with the
+        first extension package (10.1).
+- [ ] **9.2 Own databases.** `open_db(migrations=…)`, backups with a per-extension prefix,
+      the daily backup, `-pre-migrate` and `restore` for extension databases.
+- [ ] **9.3 Page + host API.** `GET /api/extensions`, `/ext/<name>/` files, a tab per
+      extension loaded with `import()`, `ext_db` / `log_reader` (read-only) dependencies,
+      `host.settings()` / `host.engine()`, page checks extensions can reuse.
+- [ ] **9.4 End to end.** A test-only extension that uses all of it; CLAUDE.md §15.
+
+### M10 Library (extension)
+
+- [ ] **10.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
+- [ ] **10.2** API, index and entry views (board through the mainline and each consequence).
+- [ ] **10.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
+- [ ] **10.4** "Your entries in this opening", read from your Log.
+
+### M11 Games (extension)
+
+- [ ] **11.1** Package, `games.db`, import into collections, `engine.score_positions()` (pass 1).
+- [ ] **11.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
+- [ ] **11.3** API, collection / game / player views with filters and an eval graph.
+- [ ] **11.4** Import on the page, and links to your Log.
+
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
 digest), Anki / Lichess-study export, mobile PWA.
@@ -738,3 +788,15 @@ None open.
   - The page shows exactly what will be sent ("What's sent") before you press the button.
     No confirm dialog.
   - (CLAUDE.md §1.3, §6, §9)
+- **2026-11-07: Extensions (M9).**
+  - Big features that aren't about your own mistakes, a game collection and a library of
+    openings and tactics, are extensions, not core.
+  - They live in this repo as their own packages (`extensions/library`, `extensions/games`,
+    a uv workspace) and are found through Python entry points: no new dependency.
+  - Each keeps its own SQLite file, which the backups include.
+  - They can read your Log, never change it.
+  - Turned on with `blunderbook ext enable NAME`, seen after `serve` restarts. Not loaded
+    while it runs: a small gain for much more complexity.
+  - The game collection is general, for anyone's games, so it's called Games, not "GM
+    analysis".
+  - (CLAUDE.md §1.7, §15)

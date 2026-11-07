@@ -2,7 +2,10 @@
 
 Commands arrive milestone by milestone (see the README roadmap):
 engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
-serve (3.4) · sync (6.4) · print (7.1) · ai (8.1).
+serve (3.4) · sync (6.4) · print (7.1) · ai (8.1) · ext (9.1).
+
+`run()` is the program's entry point: it adds the commands of the extensions turned on
+in config.toml, then runs the app.
 """
 
 import errno
@@ -19,7 +22,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from blunderbook import __version__, config, importer, printing, sources
+from blunderbook import __version__, config, ext, importer, printing, sources
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Color, SyncSource, Totals
 from blunderbook.core.source import game_time
@@ -44,6 +47,30 @@ ai_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(ai_app, name="ai")
+
+ext_app = typer.Typer(
+    help="List, turn on or turn off extensions (separately installed packages).",
+    no_args_is_help=True,
+)
+app.add_typer(ext_app, name="ext")
+
+
+def run() -> None:
+    """The `blunderbook` program: the app plus the commands of extensions that are on."""
+    add_extension_commands()
+    app()
+
+
+def add_extension_commands() -> None:
+    """Add `blunderbook <name> ...` for each extension that's on and has commands. A broken
+    config or extension is left to the command (and `doctor`) to report."""
+    try:
+        cfg = config.load(config.config_path())
+    except config.ConfigError:
+        return
+    for extension in ext.load(cfg.extensions.enabled).extensions:
+        if extension.cli is not None:
+            app.add_typer(extension.cli, name=extension.name, help=extension.title)
 
 
 def _show_version(value: bool) -> None:
@@ -196,6 +223,60 @@ def ai_off() -> None:
     if cfg.ai.enabled:
         config.save(replace(cfg, ai=replace(cfg.ai, enabled=False)))
     typer.echo("AI explanations are off. Saved explanations still show in the Log.")
+
+
+# ---------------------------------------------------------------- ext
+
+
+@ext_app.command("list")
+def ext_list() -> None:
+    """Show the extensions installed on this computer, and which are on."""
+    cfg = _load_config()
+    found = ext.installed()
+    on = set(cfg.extensions.enabled)
+    if not found and not on:
+        typer.echo("No extensions installed.")
+        return
+    loaded = ext.load(cfg.extensions.enabled)
+    titles = {e.name: e.title for e in loaded.extensions}
+    for item in found:
+        state = "on" if item.name in on else "off"
+        version = f" {item.version}" if item.version else ""
+        title = f" \N{MIDDLE DOT} {titles[item.name]}" if item.name in titles else ""
+        typer.echo(f"{item.name:<12}{state:<5}{item.package or '?'}{version}{title}")
+    for problem in loaded.problems:
+        typer.echo(f"Problem: {problem}")
+
+
+@ext_app.command("enable")
+def ext_enable(name: Annotated[str, typer.Argument(help="The extension's name.")]) -> None:
+    """Turn an installed extension on. Restart `blunderbook serve` to see its tab."""
+    cfg = _load_config()
+    point = ext.find(name)
+    if point is None:
+        _fail(f"No extension called {name} is installed. Nothing was changed.")
+    extension, problem = ext.load_one(point)
+    if problem is not None or extension is None:
+        _fail(f"{problem}\nNothing was changed.")
+    if name in cfg.extensions.enabled:
+        typer.echo(f"The {name} extension ({extension.title}) is already on.")
+        return
+    enabled = (*cfg.extensions.enabled, name)
+    config.save(replace(cfg, extensions=replace(cfg.extensions, enabled=enabled)))
+    typer.echo(f"Turned on {name} ({extension.title}).")
+    typer.echo("Restart blunderbook serve to see it on the page.")
+
+
+@ext_app.command("disable")
+def ext_disable(name: Annotated[str, typer.Argument(help="The extension's name.")]) -> None:
+    """Turn an extension off. Its data stays, and comes back if you turn it on again."""
+    cfg = _load_config()
+    if name not in cfg.extensions.enabled:
+        typer.echo(f"The {name} extension isn't on.")
+        return
+    enabled = tuple(n for n in cfg.extensions.enabled if n != name)
+    config.save(replace(cfg, extensions=replace(cfg.extensions, enabled=enabled)))
+    typer.echo(f"Turned off {name}. Its data stays; restart blunderbook serve.")
 
 
 # ---------------------------------------------------------------- init
@@ -406,6 +487,7 @@ def doctor(
     backup_problems, warnings = _doctor_backups(cfg)
     problems += backup_problems
     problems += _doctor_ai(cfg)
+    problems += _doctor_extensions(cfg)
 
     typer.echo("")
     if problems:
@@ -486,6 +568,22 @@ def _doctor_ai(cfg: config.Config) -> int:
         return 1
     _row("AI", f"on \N{MIDDLE DOT} {cfg.ai.model} \N{MIDDLE DOT} OpenRouter key set")
     return 0
+
+
+def _doctor_extensions(cfg: config.Config) -> int:
+    """Print the Extensions rows; return the number of problems."""
+    if not cfg.extensions.enabled:
+        _row("Extensions", "none on")
+        return 0
+    loaded = ext.load(cfg.extensions.enabled)
+    label = "Extensions"
+    for extension in loaded.extensions:
+        _row(label, f"{extension.name} \N{MIDDLE DOT} {extension.title}")
+        label = ""
+    for problem in loaded.problems:
+        _row(label, f"Problem: {problem}")
+        label = ""
+    return len(loaded.problems)
 
 
 def _row(label: str, text: str) -> None:

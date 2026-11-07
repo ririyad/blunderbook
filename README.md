@@ -522,6 +522,8 @@ back to the next one.
 | `blunderbook ai set-key` | Save your OpenRouter key, typed hidden. Empty removes it. |
 | `blunderbook ai model NAME` | Save the model that writes explanations. |
 | `blunderbook ai on` / `off` | Show or hide the "Explain this blunder" button. |
+| `blunderbook ext list` | Show installed extensions and which are on. |
+| `blunderbook ext enable NAME` / `disable NAME` | Turn an extension on or off; restart `serve` to see it. Turning one off keeps its data. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games
