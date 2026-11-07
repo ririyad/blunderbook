@@ -1,5 +1,6 @@
 // The Re-test view, ported from the demo (CLAUDE.md §11): the position before your blunder,
-// facing your side. Tap a piece, then a square (only the legal moves the API sent). "Show a
+// facing your side. Tap a piece, then a square (only the legal moves the API sent, shown as
+// dots once the piece is picked; tap it again to put it down). "Show a
 // hint" lights up the square the best move starts from; "I don't know — show me" gives up.
 // The server checks the move and only then sends the answer, your lesson and the next date.
 
@@ -133,13 +134,17 @@ function draw(item) {
   if (done) {
     renderBoard(el, fen, item.my_color, { hl, arrows, label: "The position after the re-test" });
   } else {
-    renderBoard(el, fen, item.my_color, { hl, arrows, onClick: (i) => tap(item, i) });
+    const targets = selected === null ? [] : targetsFrom(item, sqName(selected));
+    renderBoard(el, fen, item.my_color, { hl, arrows, targets, onClick: (i) => tap(item, i) });
   }
 }
 
 /** The legal moves from `from` to `to`, e.g. ["e7e8q", "e7e8r", ...] or ["e2e3"]. */
 const movesBetween = (item, from, to) => item.legal_uci.filter((m) => m.slice(0, 4) === from + to);
 const movesFrom = (item, from) => item.legal_uci.some((m) => m.slice(0, 2) === from);
+/** The squares the piece on `from` can go to, for the board's dots. */
+const targetsFrom = (item, from) =>
+  [...new Set(item.legal_uci.filter((m) => m.slice(0, 2) === from).map((m) => sqIdx(m.slice(2, 4))))];
 
 function tap(item, i) {
   if (done) return;
@@ -152,7 +157,7 @@ function tap(item, i) {
       return;
     }
   }
-  if (movesFrom(item, square)) {
+  if (movesFrom(item, square) && i !== selected) {
     selected = i;
     hl = { ...hintHl(), [i]: "sel" };
   } else {

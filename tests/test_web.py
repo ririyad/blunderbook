@@ -193,6 +193,26 @@ def test_the_board_asks_for_those_pieces() -> None:
     assert not re.search("[\u2654-\u265f]", board)
 
 
+def test_pieces_slide_unless_you_ask_for_less_motion() -> None:
+    """board.js updates the board in place and slides the pieces; the slide is as long as
+    the stylesheet's transition, and both stop when the system asks for less motion."""
+    board = (WEB / "js" / "board.js").read_text("utf-8")
+    css = (WEB / "css" / "app.css").read_text("utf-8")
+    assert "const SLIDE_MS = 180;" in board
+    assert "transition:transform .18s ease-out" in css
+    assert 'matchMedia("(prefers-reduced-motion: reduce)")' in board
+    reduced = css[css.index("@media (prefers-reduced-motion:reduce)") :]
+    assert ".pieces .pc" in reduced.split("}}")[0]
+
+
+def test_retest_shows_where_the_piece_can_go() -> None:
+    """Picking a piece in Re-test puts a dot on each square its legal moves reach."""
+    retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")
+    assert "targets" in retest and "targetsFrom(item, sqName(selected))" in retest
+    css = (WEB / "css" / "app.css").read_text("utf-8")
+    assert ".sq.tg{" in css and ".sq.tg.cap{" in css
+
+
 def test_other_hosts_get_no_pieces(db_file: Path) -> None:
     with TestClient(create_app(db_file), base_url="http://evil.example") as other:
         assert other.get("/pieces/wK.svg").status_code == 400

@@ -317,7 +317,8 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   - the move list, your mistakes in red with their marks;
   - the game's details and the import it came from;
   - your entries from that game, each linking to the Log.
-- **Re-test** shows each position that's due, from your side. Tap a piece, then a square.
+- **Re-test** shows each position that's due, from your side. Tap a piece (dots show where it
+  can go; tap it again to put it down), then a square.
   "Show a hint" lights up the square the best move starts from; "I don't know — show me" gives
   the answer. You then see the best line, what you played in the game, your lesson and when
   the position comes back.

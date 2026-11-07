@@ -979,3 +979,14 @@ None open.
     which deserves its own decision.
   - The extension for anyone's games is now **Collection**, so there aren't two "Games".
   - (CLAUDE.md §5, §10, §11)
+- **2026-11-07: Smoother moves on the board.**
+  - Drawing the next position into the same board updates it in place: the squares stay, so
+    a focused square keeps focus after a tap in Re-test.
+  - Pieces slide to their new squares (180 ms). Each new square takes the nearest piece of
+    the same kind that left, so castling, jumps of several moves and promotions slide too;
+    captures fade out, and arrows come in once the pieces have arrived. Nothing moves when
+    the system asks for less motion.
+  - Re-test shows a dot on each square the picked piece can reach (a ring for a capture),
+    from the legal moves the API already sends. Tapping the piece again puts it down.
+  - Not yet: drag and drop, and a promotion picker (Re-test still promotes to a queen,
+    §7.8). (CLAUDE.md §11)
