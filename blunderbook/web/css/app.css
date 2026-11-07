@@ -57,7 +57,7 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .view{display:none}
 .view.on{display:block;animation:fade .15s ease-out}
 @keyframes fade{from{opacity:.4}to{opacity:1}}
-@media (prefers-reduced-motion:reduce){.view.on{animation:none}*{transition:none !important}}
+@media (prefers-reduced-motion:reduce){.view.on,.pieces .pc,.arrows{animation:none}*{transition:none !important}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .empty{padding:24px;color:var(--muted);text-align:center}
 .na{color:var(--muted);font-weight:500}
@@ -182,7 +182,15 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .sq.hl-sel::after{background:rgba(240,190,40,.55)}
 .sq.hl-ok::after{background:rgba(29,122,82,.55)}
 .sq.hl-bad::after{background:rgba(196,48,38,.55)}
-.sq .pc{position:relative;z-index:1;display:block;width:100%;height:100%;pointer-events:none;user-select:none}
+.sq.tg{background-image:radial-gradient(circle,rgba(27,27,27,.3) 17%,transparent 18%)}
+.sq.tg.cap{background-image:radial-gradient(circle,transparent 72%,rgba(27,27,27,.3) 73%)}
+.pieces{position:absolute;inset:0;pointer-events:none;z-index:1}
+.pieces .pc{position:absolute;top:0;left:0;z-index:1;display:block;width:12.5%;height:12.5%;user-select:none;transition:transform .18s ease-out}
+.pieces .pc.moving{z-index:2}
+.pieces .pc.gone{z-index:0;opacity:0;transition:transform .18s ease-out,opacity .18s ease-out}
+.pieces .pc.enter{animation:pcin .18s ease-out both}
+.arrows.late{animation:pcin .15s ease-out .15s both}
+@keyframes pcin{from{opacity:0}}
 .coord{position:absolute;font-size:3cqw;font-weight:700;font-family:system-ui,sans-serif;line-height:1;z-index:2}
 .coord.r{top:3%;left:4%}.coord.f{bottom:3%;right:5%}
 .sq.l .coord{color:var(--dark)}.sq.d .coord{color:var(--light)}
