@@ -303,7 +303,20 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
     move;
   - the cause chips (dashed ones are suggestions: click one to confirm it), and **What I was
     thinking** and **Lesson**, which save as you type;
-  - with [AI explanations](#ai-explanations-optional) on, an **Explain this blunder** button.
+  - with [AI explanations](#ai-explanations-optional) on, an **Explain this blunder** button;
+  - **See the whole game**, which opens it on the Games tab.
+- **Games** lists every game you imported, clean ones too. By default they're grouped by the
+  import they came from (the file's name, "Pasted PGN", "Lichess sync"), newest first; **By
+  date** shows one list instead. Filter by source, result (from your side), time control, with
+  or without blunders, or search the opponent and opening. Each row shows the result, your
+  side, the opponent, your marks (`2?? 1?`) or "Clean", the time control, opening and date.
+  Games imported before this tab existed are grouped by the day they were imported.
+  Opening a game shows:
+  - the board from your side, with step controls (and ← → Home End) through the whole game,
+    and a button that jumps to your next mistake;
+  - the move list, your mistakes in red with their marks;
+  - the game's details and the import it came from;
+  - your entries from that game, each linking to the Log.
 - **Re-test** shows each position that's due, from your side. Tap a piece, then a square.
   "Show a hint" lights up the square the best move starts from; "I don't know — show me" gives
   the answer. You then see the best line, what you played in the game, your lesson and when
@@ -311,8 +324,9 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
 - **Patterns** shows your totals, the causes behind your blunders (solid for confirmed,
   striped for suggested), blunders by time control, and your re-test history.
 - **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
-  position, and shows each game's result with links to the new entries. Games that need a side
-  must be imported on the command line with `--side`.
+  position, and shows each game's result with links to the new entries and to the game.
+  "See these games in Games" opens the list. Games that need a side must be imported on the
+  command line with `--side`.
 - **Extensions** that are on and have a page get a tab of their own after these. If one can't
   be used, `serve` says why when it starts, and runs without it.
 

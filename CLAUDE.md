@@ -119,6 +119,7 @@ blunderbook/
 │   │   ├── jobs.py            # the background import job (one at a time, in memory)
 │   │   ├── routes_import.py   # web import and FEN quick entry
 │   │   ├── routes_blunders.py
+│   │   ├── routes_games.py    # the games you imported, and a game page
 │   │   ├── routes_retest.py
 │   │   ├── routes_patterns.py
 │   │   ├── routes_explain.py  # the optional AI explanation
@@ -708,7 +709,7 @@ every attempt.
 
 ## 11. Frontend (port the reference demo)
 
-Views (hash routes): `#log`, `#retest`, `#patterns`, `#import`. Header: brand and tabs, with
+Views (hash routes): `#log`, `#games`, `#retest`, `#patterns`, `#import`. Header: brand and tabs, with
 a due-count badge on Re-test. Games are added on the Import tab or on the CLI
 (`blunderbook import`).
 
@@ -750,6 +751,18 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
     order. Unsaved text is sent before you switch entries, and when the page closes
     (`keepalive`). A failed save says so in red and keeps the text for the next try.
   - Picking an entry sets `#log/<id>` with `replaceState`, so it doesn't add to the history.
+  - "See the whole game" opens `#games/<game id>` (not for FEN entries).
+- **Games:** the games you imported (not FEN entries), clean ones too. A filter bar (source,
+  result from your side, time control, with or without blunders, a search of opponent and
+  opening) and **By import** (the default: a header per import, "imported 7 Nov · N games ·
+  N blunders", newest first; older games with no import under "Imported {day}") or **By
+  date** (one list). Each row: W / L / D, your side, "vs Opponent (rating)", the marks
+  (`2?? 1?`) or "Clean", source, time control, opening and date. The empty state is the Log's.
+  - `#games/<id>` is the game page: "← All games" (the filters and scroll position are kept),
+    the board facing your side with start / back / forward / end and "next mistake" (and the
+    ← → Home End keys), the details grid with the engine and the import, your entries in
+    this game linking to `#log/<id>` (or "No blunders found at depth N."), and the move list
+    as buttons, your mistakes in red with their marks.
 - **AI explanation** (`js/explain.js`, optional, §7.10): under I played / Best was in the
   Log, and on the Re-test result after an attempt (never before). `/api/ai` is read each
   time. AI off and nothing saved: nothing shown. A saved one: an amber dashed box marked
@@ -765,7 +778,8 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
 - **Import:** a paste box ("Paste PGN here, or drop a .pgn file on this box."), "Choose .pgn
   file", drop onto the box, and "Import". While it runs: a progress bar with the percentage
   (`aria-live`). Then the report: each game's status and reason, links to new entries
-  (`#log/<id>`), and the summary line. A "Quick entry from a FEN" card: FEN, your move (UCI or
+  (`#log/<id>`) and to the game (`#games/<id>`), the summary line, and "See these games in
+  Games". A chosen or dropped file's name goes in `X-Pgn-Name`. A "Quick entry from a FEN" card: FEN, your move (UCI or
   SAN), opponent, date, and the outcome. After either, the view dispatches `entries-changed`.
 - **Patterns:** four tiles, cause bars (solid = confirmed, striped = suggested), by time
   control, re-test history, a one-line "biggest leak" insight.

@@ -348,6 +348,7 @@ class ImportGameOut(BaseModel):
     reason: str | None  # why it's skipped, or what to do
     warnings: list[str]
     entries: list[EntryRefOut]  # new entries, once the import finished
+    game_id: int | None  # the saved game, for #games/<id>; None until it's saved
 
 
 class ImportJobOut(BaseModel):

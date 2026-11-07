@@ -28,6 +28,12 @@ export function fmtDate(value, now = new Date()) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, options);
 }
 
+/** A UTC timestamp as your local "YYYY-MM-DD" (for fmtDate), or null if it can't be read. */
+export function localDay(timestamp) {
+  const d = new Date(timestamp);
+  return Number.isNaN(d.getTime()) ? null : localToday(d);
+}
+
 /** White POV, like Lichess: {cp: 36} -> "+0.36", {mate: -2} -> "−M2", {mate: 0} -> "#". */
 export function fmtEval(ev) {
   if ("mate" in ev) return ev.mate === 0 ? "#" : (ev.mate > 0 ? "+" : "−") + "M" + Math.abs(ev.mate);

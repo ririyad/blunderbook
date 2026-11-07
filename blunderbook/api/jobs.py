@@ -78,6 +78,7 @@ class GameRow:
     reason: str | None
     warnings: tuple[str, ...]
     entries: tuple[EntryRef, ...]
+    game_id: int | None = None  # once it's saved: the Games tab's #games/<id>
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +201,7 @@ class Job:
             reason=reason,
             warnings=q.warnings,
             entries=entries,
+            game_id=saved.game_id if saved is not None else None,
         )
 
 

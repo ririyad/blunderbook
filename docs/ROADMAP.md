@@ -19,16 +19,17 @@ _Last updated: 2026-11-07_
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
-| M10 Your games | In progress (2/3) | A Games tab: every game you imported, by import, with a game page |
+| M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Not started | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 10.3, the Games tab: by import or by date, filters, the game page, and links from the Log and Import. Still to check
-from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
+**Next up:** 11.1, the Library extension's package, content format and starter entries. Still
+to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
-In place: all of M1 to M9. `blunderbook import` reads a PGN file, finds your blunders
+In place: all of M1 to M10. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
 database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
 you have no PGN of. The database is backed up once a day before `import` and `fen`, and
@@ -39,6 +40,7 @@ position facing your side: tap a piece and a square, take a hint or give up, and
 answer, your lesson and the next date. Patterns shows your causes, time controls and re-test
 history. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
 The Import tab imports a pasted or dropped PGN, or one FEN position, on the page.
+The Games tab lists every game you imported, by import or by date, and steps through any of them.
 `blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
 against hand-built responses only; no real download has been checked yet).
 `blunderbook print` writes the A4 Blunder Log page, and `serve --open` opens the page for you.
@@ -694,8 +696,37 @@ that steps through the whole game with your blunders marked. No delete in this m
       - The entry detail and the game page build the game the same way: `moves()` and
         `game_out()` moved from `routes_blunders.py` to `api/common.py` (a test checks both
         give the same game).
-- [ ] **10.3 The Games view.** The tab, By import / By date, filters, the game page, links
+- [x] **10.3 The Games view.** The tab, By import / By date, filters, the game page, links
       from the Log detail and the Import report, 390 px.
+      _Done:_
+      - **Games tab** (`js/views/games.js`), between Log and Re-test:
+        - filters for source, result, time control, with or without blunders, and a search;
+        - By import (a header per import with its games and blunders) or By date;
+        - each row with the result, side, opponent, marks or "Clean", time control, opening
+          and date.
+      - **Game page** (`#games/<id>`):
+        - the board from your side, with step controls, "next mistake" and the arrow keys;
+        - the details and the import;
+        - your entries, linking to the Log;
+        - the move list, your mistakes in red.
+        "← All games" keeps the filters and the scroll position.
+      - **Links:**
+        - The Log detail has "See the whole game" (not for FEN entries).
+        - The Import report links each saved game, and adds "See these games in Games".
+        - The page sends the chosen file's name in `X-Pgn-Name` (`api()` takes `headers`).
+      - `localDay()` moved to `js/format.js`, shared with `explain.js`.
+      - `test_web.py`: the view's fields against `GameSummary` and the game detail, the
+        `/api/games` routes, the empty-state copy, the links both ways.
+      - **Checked in Chrome** on a scratch database:
+        - the grouped list, By date, the filters, search and the empty message;
+        - the game page, next mistake and the keys;
+        - Log → game → Log, and an unknown id ("No game #999.");
+        - a pasted import's report links, and a dropped file named
+          "Friday blitz — café.pgn" labelled as such.
+        No console errors.
+      - **At 390 px**, measured through the DevTools protocol (headless Chrome won't go
+        below 500 px otherwise): no sideways scroll on `#games`, `#games/<id>`, `#log/<id>`
+        and `#import`.
 
 ### M11 Library (extension)
 

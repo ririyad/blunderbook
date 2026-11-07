@@ -6,7 +6,7 @@
 // nothing at all.
 
 import { api } from "./api.js";
-import { fmtDate } from "./format.js";
+import { fmtDate, localDay } from "./format.js";
 import { esc } from "./ui.js";
 
 /** Fill `box` for entry `id`. `saved` is the entry's explanation or null; `judgment` names
@@ -52,14 +52,6 @@ function savedHtml(saved) {
     ${paragraphs}
     <p class="small">Written by ${esc(saved.model)}${when ? " on " + esc(when) : ""}, from Stockfish's lines. It can be wrong: the lines themselves are the engine's.</p>
   </div>`;
-}
-
-/** A UTC timestamp as your local YYYY-MM-DD, for fmtDate. */
-function localDay(timestamp) {
-  const d = new Date(timestamp);
-  if (Number.isNaN(d.getTime())) return null;
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 async function loadPrompt(details, id) {

@@ -22,9 +22,13 @@ from blunderbook.api.schemas import (
     EntrySummary,
     ExplanationOut,
     FenOut,
+    GameDetail,
+    GameEntryOut,
     GameOut,
+    GameSummary,
     ImportGameOut,
     ImportJobOut,
+    ImportOut,
     ImportStarted,
     MoveOut,
     PatternsOut,
@@ -38,7 +42,13 @@ from blunderbook.api.schemas import (
 from blunderbook.core.models import CAUSES
 
 URL = "http://127.0.0.1"
-VIEWS = {"log": "log", "retest": "retest", "patterns": "patterns", "import": "importView"}
+VIEWS = {
+    "log": "log",
+    "games": "games",
+    "retest": "retest",
+    "patterns": "patterns",
+    "import": "importView",
+}
 WEB_FILES = sorted(p for p in WEB.rglob("*") if p.is_file())
 JS_FILES = [p for p in WEB_FILES if p.suffix == ".js"]
 # `import ... from "./x.js"` and `import "./x.js"`
@@ -239,6 +249,7 @@ RETEST_JS = WEB / "js" / "views" / "retest.js"
 PATTERNS_JS = WEB / "js" / "views" / "patterns.js"
 IMPORT_JS = WEB / "js" / "views" / "import.js"
 EXPLAIN_JS = WEB / "js" / "explain.js"
+GAMES_JS = WEB / "js" / "views" / "games.js"
 
 
 @pytest.mark.parametrize(
@@ -259,6 +270,12 @@ EXPLAIN_JS = WEB / "js" / "explain.js"
         (EXPLAIN_JS, r"\bsaved\.(\w+)", (ExplanationOut,)),
         (EXPLAIN_JS, r"\bai\.(\w+)", (AiOut,)),
         (EXPLAIN_JS, r"\bprompt\.(\w+)", (PromptOut,)),
+        (GAMES_JS, r"\bg\.(\w+)", (GameSummary, GameOut)),  # a list row, or the open game
+        (GAMES_JS, r"\bdetail\.(\w+)", (GameDetail,)),
+        (GAMES_JS, r"\bg\.batch\.(\w+)", (ImportOut,)),
+        (GAMES_JS, r"\bdetail\.batch\.(\w+)", (ImportOut,)),
+        (GAMES_JS, r"\be\.(\w+)", (GameEntryOut,)),
+        (GAMES_JS, r"\bm\.(\w+)", (MoveOut,)),
     ],
     ids=[
         "queue item",
@@ -276,6 +293,12 @@ EXPLAIN_JS = WEB / "js" / "explain.js"
         "explanation",
         "ai",
         "prompt",
+        "games row",
+        "game detail",
+        "games import",
+        "game import",
+        "game entry",
+        "game move",
     ],
 )
 def test_views_read_only_fields_the_api_sends(
@@ -320,6 +343,8 @@ def test_page_calls_only_routes_that_exist(db_file: Path) -> None:
         "/api/ai",
         "/api/blunders/{}/explanation",
         "/api/blunders/{}/explanation/prompt",
+        "/api/games",
+        "/api/games/{}",
     } <= seen
 
 
@@ -334,7 +359,7 @@ def test_empty_states_point_to_the_import_tab_and_the_cli() -> None:
         'Import a PGN on the <a href="#import">Import</a> tab, or with '
         "<code>blunderbook import FILE.pgn</code>."
     )
-    for path in (LOG_JS, RETEST_JS, PATTERNS_JS):
+    for path in (LOG_JS, GAMES_JS, RETEST_JS, PATTERNS_JS):
         assert copy in path.read_text("utf-8"), served(path)
     text = LOG_JS.read_text("utf-8")
     assert "Add games" not in text
@@ -349,7 +374,8 @@ def test_import_sends_the_pgn_as_bytes_of_its_own_type() -> None:
     bytes, so the server reads its encoding."""
     text = IMPORT_JS.read_text("utf-8")
     assert 'const PGN_TYPE = "application/x-chess-pgn";' in text
-    assert 'api("/api/import", { method: "POST", data, type: PGN_TYPE })' in text
+    assert 'api("/api/import", { method: "POST", data, type: PGN_TYPE, headers })' in text
+    assert 'const headers = fileName ? { "X-Pgn-Name": encodeURIComponent(fileName) } : {};' in text
     assert "readAsText" not in text and "file.text()" not in text
     api_js = (WEB / "js" / "api.js").read_text("utf-8")
     assert 'init.headers["Content-Type"] = options.type;' in api_js
@@ -399,3 +425,34 @@ def test_extension_tabs_are_built_safely() -> None:
     assert "tab.textContent = x.title;" in router
     assert "innerHTML" not in router
     assert "await addExtensions();" in router.split("route();")[-2]  # before the first route
+
+
+# ---------------------------------------------------------------- the Games view (10.3)
+
+
+def test_games_links_go_both_ways() -> None:
+    """A game opens from the Games list, the Log detail and the Import report; its entries open
+    in the Log (CLAUDE.md §11)."""
+    games = GAMES_JS.read_text("utf-8")
+    assert 'href="#games/${g.id}"' in games
+    assert 'href="#log/${e.id}"' in games
+    assert 'href="#games">← All games</a>' in games
+    log = LOG_JS.read_text("utf-8")
+    assert 'href="#games/${g.id}">See the whole game</a>' in log
+    assert 'g.source !== "fen"' in log  # a FEN entry has no game to see
+    imports = IMPORT_JS.read_text("utf-8")
+    assert 'href="#games/${g.game_id}">Open the game</a>' in imports
+    assert "See these games in Games" in imports
+
+
+def test_games_view_copy() -> None:
+    text = GAMES_JS.read_text("utf-8")
+    for copy in (
+        "By import",
+        "By date",
+        "No games match these filters.",
+        "Clean",
+        "No blunders found",
+    ):
+        assert copy in text, copy
+    assert "!" not in re.sub(r"!==?|!\w|!\(", "", text)  # no exclamation marks in the copy

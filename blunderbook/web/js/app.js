@@ -1,6 +1,6 @@
-// The page shell: hash router (#log, #retest, #patterns, #import, and a tab per extension)
-// and the Re-test badge. A route can carry more after a slash (#log/12); the view gets
-// that part.
+// The page shell: hash router (#log, #games, #retest, #patterns, #import, and a tab per
+// extension) and the Re-test badge. A route can carry more after a slash (#log/12); the
+// view gets that part.
 //
 // Extensions (CLAUDE.md §15) are listed by /api/extensions. Each gets a tab and a section;
 // its /ext/<name>/view.js is loaded the first time its tab opens, and has the same
@@ -8,13 +8,14 @@
 
 import { api } from "./api.js";
 import { showError } from "./ui.js";
+import * as games from "./views/games.js";
 import * as importView from "./views/import.js";
 import * as log from "./views/log.js";
 import * as patterns from "./views/patterns.js";
 import * as retest from "./views/retest.js";
 
-const VIEWS = { log, retest, patterns, import: importView };
-const TITLES = { log: "Log", retest: "Re-test", patterns: "Patterns", import: "Import" };
+const VIEWS = { log, games, retest, patterns, import: importView };
+const TITLES = { log: "Log", games: "Games", retest: "Re-test", patterns: "Patterns", import: "Import" };
 const DEFAULT = "log";
 const extensions = new Map(); // name -> its view module, a promise once it's asked for
 

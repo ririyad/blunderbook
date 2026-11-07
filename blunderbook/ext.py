@@ -36,8 +36,8 @@ NAME: Final = re.compile(r"[a-z]+")
 RESERVED: Final = frozenset(
     {
         "ai", "api", "backup", "blunderbook", "css", "doctor", "engine", "ext", "fen",
-        "import", "init", "js", "log", "patterns", "pieces", "print", "restore", "retest",
-        "serve", "sync",
+        "games", "import", "init", "js", "log", "patterns", "pieces", "print", "restore",
+        "retest", "serve", "sync",
     }
 )  # fmt: skip
 

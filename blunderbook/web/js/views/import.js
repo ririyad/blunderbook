@@ -111,12 +111,12 @@ function build(section) {
       $("pgnErr").textContent = "Paste a PGN first, or choose a file.";
       return;
     }
-    start(new Blob([text], { type: PGN_TYPE }), "pasted text");
+    start(new Blob([text], { type: PGN_TYPE }), "pasted text", null);
   });
   $("pgnFile").addEventListener("change", (ev) => {
     const file = ev.target.files[0];
     ev.target.value = ""; // the same file can be chosen again
-    if (file) start(file, file.name);
+    if (file) start(file, file.name, file.name);
   });
   const drop = $("drop");
   drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.add("over"); });
@@ -125,7 +125,7 @@ function build(section) {
     ev.preventDefault();
     drop.classList.remove("over");
     const file = ev.dataTransfer.files && ev.dataTransfer.files[0];
-    if (file) start(file, file.name);
+    if (file) start(file, file.name, file.name);
   });
   $("fenForm").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -135,12 +135,14 @@ function build(section) {
 
 // ---------------------------------------------------------------- import
 
-async function start(data, from) {
+/** Import `data`. `fileName` names the import in the Games tab; null for pasted text. */
+async function start(data, from, fileName) {
   $("pgnErr").textContent = "";
   showError(null);
   $("importBtn").disabled = true;
   try {
-    const started = await api("/api/import", { method: "POST", data, type: PGN_TYPE });
+    const headers = fileName ? { "X-Pgn-Name": encodeURIComponent(fileName) } : {};
+    const started = await api("/api/import", { method: "POST", data, type: PGN_TYPE, headers });
     jobId = started.job_id;
     sessionStorage.setItem(SAVED_JOB, jobId);
     source = from;
@@ -198,8 +200,11 @@ function renderJob(job) {
   if (running) return;
   const notes = job.notes.map((n) => `<p class="small note">Note: ${esc(n)}</p>`).join("");
   const error = job.error ? `<p class="bad-text">${esc(job.error)}</p>` : "";
+  const links = [];
+  if (job.games.some((g) => g.game_id != null)) links.push('<a class="btn ghost" href="#games">See these games in Games</a>');
+  if (job.games.some((g) => g.entries.length)) links.push('<a class="btn ghost" href="#log">Open the Log</a>');
   foot.innerHTML = `<div><b>${esc(job.summary)}</b>${error}${notes}</div>`
-    + (job.games.some((g) => g.entries.length) ? '<a class="btn ghost" href="#log">Open the Log</a>' : "");
+    + (links.length ? `<div class="row">${links.join("")}</div>` : "");
 }
 
 function row(job, g) {
@@ -217,7 +222,8 @@ function row(job, g) {
       ? `${plural(g.entries.length, "blunder", "blunders")} found: `
         + g.entries.map((en) => `<a href="#log/${en.id}">${esc(en.label)}${MARK[en.judgment]}</a>`).join(", ")
       : "No blunders by you in this game.";
-    found = `<div class="found">${found}</div>`;
+    const open = g.game_id != null ? ` <a href="#games/${g.game_id}">Open the game</a>` : "";
+    found = `<div class="found">${found}${open}</div>`;
   } else if (g.reason) {
     found = `<div class="found">${esc(g.reason)}</div>`;
   }

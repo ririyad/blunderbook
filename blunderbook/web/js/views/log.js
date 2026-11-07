@@ -237,7 +237,7 @@ function renderDetail() {
       <div class="head"><div>
         <h2>${esc(moveLabel(e.move_no, g.my_color))}<span class="bad">${esc(e.played_san + mark)}</span></h2>
         <div class="meta">${meta.join(" · ")}</div>
-      </div></div>
+      </div>${g.source !== "fen" ? `<a class="btn ghost" href="#games/${g.id}">See the whole game</a>` : ""}</div>
       <div class="moves">
         <div class="mvbox bad"><div class="k">I played</div><div class="v">${esc(e.played_san)}</div><div class="line">Refutation: ${esc(e.refutation_san || "—")}</div></div>
         <div class="mvbox good"><div class="k">Best was</div><div class="v">${esc(e.best_san)}</div><div class="line">${esc(e.best_line_san)}</div></div>

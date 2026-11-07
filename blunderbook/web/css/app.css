@@ -272,5 +272,59 @@ a.hist:hover{text-decoration:underline}
 .p-err{background:var(--red-bg);color:var(--red)}
 .found{margin-top:8px;font-size:13px}
 
+/* Games: the list, by import or by date, and one game */
+.gbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px}
+.gbar select{font-size:12.5px;min-width:0}
+.gbar input.gsearch{flex:1 1 180px;width:auto;min-width:0;font-size:12.5px}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--radius-sm);overflow:hidden;background:#fff}
+.seg button{border:0;border-left:1px solid var(--line);background:none;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);transition:background .12s}
+.seg button:first-child{border-left:0}
+.seg button:hover{background:var(--hover)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.seg button:focus-visible{outline-offset:-2px}
+.gcount{margin:12px 2px 8px;font-size:12.5px;color:var(--muted);min-height:19px}
+.ggroup{margin-bottom:14px;overflow:hidden}
+.ghead{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--soft)}
+.ghead h3{font-size:15px;overflow-wrap:anywhere}
+.glist{list-style:none;margin:0;padding:6px}
+.grow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:9px 10px;border-radius:var(--radius-sm);color:inherit;text-decoration:none;transition:background .12s}
+.grow:hover{background:var(--hover)}
+.grow .res{grid-row:1/3}
+.grow .who{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grow .marks{text-align:right}
+.grow .sub{grid-column:2;display:flex;gap:6px;align-items:center;min-width:0;font-size:12.5px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.grow .when{text-align:right;font-size:12px;color:var(--muted);white-space:nowrap}
+@media (max-width:560px){
+  .grow{grid-template-columns:auto minmax(0,1fr)}
+  .grow .res{grid-row:1/4}
+  .grow .marks,.grow .when{grid-column:2;text-align:left}
+  .grow .sub{white-space:normal;flex-wrap:wrap}
+}
+.res{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;font-weight:700;font-size:12.5px;flex:none;vertical-align:middle}
+.res.won{background:var(--green-bg);color:var(--green)}
+.res.lost{background:#eeece6;color:var(--ink)}
+.res.drawn,.res.none{background:#f3f1ec;color:var(--muted)}
+.head h2 .res{width:30px;height:30px;font-size:14px;margin-right:6px;vertical-align:4px}
+.side{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--ink);margin-right:7px;vertical-align:-1px}
+.side.white{background:#fff}.side.black{background:var(--ink)}
+.gback{display:inline-block;margin:0 0 10px;font-size:13px;font-weight:600;text-decoration:none}
+.gback:hover{text-decoration:underline}
+.legend .l-sel{background:rgba(240,190,40,.7)}
+.gentries{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.gentry{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);color:inherit;text-decoration:none;transition:background .12s}
+.gentry:hover{background:var(--hover)}
+.gentry .mv{font-weight:700;font-variant-numeric:tabular-nums}
+.gentry .small{margin-left:auto}
+.mlist{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:1px 12px;font-variant-numeric:tabular-nums}
+.mlist li{display:grid;grid-template-columns:32px 1fr 1fr;align-items:center}
+.mlist .no{color:var(--muted);font-size:12px}
+.mbtn{border:0;background:none;text-align:left;padding:3px 7px;border-radius:5px;cursor:pointer;font-weight:600;font-size:13px;transition:background .12s}
+.mbtn:hover{background:var(--hover)}
+.mbtn.bad{color:var(--red)}
+.mbtn[aria-current="true"]{background:var(--ink);color:#fff}
+.mbtn.bad[aria-current="true"]{background:var(--red);color:#fff}
+.mbtn:focus-visible{outline-offset:0}
+.mempty{color:var(--muted);padding:3px 7px}
+
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:var(--radius-sm);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
 .toast.on{opacity:1}
