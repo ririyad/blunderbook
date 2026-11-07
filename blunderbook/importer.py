@@ -16,13 +16,14 @@ from collections.abc import Callable, Container, Iterable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from datetime import date, datetime
-from typing import Literal
+from typing import Final, Literal
 
 import chess
 import chess.pgn
 
 from blunderbook.core import detect, engine, hints, identity, pgn, timecontrol
 from blunderbook.core.models import (
+    Batch,
     Color,
     Finding,
     GameAnalysis,
@@ -261,6 +262,25 @@ def _fen_move(board: chess.Board, text: str) -> chess.Move:
     raise FenError(f"{text or 'That'} isn't a legal move in that position. {side} is to move.")
 
 
+PASTED: Final = "Pasted PGN"
+LONGEST_LABEL: Final = 200
+
+
+def file_batch(name: str | None) -> Batch:
+    """The import of a file called ``name`` (a path, or just its name), or of pasted text
+    when there's no name. Folders are dropped, and so are control characters."""
+    base = re.split(r"[\\/]", name or "")[-1]
+    label = re.sub(r"[\x00-\x1f\x7f]", "", re.sub(r"\s+", " ", base)).strip()
+    if not label:
+        return Batch(PASTED, "paste")
+    return Batch(label[:LONGEST_LABEL], "file")
+
+
+def sync_batch(site_label: str) -> Batch:
+    """The import of a sync: "Lichess sync", "Chess.com sync"."""
+    return Batch(f"{site_label} sync", "sync")
+
+
 def _pgn_name(name: str | None) -> str:
     """A name safe inside a PGN header: python-chess doesn't escape quotes."""
     cleaned = re.sub(r"\s+", " ", (name or "").replace('"', "'").replace("\\", "/")).strip()
@@ -268,12 +288,21 @@ def _pgn_name(name: str | None) -> str:
 
 
 def save(
-    conn: sqlite3.Connection, analysed: AnalysedGame, *, now: datetime | None = None
+    conn: sqlite3.Connection,
+    analysed: AnalysedGame,
+    *,
+    now: datetime | None = None,
+    import_id: int | None = None,
 ) -> SavedGame | None:
-    """Store an analysed game and its blunders. None when the game was saved meanwhile
-    (by another import running at the same time): nothing is written then."""
+    """Store an analysed game and its blunders, with the import it came from. None when
+    the game was saved meanwhile (by another import running at the same time): nothing is
+    written then."""
     ids = repo.add_game(
-        conn, new_game(analysed), [new_blunder(b) for b in analysed.blunders], now=now
+        conn,
+        new_game(analysed),
+        [new_blunder(b) for b in analysed.blunders],
+        now=now,
+        import_id=import_id,
     )
     if ids is None:
         return None
@@ -370,8 +399,12 @@ def run(
     thresholds: Thresholds,
     progress_for: ProgressFor | None = None,
     should_stop: Callable[[], bool] | None = None,
+    batch: Batch | None = None,
 ) -> RunResult:
     """Analyse and save each ready game of ``queue``, one by one (CLAUDE.md §7.4, §7.6).
+
+    ``batch`` names the import (the file, a paste, a sync). It's remembered when the first
+    game is saved, so an import that adds nothing leaves no trace in the Games list.
 
     Each game is saved as soon as it's analysed. If the engine fails, or ``should_stop()``
     turns true (checked after each position), the games before it stay saved, the game being
@@ -381,6 +414,7 @@ def run(
     where = {q.number: i for i, q in enumerate(games)}
     ready = [q for q in games if q.status == "ready"]
     saved: dict[int, SavedGame] = {}
+    import_id: int | None = None
 
     def result(error: str | None = None, stopped: bool = False) -> RunResult:
         return RunResult(tuple(games), saved, error, stopped)
@@ -402,7 +436,9 @@ def run(
             return result(stopped=True)
         except engine.EngineError as exc:
             return result(error=str(exc))
-        done = save(conn, analysed)
+        if batch is not None and import_id is None:
+            import_id = repo.add_import(conn, batch)
+        done = save(conn, analysed, import_id=import_id)
         if done is None:  # another import saved it meanwhile
             games[where[queued.number]] = replace(
                 queued, status="duplicate", reason=ALREADY_IMPORTED

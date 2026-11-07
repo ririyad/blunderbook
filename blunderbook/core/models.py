@@ -15,6 +15,8 @@ Speed = Literal["bullet", "blitz", "rapid", "classical"]
 Judgment = Literal["blunder", "mistake", "inaccuracy"]
 Status = Literal["new", "solved", "missed"]
 AnalysisStatus = Literal["pending", "running", "done", "error"]
+ImportKind = Literal["file", "paste", "sync"]
+Outcome = Literal["won", "lost", "drawn"]
 
 # Fixed order everywhere: UI chips, print page, Patterns (CLAUDE.md §5).
 CAUSES: Final[tuple[str, ...]] = (
@@ -257,6 +259,37 @@ class Game(NewGame):
     id: int
     analysis_status: AnalysisStatus
     imported_at: datetime
+    import_id: int | None = None  # None for FEN entries and games saved before 0003
+
+
+@dataclass(frozen=True, slots=True)
+class Batch:
+    """An import about to save games: "blitz-week.pgn" (file), "Pasted PGN" (paste),
+    "Lichess sync" (sync)."""
+
+    label: str
+    kind: ImportKind
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ImportInfo:
+    """One saved import (a row in ``imports``)."""
+
+    id: int
+    label: str
+    kind: ImportKind
+    started_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GameRow:
+    """A game for the Games list: the import it came from and its entries by judgment."""
+
+    game: Game
+    batch: ImportInfo | None  # None for games saved before imports were remembered
+    blunders: int
+    mistakes: int
+    inaccuracies: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

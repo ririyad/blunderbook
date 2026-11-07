@@ -106,8 +106,8 @@ def wait(client: TestClient, job_id: str) -> dict[str, Any]:
         time.sleep(0.01)
 
 
-def imported(client: TestClient, body: bytes) -> dict[str, Any]:
-    response = start(client, body)
+def imported(client: TestClient, body: bytes, **headers: str) -> dict[str, Any]:
+    response = start(client, body, **headers)
     assert response.status_code == 202, response.text
     return wait(client, response.json()["job_id"])
 
@@ -359,3 +359,37 @@ def test_a_bad_fen_entry(
     response = client.post("/api/fen", json=body)
     assert response.status_code == status
     assert sf.positions == 0
+
+
+# ---------------------------------------------------------------- the import's name (Games tab)
+
+
+def import_labels(db_file: Path) -> list[tuple[str, str]]:
+    with closing(connection.connect(db_file, mode="ro")) as conn:
+        rows = conn.execute("SELECT label, kind FROM imports ORDER BY id").fetchall()
+    return [tuple(r) for r in rows]
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        (
+            {"X-Pgn-Name": "blitz%20week%20%E2%80%94%20Nov.pgn"},
+            ("blitz week \u2014 Nov.pgn", "file"),
+        ),
+        ({"X-Pgn-Name": "C%3A%5Cgames%5Cclub.pgn"}, ("club.pgn", "file")),
+        ({}, ("Pasted PGN", "paste")),
+    ],
+    ids=["file", "path", "pasted"],
+)
+def test_the_import_is_named(
+    client: TestClient,
+    ready: Path,
+    sf: GatedEngine,
+    db_file: Path,
+    headers: dict[str, str],
+    expected: tuple[str, str],
+) -> None:
+    job = imported(client, fixture("qgd_elephant.pgn"), **headers)
+    assert job["status"] == "done", job
+    assert import_labels(db_file) == [expected]

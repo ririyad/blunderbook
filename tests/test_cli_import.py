@@ -354,6 +354,7 @@ def test_import_prints_the_blunder(ready: Path, stub: StubEngine) -> None:
     assert "Refutation: 6... Nxd5" in out
     assert f"{DOT} entry #1\n" in out
     assert f"1 game read {DOT} 1 blunder added" in out
+    assert import_labels() == [("qgd_elephant.pgn", "file")]  # for the Games tab
     assert stub.closed
     assert stub.opened_with == {
         "command": [str(ready)],
@@ -900,3 +901,9 @@ def test_no_upgrade_without_the_safety_copy(
     ) in result.output
     with closing(connection.connect(db_file, mode="ro")) as conn:
         assert connection.user_version(conn) == LATEST
+
+
+def import_labels() -> list[tuple[str, str]]:
+    with closing(connection.connect(config.db_path(), mode="ro")) as conn:
+        rows = conn.execute("SELECT label, kind FROM imports ORDER BY id").fetchall()
+    return [tuple(r) for r in rows]

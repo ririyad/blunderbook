@@ -190,6 +190,9 @@ def test_sync_imports_and_records_how_far_it_got(
     assert "6. Nxd5??" in result.output
     assert f"2 games read {DOT} 1 blunder added" in result.output
     assert entry_moves(db_file) == ["Nxd5"]
+    with closing(connection.connect(db_file, mode="ro")) as conn:
+        labels = conn.execute("SELECT label, kind FROM imports").fetchall()
+    assert [tuple(r) for r in labels] == [("Lichess sync", "sync")]  # for the Games tab
     saved = state(db_file, "lichess")
     assert saved.username == "Rashed"
     assert saved.last_synced == NEWEST_LICHESS

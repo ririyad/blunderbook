@@ -184,7 +184,8 @@ CREATE TABLE games (
   has_clocks      INTEGER NOT NULL DEFAULT 0,
   analysis_status TEXT NOT NULL DEFAULT 'pending', -- pending|running|done|error
   engine_name     TEXT, engine_depth INTEGER,
-  imported_at     TEXT NOT NULL
+  imported_at     TEXT NOT NULL,
+  import_id       INTEGER REFERENCES imports(id)  -- NULL: a FEN entry, or saved before 0003
 );
 
 CREATE TABLE blunders (
@@ -234,6 +235,14 @@ CREATE TABLE explanations (                    -- optional AI explanations (§7.
   created_at      TEXT NOT NULL
 );
 
+CREATE TABLE imports (                         -- one per import that saved a game (Games tab)
+  id          INTEGER PRIMARY KEY,
+  label       TEXT NOT NULL,                  -- "blitz-week.pgn", "Pasted PGN", "Lichess sync"
+  kind        TEXT NOT NULL CHECK (kind IN ('file','paste','sync')),
+  started_at  TEXT NOT NULL
+);
+CREATE INDEX games_import ON games (import_id);
+
 CREATE TABLE sync_state (
   source        TEXT PRIMARY KEY,             -- 'lichess' | 'chesscom'
   username      TEXT NOT NULL,
@@ -249,7 +258,12 @@ FEN quick entries get a synthetic `games` row (`source='fen'`, `pgn` = a one-mov
 `[SetUp "1"] [FEN "..."]`, `my_color` = side to move) so every blunder has a game. Its
 headers: `Event "FEN entry"`, your first `my_names` entry on your side, `--opponent` on the
 other, and the date (today unless `--date` is given). Unknown names are `?`, and quotes in
-names become `'`.
+names become `'`. FEN entries have no import (`import_id` NULL) and aren't listed as games.
+
+Each import that saves a game gets an `imports` row when its first game is saved, so an
+import that adds nothing leaves none: `blunderbook import FILE` is labelled with the file's
+name, `sync` with "Lichess sync" / "Chess.com sync", the page with the chosen file's name or
+"Pasted PGN". Games saved before migration 0003 have no import.
 
 The fixed cause list (keep this order everywhere: UI chips, print page, Patterns):
 
@@ -627,6 +641,9 @@ Web import:
 - The body is the file's bytes, so the server decodes it as §7.1 says (`utf-8-sig`, else
   cp1252 with "Read as Windows-1252" in the report). At most 10 MB (413). No games is a 422
   with the CLI's message.
+- The page sends the chosen file's name, percent-encoded, in `X-Pgn-Name` (none for pasted
+  text), which names the import (§5). Folders, control characters and anything past 200
+  characters are dropped.
 - One import at a time, in a background thread with its own connection and one engine. A
   second one is a 409. Each job reads config.toml, finds Stockfish as §6 says (there's no
   `--stockfish` here), and runs the daily backup check first; a failed backup is a warning in
@@ -826,8 +843,9 @@ Design language (from the demo and the paper template):
    prompt, the OpenRouter client, saved explanations, the Log and Re-test block (§7.10).
 9. **Extensions:** the contract, discovery and `ext` commands, extension databases in the
    backups, routes, pages and the host API, one extension end to end (§15).
-10. **Library (extension):** openings, traps and tactics to study and practise.
-11. **Games (extension):** your game collection, anyone's games, analysed.
+10. **Your games:** remember each import, the games API, and a Games tab with a game page.
+11. **Library (extension):** openings, traps and tactics to study and practise.
+12. **Collection (extension):** a collection of anyone's games, analysed.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -863,7 +881,7 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 Bigger features that aren't about your own mistakes are extensions: separate packages, kept
 in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. The first
-two are **Library** (openings, traps and tactics) and **Games** (your game collection).
+two are **Library** (openings, traps and tactics) and **Collection** (anyone's games).
 `tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
 
 **Found, not imported.** An extension package declares an entry point in the

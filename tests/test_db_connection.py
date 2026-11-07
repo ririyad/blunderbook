@@ -12,7 +12,7 @@ from blunderbook.db import connection
 from blunderbook.db.connection import StorageError
 
 CLAUDE_MD = Path(__file__).parent.parent / "CLAUDE.md"
-TABLES = {"games", "blunders", "retest_attempts", "sync_state", "explanations"}
+TABLES = {"games", "blunders", "retest_attempts", "sync_state", "explanations", "imports"}
 
 
 def tables(conn: sqlite3.Connection) -> set[str]:
@@ -47,8 +47,9 @@ def test_migrations_shipped_with_the_app() -> None:
     assert [(m.number, m.name) for m in migrations] == [
         (1, "0001_init.sql"),
         (2, "0002_explanations.sql"),
+        (3, "0003_imports.sql"),
     ]
-    assert connection.latest_version() == 2
+    assert connection.latest_version() == 3
     for migration in migrations:
         assert not re.search(r"^\s*(BEGIN|COMMIT)\b", migration.sql, re.I | re.M)
 
@@ -335,6 +336,29 @@ def test_a_v1_database_with_data_is_upgraded_after_a_safety_copy(
     calls: list[int] = []
     with closing(connection.open_db(path, before_migrate=lambda: calls.append(1))) as conn:
         assert calls == [1]
-        assert connection.user_version(conn) == 2
+        assert connection.user_version(conn) == connection.latest_version()
         assert "explanations" in tables(conn)
         assert conn.execute("SELECT username FROM sync_state").fetchone()[0] == "rashed"
+
+
+def test_a_v2_database_keeps_its_games_with_no_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 0003 upgrade: imports arrive, games already saved have none (the Games tab groups
+    them by the day they were imported), and the -pre-migrate hook runs first."""
+    path = tmp_path / "blunderbook.db"
+    first_two = connection.load_migrations()[:2]
+    with monkeypatch.context() as patch:
+        patch.setattr(connection, "load_migrations", lambda *_: first_two)
+        with closing(connection.open_db(path, create=True)) as conn:
+            conn.execute(
+                "INSERT INTO games (fingerprint, source, my_color, start_fen, pgn, imported_at) "
+                "VALUES ('fp', 'pgn', 'white', 'x', '1. e4 *', '2026-11-05T09:30:00+00:00')"
+            )
+    calls: list[int] = []
+    with closing(connection.open_db(path, before_migrate=lambda: calls.append(1))) as conn:
+        assert calls == [1]
+        assert connection.user_version(conn) == 3
+        assert "imports" in tables(conn)
+        row = conn.execute("SELECT fingerprint, import_id FROM games").fetchone()
+        assert tuple(row) == ("fp", None)

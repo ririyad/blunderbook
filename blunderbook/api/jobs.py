@@ -19,6 +19,7 @@ from typing import Final, Literal
 
 from blunderbook import config, ext, importer
 from blunderbook.core import engine, pgn
+from blunderbook.core.models import Batch
 from blunderbook.db import connection, repo
 from blunderbook.db.connection import StorageError
 
@@ -241,9 +242,10 @@ class ImportJobs:
             latest = self._latest
         return latest if latest is not None and latest.id == job_id else None
 
-    def start(self, data: bytes) -> Job:
-        """Read the text, queue its games and start analysing the ready ones. Raises Busy,
-        CantStart, config.ConfigError or StorageError, with nothing started."""
+    def start(self, data: bytes, name: str | None = None) -> Job:
+        """Read the text, queue its games and start analysing the ready ones. ``name`` is
+        the file's name (None for pasted text). Raises Busy, CantStart, config.ConfigError
+        or StorageError, with nothing started."""
         cfg = config.load()
         decoded = pgn.decode(data)
         notes = [READ_AS_CP1252] if decoded.encoding == "cp1252" else []
@@ -261,7 +263,9 @@ class ImportJobs:
             else:
                 program = _stockfish(cfg)
                 thread = threading.Thread(
-                    target=self._run, args=(job, cfg, program), name="blunderbook-import"
+                    target=self._run,
+                    args=(job, cfg, program, importer.file_batch(name)),
+                    name="blunderbook-import",
                 )
                 with self._lock:
                     self._thread = thread
@@ -274,7 +278,7 @@ class ImportJobs:
             if not started:
                 self._release()
 
-    def _run(self, job: Job, cfg: config.Config, program: Path) -> None:
+    def _run(self, job: Job, cfg: config.Config, program: Path, batch: Batch) -> None:
         try:
             backup_notes = _daily_backup(cfg, self.db_path)
             with job.lock:
@@ -298,6 +302,7 @@ class ImportJobs:
                     thresholds=cfg.thresholds,
                     progress_for=job.progress_for,
                     should_stop=self._stop.is_set,
+                    batch=batch,
                 )
             if result.error is not None:
                 job.finish("failed", result, f"Analysis stopped: {result.error} {AGAIN}")

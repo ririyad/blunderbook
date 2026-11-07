@@ -4,6 +4,7 @@
 from dataclasses import asdict
 from datetime import date
 from typing import Final
+from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -15,6 +16,7 @@ from .jobs import Busy, CantStart, ImportJobs
 from .schemas import FenIn, FenOut, ImportJobOut, ImportStarted
 
 PGN_TYPE: Final = "application/x-chess-pgn"
+NAME_HEADER: Final = "x-pgn-name"  # the file's name, percent-encoded; none for pasted text
 MAX_BYTES: Final = 10 * 1024 * 1024
 TOO_BIG: Final = "That's more than 10 MB of PGN. Split it, or use blunderbook import FILE."
 
@@ -42,7 +44,8 @@ async def start_import(request: Request) -> ImportStarted:
         if len(data) > MAX_BYTES:
             raise HTTPException(status_code=413, detail=TOO_BIG)
     try:
-        job = await run_in_threadpool(jobs(request).start, bytes(data))
+        name = unquote(request.headers.get(NAME_HEADER, "")[:1000]) or None
+        job = await run_in_threadpool(jobs(request).start, bytes(data), name)
     except Busy as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except CantStart as exc:

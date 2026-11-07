@@ -11,7 +11,7 @@ from pathlib import Path
 import chess
 import pytest
 
-from blunderbook.core.models import Eval, NewBlunder, NewGame
+from blunderbook.core.models import Batch, Eval, NewBlunder, NewGame
 from blunderbook.db import connection, repo
 
 NOW = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
@@ -387,3 +387,108 @@ def test_deleting_an_entry_deletes_its_explanation(conn: sqlite3.Connection) -> 
     assert repo.delete_blunder(conn, blunder_id)
     assert repo.get_explanation(conn, blunder_id) is None
     assert conn.execute("SELECT count(*) FROM explanations").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------- imports and the Games list
+
+
+def games_with_imports(conn: sqlite3.Connection) -> dict[str, int]:
+    """Four games: two from a file, one pasted, one from before imports were remembered,
+    plus a FEN entry. Returns their ids by name."""
+    week = repo.add_import(conn, Batch("blitz-week.pgn", "file"), now=NOW)
+    paste = repo.add_import(conn, Batch("Pasted PGN", "paste"), now=NOW + timedelta(hours=1))
+    ids: dict[str, int] = {}
+
+    def add(name: str, game: NewGame, judgments: tuple[str, ...], import_id: int | None) -> None:
+        blunders = [new_blunder(ply=10 + 2 * i, judgment=j) for i, j in enumerate(judgments)]
+        saved = repo.add_game(conn, game, blunders, now=NOW, import_id=import_id)
+        assert saved is not None
+        ids[name] = saved.game_id
+
+    add("loss", new_game(), ("blunder", "blunder", "mistake"), week)
+    add(
+        "win",
+        new_game(fingerprint="fp-win", result="1-0", black="Ünal", played_on=date(2026, 10, 7)),
+        (),
+        week,
+    )
+    add(
+        "draw",
+        new_game(
+            fingerprint="fp-draw",
+            my_color="black",
+            white="Kasim",
+            black="Rashed",
+            result="1/2-1/2",
+            played_on=None,
+            speed="rapid",
+            source="pgn",
+            opening="Sicilian Defense",
+            eco="B20",
+        ),
+        ("inaccuracy",),
+        paste,
+    )
+    add("old", new_game(fingerprint="fp-old", played_on=date(2026, 9, 1)), (), None)
+    add("fen", new_game(fingerprint="fp-fen", source="fen"), ("mistake",), None)
+    return ids
+
+
+def test_games_list_newest_first_with_imports_and_counts(conn: sqlite3.Connection) -> None:
+    ids = games_with_imports(conn)
+    rows = repo.list_games(conn)
+    # The draw has no date: it sorts by the day it was imported (2026-11-05).
+    assert [r.game.id for r in rows] == [ids["draw"], ids["win"], ids["loss"], ids["old"]]
+    loss = next(r for r in rows if r.game.id == ids["loss"])
+    assert (loss.blunders, loss.mistakes, loss.inaccuracies) == (2, 1, 0)
+    assert loss.batch is not None
+    assert (loss.batch.label, loss.batch.kind, loss.batch.started_at) == (
+        "blitz-week.pgn",
+        "file",
+        NOW,
+    )
+    assert loss.game.import_id == loss.batch.id
+    old = next(r for r in rows if r.game.id == ids["old"])
+    assert old.batch is None and old.game.import_id is None
+    assert all(r.game.source != "fen" for r in rows)
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        ({"outcome": "won"}, ["win"]),
+        ({"outcome": "lost"}, ["loss", "old"]),
+        ({"outcome": "drawn"}, ["draw"]),  # you were Black
+        ({"source": "pgn"}, ["draw"]),
+        ({"speed": "rapid"}, ["draw"]),
+        ({"clean": True}, ["win", "old"]),
+        ({"clean": False}, ["draw", "loss"]),
+        ({"text": "ünal"}, ["win"]),  # case-insensitive, beyond ASCII
+        ({"text": "sicilian"}, ["draw"]),
+        ({"text": "B20"}, ["draw"]),
+        ({"text": "kasim"}, ["draw"]),
+        ({"text": "rashed"}, []),  # your own name isn't the opponent
+        ({"outcome": "lost", "clean": True}, ["old"]),
+    ],
+)
+def test_games_list_filters(
+    conn: sqlite3.Connection, filters: dict[str, object], expected: list[str]
+) -> None:
+    ids = games_with_imports(conn)
+    names = {v: k for k, v in ids.items()}
+    assert [names[r.game.id] for r in repo.list_games(conn, **filters)] == expected  # type: ignore[arg-type]
+
+
+def test_one_game_row(conn: sqlite3.Connection) -> None:
+    ids = games_with_imports(conn)
+    row = repo.get_game_row(conn, ids["loss"])
+    assert row is not None and row.blunders == 2
+    assert repo.get_game_row(conn, ids["fen"]) is None  # a FEN entry isn't a game
+    assert repo.get_game_row(conn, 999) is None
+
+
+def test_entries_of_one_game(conn: sqlite3.Connection) -> None:
+    ids = games_with_imports(conn)
+    entries = repo.list_entries(conn, game_id=ids["loss"])
+    assert [e.blunder.ply for e in entries] == [10, 12, 14]  # in move order
+    assert {e.game.id for e in entries} == {ids["loss"]}

@@ -19,15 +19,20 @@ from blunderbook.core.models import (
     AnalysisStatus,
     Attempt,
     AttemptStats,
+    Batch,
     Blunder,
     Color,
     Entry,
     Eval,
     Explanation,
     Game,
+    GameRow,
+    ImportInfo,
+    ImportKind,
     Judgment,
     NewBlunder,
     NewGame,
+    Outcome,
     SavedIds,
     Source,
     Speed,
@@ -63,6 +68,7 @@ _GAME_COLUMNS = (
     "engine_name",
     "engine_depth",
     "imported_at",
+    "import_id",
 )
 _BLUNDER_COLUMNS = (
     "game_id",
@@ -129,8 +135,10 @@ def add_game(
     blunders: Iterable[NewBlunder] = (),
     *,
     now: datetime | None = None,
+    import_id: int | None = None,
 ) -> SavedIds | None:
     """Save an analysed game and its blunders in one transaction, and return their ids.
+    ``import_id`` is the import it came from (``add_import``).
 
     A game with no blunders is saved too, so importing it again is skipped. Returns None,
     and writes nothing, when a game with the same fingerprint is already saved. New entries
@@ -140,7 +148,7 @@ def add_game(
     stamp = _timestamp(moment)
     due = moment.astimezone().date()  # local
     with transaction(conn):
-        row = conn.execute(_INSERT_GAME, _game_params(game, stamp)).fetchone()
+        row = conn.execute(_INSERT_GAME, _game_params(game, stamp, import_id)).fetchone()
         if row is None:
             return None
         game_id = int(row[0])
@@ -175,7 +183,105 @@ def get_game(conn: sqlite3.Connection, game_id: int) -> Game | None:
     return None if row is None else _game(row)
 
 
-def _game_params(game: NewGame, stamp: str) -> dict[str, Any]:
+# ---------------------------------------------------------------- imports and the Games list
+
+
+def add_import(conn: sqlite3.Connection, batch: Batch, *, now: datetime | None = None) -> int:
+    """Remember an import, as its first game is saved; returns its id for ``add_game``."""
+    row = conn.execute(
+        "INSERT INTO imports (label, kind, started_at) VALUES (?, ?, ?) RETURNING id",
+        (batch.label, batch.kind, _timestamp(_moment(now))),
+    ).fetchone()
+    return int(row[0])
+
+
+# Won, lost or drawn from your side.
+_WIN = "(g.result = '1-0' AND g.my_color = 'white') OR (g.result = '0-1' AND g.my_color = 'black')"
+_LOSS = "(g.result = '0-1' AND g.my_color = 'white') OR (g.result = '1-0' AND g.my_color = 'black')"
+_OUTCOME_SQL: dict[Outcome, str] = {
+    "won": f"({_WIN})",
+    "lost": f"({_LOSS})",
+    "drawn": "g.result = '1/2-1/2'",
+}
+_SELECT_GAME_ROW = (
+    "SELECT "
+    + ", ".join(f"g.{c} AS g_{c}" for c in ("id", *_GAME_COLUMNS))
+    + ", i.id AS i_id, i.label AS i_label, i.kind AS i_kind, i.started_at AS i_started_at"
+    + ", count(CASE WHEN b.judgment = 'blunder' THEN 1 END) AS n_blunders"
+    + ", count(CASE WHEN b.judgment = 'mistake' THEN 1 END) AS n_mistakes"
+    + ", count(CASE WHEN b.judgment = 'inaccuracy' THEN 1 END) AS n_inaccuracies"
+    + " FROM games AS g LEFT JOIN imports AS i ON i.id = g.import_id"
+    + " LEFT JOIN blunders AS b ON b.game_id = g.id"
+)
+# Newest game first; one with no date by the day it was imported.
+_GAME_ORDER = " ORDER BY coalesce(g.played_on, substr(g.imported_at, 1, 10)) DESC, g.id DESC"
+
+
+def list_games(
+    conn: sqlite3.Connection,
+    *,
+    source: Source | None = None,
+    outcome: Outcome | None = None,
+    speed: Speed | None = None,
+    clean: bool | None = None,
+    text: str | None = None,
+) -> list[GameRow]:
+    """The games you imported, newest first, for the Games tab. FEN entries aren't games, so
+    they're left out. ``clean`` keeps games with no entries (True) or with some (False);
+    ``text`` matches the opponent, the opening or its ECO code, ignoring case."""
+    where = ["g.source <> 'fen'"]
+    params: dict[str, Any] = {}
+    if source is not None:
+        where.append("g.source = :source")
+        params["source"] = source
+    if outcome is not None:
+        where.append(_OUTCOME_SQL[outcome])
+    if speed is not None:
+        where.append("g.speed = :speed")
+        params["speed"] = speed
+    having = ""
+    if clean is not None:
+        having = " HAVING count(b.id) = 0" if clean else " HAVING count(b.id) > 0"
+    sql = f"{_SELECT_GAME_ROW} WHERE {' AND '.join(where)} GROUP BY g.id{having}{_GAME_ORDER}"
+    rows = [_game_row(row) for row in conn.execute(sql, params)]
+    if text and text.strip():
+        wanted = text.strip().casefold()  # in Python: SQLite's lower() is ASCII only
+        rows = [r for r in rows if wanted in _searchable(r.game)]
+    return rows
+
+
+def get_game_row(conn: sqlite3.Connection, game_id: int) -> GameRow | None:
+    """One game as the Games list shows it, or None (also for a FEN entry's game)."""
+    row = conn.execute(
+        f"{_SELECT_GAME_ROW} WHERE g.id = ? AND g.source <> 'fen' GROUP BY g.id", (game_id,)
+    ).fetchone()
+    return None if row is None else _game_row(row)
+
+
+def _searchable(game: Game) -> str:
+    theirs = game.black if game.my_color == "white" else game.white
+    return " ".join(x for x in (theirs, game.opening, game.eco) if x).casefold()
+
+
+def _game_row(row: sqlite3.Row) -> GameRow:
+    batch = None
+    if row["i_id"] is not None:
+        batch = ImportInfo(
+            id=row["i_id"],
+            label=row["i_label"],
+            kind=cast(ImportKind, row["i_kind"]),
+            started_at=datetime.fromisoformat(row["i_started_at"]),
+        )
+    return GameRow(
+        game=_game(row, "g_"),
+        batch=batch,
+        blunders=row["n_blunders"],
+        mistakes=row["n_mistakes"],
+        inaccuracies=row["n_inaccuracies"],
+    )
+
+
+def _game_params(game: NewGame, stamp: str, import_id: int | None = None) -> dict[str, Any]:
     return {
         "fingerprint": game.fingerprint,
         "source": game.source,
@@ -201,6 +307,7 @@ def _game_params(game: NewGame, stamp: str) -> dict[str, Any]:
         "engine_name": game.engine_name,
         "engine_depth": game.engine_depth,
         "imported_at": stamp,
+        "import_id": import_id,
     }
 
 
@@ -234,6 +341,7 @@ def _game(row: sqlite3.Row, prefix: str = "") -> Game:
         engine_name=col("engine_name"),
         engine_depth=col("engine_depth"),
         imported_at=datetime.fromisoformat(col("imported_at")),
+        import_id=col("import_id"),
     )
 
 
@@ -252,6 +360,7 @@ def list_entries(
     statuses: Collection[Status] = (),
     cause: str | None = None,
     due_by: date | None = None,
+    game_id: int | None = None,
 ) -> list[Entry]:
     """The Log, newest first. Filters combine; each one left out matches everything.
 
@@ -279,6 +388,9 @@ def list_entries(
     if due_by is not None:
         where.append("b.due_on <= :due_by")
         params["due_by"] = due_by.isoformat()
+    if game_id is not None:
+        where.append("b.game_id = :game_id")
+        params["game_id"] = game_id
     sql = _SELECT_ENTRY + (" WHERE " + " AND ".join(where) if where else "") + _ENTRY_ORDER
     return [_entry(row) for row in conn.execute(sql, params)]
 

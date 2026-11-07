@@ -14,7 +14,7 @@ import pytest
 
 from blunderbook import importer
 from blunderbook.core.engine import EngineError, Line
-from blunderbook.core.models import Eval, Thresholds
+from blunderbook.core.models import Batch, Eval, Thresholds
 from blunderbook.db import connection, repo
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pgn"
@@ -538,3 +538,57 @@ def test_summary_line_counts_blunders_and_plurals() -> None:
     assert importer.summary([queued], [saved]) == "1 game read \N{MIDDLE DOT} 1 blunder added"
     two = importer.prepare('[White "A"]\n\n1. e4 *\n\n[White "B"]\n\n1. d4 *', NAMES)
     assert "2 need side" in importer.summary(two, [])
+
+
+# ---------------------------------------------------------------- imports (Games tab)
+
+
+def imports(conn: sqlite3.Connection) -> list[tuple[str, str, int]]:
+    """Each saved import: its label, kind and how many games it holds."""
+    return [
+        tuple(row)
+        for row in conn.execute(
+            "SELECT i.label, i.kind, count(g.id) FROM imports AS i "
+            "LEFT JOIN games AS g ON g.import_id = i.id GROUP BY i.id ORDER BY i.id"
+        )
+    ]
+
+
+def test_run_remembers_its_import(conn: sqlite3.Connection) -> None:
+    run(conn, Scripted(), batch=importer.file_batch("multi_game.pgn"))
+    assert imports(conn) == [("multi_game.pgn", "file", 2)]
+
+
+def test_an_import_that_adds_nothing_isnt_remembered(conn: sqlite3.Connection) -> None:
+    run(conn, Scripted(), batch=importer.file_batch("multi_game.pgn"))
+    run(conn, Scripted(), batch=importer.file_batch("multi_game.pgn"))  # all duplicates
+    assert imports(conn) == [("multi_game.pgn", "file", 2)]
+
+
+def test_without_a_batch_games_have_no_import(conn: sqlite3.Connection) -> None:
+    run(conn, Scripted())
+    assert imports(conn) == []
+    assert conn.execute("SELECT count(*) FROM games WHERE import_id IS NULL").fetchone()[0] == 2
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("blitz-week.pgn", ("blitz-week.pgn", "file")),
+        ("C:\\Users\\Rashed\\Downloads\\club.pgn", ("club.pgn", "file")),
+        ("/home/rashed/games/open 2026.pgn", ("open 2026.pgn", "file")),
+        ("  two\tspaces\n.pgn ", ("two spaces .pgn", "file")),
+        ("bell\x07.pgn", ("bell.pgn", "file")),
+        ("x" * 300, ("x" * 200, "file")),
+        ("", (importer.PASTED, "paste")),
+        (None, (importer.PASTED, "paste")),
+        ("folder/", (importer.PASTED, "paste")),
+    ],
+)
+def test_file_batch(name: str | None, expected: tuple[str, str]) -> None:
+    batch = importer.file_batch(name)
+    assert (batch.label, batch.kind) == expected
+
+
+def test_sync_batch() -> None:
+    assert importer.sync_batch("Chess.com") == Batch("Chess.com sync", "sync")

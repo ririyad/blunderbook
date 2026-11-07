@@ -19,10 +19,11 @@ _Last updated: 2026-11-07_
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
-| M10 Library | Not started | Extension: openings, traps and tactics to study and practise |
-| M11 Games | Not started | Extension: your game collection (anyone's games), analysed |
+| M10 Your games | In progress (1/3) | A Games tab: every game you imported, by import, with a game page |
+| M11 Library | Not started | Extension: openings, traps and tactics to study and practise |
+| M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 10.1, the Library package: its content format, a validator and the first entries. Still to check
+**Next up:** 10.2, the games API: `GET /api/games` with filters, and one game with its moves and entries. Still to check
 from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -44,7 +45,7 @@ against hand-built responses only; no real download has been checked yet).
 "Explain this blunder" asks OpenRouter, with your own key, to put Stockfish's lines into words
 (off until you turn it on). Extensions can be installed and turned on: each adds its own tab,
 routes, commands and database, is backed up with yours, and can read your Log but never change
-it. None ships yet: Library (M10) and Games (M11) are the first.
+it. None ships yet: Library (M11) and Collection (M12) are the first.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -600,7 +601,7 @@ Log but never change it. Turned on with `blunderbook ext enable NAME`, then a re
       - Tests load sample extensions (`tests/ext_samples.py`) through hand-made entry points.
       - Checked: uv 0.13.7 has `uv tool install --with <requirement>` (a local path works as
         a requirement) and `uv sync --all-packages`. The workspace itself arrives with the
-        first extension package (10.1).
+        first extension package (11.1).
 - [x] **9.2 Own databases.** `open_db(migrations=…)`, backups with a per-extension prefix,
       the daily backup, `-pre-migrate` and `restore` for extension databases.
       _Done:_
@@ -653,21 +654,50 @@ Log but never change it. Turned on with `blunderbook ext enable NAME`, then a re
       - **`ext.boundary_problems(package)`** lists an extension's imports from Blunderbook
         outside the host API. A test checks core never imports an extension.
       - **CLAUDE.md §15** writes the contract down: what an extension declares, what it may
-        use, and the rules it follows. Also §4, §12 and §13 (M9 to M11).
+        use, and the rules it follows. Also §4, §12 and §13 (M9 to M12).
 
-### M10 Library (extension)
+### M10 Your games
 
-- [ ] **10.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
-- [ ] **10.2** API, index and entry views (board through the mainline and each consequence).
-- [ ] **10.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
-- [ ] **10.4** "Your entries in this opening", read from your Log.
+The Log lists blunders. A Games tab lists the games themselves, clean ones too: grouped by the
+import they came from (a file, a paste, a sync) or by date, with filters, and a game page
+that steps through the whole game with your blunders marked. No delete in this milestone.
 
-### M11 Games (extension)
+- [x] **10.1 Storage: remember each import.** Migration 0003, `importer.run(batch=)`, the
+      import's name from the CLI, sync and the page, `repo.list_games`.
+      _Done:_
+      - **0003_imports.sql**: an `imports` table (label, kind `file`/`paste`/`sync`, when) and
+        `games.import_id`. Games saved before it keep NULL; the upgrade takes the usual
+        `-pre-migrate` backup.
+      - **`importer.run(..., batch=)`** remembers the import when its first game is saved, so
+        one that adds nothing (all duplicates) leaves no empty group. FEN entries have none.
+      - **Names:** `blunderbook import FILE` uses the file's name, `sync` "Lichess sync" /
+        "Chess.com sync", and the page sends the chosen file's name in `X-Pgn-Name`
+        (percent-encoded); pasted text is "Pasted PGN". Folders, control characters and
+        anything past 200 characters are dropped (`importer.file_batch`).
+      - **`repo.list_games`**: newest first (a game with no date by the day it was imported),
+        each with its import and its entries by judgment; filters for source, result from
+        your side, speed, clean or not, and a search of the opponent, opening and ECO that
+        ignores case beyond ASCII. FEN entries aren't games, so they're left out.
+        `repo.get_game_row` and `list_entries(game_id=)` for the game page.
+- [ ] **10.2 API.** `GET /api/games` (filters, each game with its import) and
+      `GET /api/games/{id}` (the game, its moves with FENs, its entries).
+- [ ] **10.3 The Games view.** The tab, By import / By date, filters, the game page, links
+      from the Log detail and the Import report, 390 px.
 
-- [ ] **11.1** Package, `games.db`, import into collections, `engine.score_positions()` (pass 1).
-- [ ] **11.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
-- [ ] **11.3** API, collection / game / player views with filters and an eval graph.
-- [ ] **11.4** Import on the page, and links to your Log.
+### M11 Library (extension)
+
+- [ ] **11.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
+- [ ] **11.2** API, index and entry views (board through the mainline and each consequence).
+- [ ] **11.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
+- [ ] **11.4** "Your entries in this opening", read from your Log.
+
+### M12 Collection (extension)
+
+- [ ] **12.1** Package, `collection.db`, import into collections, `engine.score_positions()`
+      (pass 1).
+- [ ] **12.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
+- [ ] **12.3** API, collection / game / player views with filters and an eval graph.
+- [ ] **12.4** Import on the page, and links to your Log.
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
@@ -842,12 +872,21 @@ None open.
 - **2026-11-07: Extensions (M9).**
   - Big features that aren't about your own mistakes, a game collection and a library of
     openings and tactics, are extensions, not core.
-  - They live in this repo as their own packages (`extensions/library`, `extensions/games`,
+  - They live in this repo as their own packages (`extensions/library`, `extensions/collection`,
     a uv workspace) and are found through Python entry points: no new dependency.
   - Each keeps its own SQLite file, which the backups include.
   - They can read your Log, never change it.
   - Turned on with `blunderbook ext enable NAME`, seen after `serve` restarts. Not loaded
     while it runs: a small gain for much more complexity.
-  - The game collection is general, for anyone's games, so it's called Games, not "GM
-    analysis".
+  - The game collection is general, for anyone's games, so it's not "GM analysis". On
+    2026-11-07 it was renamed Collection, as Games became a core tab (below).
   - (CLAUDE.md §1.7, §15)
+- **2026-11-07: A Games tab in core (M10).**
+  - Your own imported games are about your own mistakes, so they're core, not an extension.
+  - Grouped by the import they came from, which the database now remembers (`imports`), or
+    by date; filters; a game page. Games saved before have no import and are grouped by day.
+  - FEN quick entries aren't games: they stay in the Log only.
+  - No delete yet: deleting a game would delete its entries and let it be imported again,
+    which deserves its own decision.
+  - The extension for anyone's games is now **Collection**, so there aren't two "Games".
+  - (CLAUDE.md §5, §10, §11)

@@ -24,7 +24,7 @@ import typer
 
 from blunderbook import __version__, config, ext, importer, printing, sources
 from blunderbook.core import engine, pgn
-from blunderbook.core.models import Color, SyncSource, Totals
+from blunderbook.core.models import Batch, Color, SyncSource, Totals
 from blunderbook.core.source import game_time
 from blunderbook.db import backup, connection, repo
 from blunderbook.sources.base import SyncError, redact
@@ -644,7 +644,14 @@ def import_(
             _fail(f"No games found in {path}.")
 
         try:
-            queue, saved, error = _analyse(conn, cfg, queue, stockfish=stockfish, depth=depth)
+            queue, saved, error = _analyse(
+                conn,
+                cfg,
+                queue,
+                stockfish=stockfish,
+                depth=depth,
+                batch=importer.file_batch(path.name),
+            )
         except _NoEngine as exc:
             _fail(str(exc))
         _print_report(queue, saved)
@@ -666,6 +673,7 @@ def _analyse(
     *,
     stockfish: str | None = None,
     depth: int | None = None,
+    batch: Batch | None = None,
 ) -> tuple[list[importer.QueuedGame], dict[int, importer.SavedGame], str | None]:
     """Analyse and save the ready games, each as soon as it's done. Returns the queue, the
     saved games and the engine's error (None when all went well). Raises _NoEngine."""
@@ -691,6 +699,7 @@ def _analyse(
                 depth=use_depth,
                 thresholds=cfg.thresholds,
                 progress_for=lambda q, k, n: _Progress(f"Game {q.number} ({k} of {n})"),
+                batch=batch,
             )
             queue, saved, error = list(result.queue), result.saved, result.error
     except engine.EngineError as exc:  # it couldn't start, or failed as it closed
@@ -1184,7 +1193,7 @@ def _sync_site(conn: sqlite3.Connection, cfg: config.Config, name: SyncSource) -
         )
     )
     try:
-        queue, saved, error = _analyse(conn, cfg, queue)
+        queue, saved, error = _analyse(conn, cfg, queue, batch=importer.sync_batch(label))
     except _NoEngine as exc:
         return failed(f"{exc} Nothing was imported from {label}.")
     _print_report(queue, saved, list_duplicates=False)
