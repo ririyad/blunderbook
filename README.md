@@ -313,6 +313,8 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
 - **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
   position, and shows each game's result with links to the new entries. Games that need a side
   must be imported on the command line with `--side`.
+- **Extensions** that are on and have a page get a tab of their own after these. If one can't
+  be used, `serve` says why when it starts, and runs without it.
 
 ### AI explanations (optional)
 

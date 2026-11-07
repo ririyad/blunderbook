@@ -81,6 +81,14 @@ class ExplanationOut(BaseModel):
     created_at: datetime
 
 
+class ExtensionOut(BaseModel):
+    """An extension that's on and has a page: the page adds a tab for it."""
+
+    name: str  # its route (#name) and folder (/ext/name/)
+    title: str  # the tab's label
+    css: bool  # it has a view.css to load
+
+
 class AiOut(BaseModel):
     """Whether the page shows "Explain this blunder". Never the key."""
 

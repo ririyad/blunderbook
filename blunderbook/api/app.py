@@ -5,7 +5,7 @@ daily backup). Each request opens its own connection.
 """
 
 import mimetypes
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -19,11 +19,12 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 from starlette.types import Scope
 
-from blunderbook import __version__
+from blunderbook import __version__, ext
 from blunderbook.db.connection import StorageError
 
 from . import routes_blunders, routes_explain, routes_import, routes_patterns, routes_retest
 from .jobs import ImportJobs
+from .schemas import ExtensionOut
 
 WEB = Path(__file__).parent.parent / "web"
 
@@ -73,7 +74,10 @@ class _Web(StaticFiles):
         return response
 
 
-def create_app(db_path: Path) -> FastAPI:
+def create_app(db_path: Path, extensions: Sequence[ext.Extension] = ()) -> FastAPI:
+    """The app for the database at ``db_path``, with ``extensions`` (loaded and checked,
+    their databases opened by ``serve``): each one's routes at ``/api/ext/<name>``, and its
+    page files at ``/ext/<name>/``, served like the page's own."""
     # Some Windows registries map .js to text/plain, and browsers refuse to run a module
     # served that way. Python reads the registry, so set the types the page needs.
     mimetypes.add_type("text/javascript", ".js")
@@ -93,12 +97,29 @@ def create_app(db_path: Path) -> FastAPI:
     )
     app.state.db_path = db_path
     app.state.jobs = jobs
+    app.state.extensions = {extension.name: extension for extension in extensions}
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(LOCAL_HOSTS))
     app.include_router(routes_blunders.router)
     app.include_router(routes_retest.router)
     app.include_router(routes_patterns.router)
     app.include_router(routes_import.router)
     app.include_router(routes_explain.router)
+
+    pages: list[tuple[ext.Extension, Path]] = []
+    for extension in extensions:
+        if extension.router is not None:
+            app.include_router(extension.router, prefix=f"/api/ext/{extension.name}")
+        folder = ext.web_folder(extension)
+        if folder is not None:
+            pages.append((extension, folder))
+
+    @app.get("/api/extensions")
+    def list_extensions() -> list[ExtensionOut]:
+        """The extensions with a page, in the order they're turned on: a tab each."""
+        return [
+            ExtensionOut(name=e.name, title=e.title, css=(folder / "view.css").is_file())
+            for e, folder in pages
+        ]
 
     @app.get("/pieces/{name}.svg", include_in_schema=False)
     def piece(name: str) -> Response:
@@ -107,6 +128,8 @@ def create_app(db_path: Path) -> FastAPI:
             raise HTTPException(status_code=404, detail="There's no such piece.")
         return Response(svg, media_type="image/svg+xml", headers=WEB_HEADERS)
 
+    for extension, folder in pages:
+        app.mount(f"/ext/{extension.name}", _Web(directory=folder), name=f"ext-{extension.name}")
     app.mount("/", _Web(directory=WEB, html=True), name="web")  # last: /api comes first
 
     @app.exception_handler(StorageError)

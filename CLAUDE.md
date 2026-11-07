@@ -106,6 +106,8 @@ blunderbook/
 │   ├── importer.py            # orchestrates: PGN text -> games -> analysis -> blunders
 │   ├── ai.py                  # OpenRouter client for the optional AI explanation (§7.10)
 │   ├── ext.py                 # the extension contract, discovery and loading (§15)
+│   ├── host.py                # the host API extensions use: Log (read-only), settings, engine
+│   ├── webcheck.py            # page-file checks, reused by extensions' tests (§12)
 │   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
 │   ├── sources/
 │   │   ├── base.py            # SourceAdapter protocol: fetch_new_pgn(since) -> str
@@ -555,7 +557,7 @@ They return **PGN text only**. The importer does everything else.
 | `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
 | `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
-| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` opens the page in the browser once the port listens; no browser is a message, not a failure. Imports started on the page run inside it. |
+| `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Then each extension that's on is loaded and its database opened the same way; one that can't be used is a warning and is left out. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` opens the page in the browser once the port listens; no browser is a message, not a failure. Imports started on the page run inside it. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
 | `ai show` | AI explanations on or off, the model, and whether a key is set (never the key). |
 | `ai set-key` | Ask for the OpenRouter key with hidden input and save it. Empty input removes it. |
@@ -610,6 +612,10 @@ GET    /api/ai                    {enabled, model}: enabled = on, with a key and
 GET    /api/blunders/{id}/explanation/prompt   {model, system, user}: exactly what would be sent
 POST   /api/blunders/{id}/explanation          asks OpenRouter, saves it (replacing the one before)
                                   -> {text, model, created_at}
+
+GET    /api/extensions            [{name, title, css}]: the extensions with a page, a tab each
+*      /api/ext/{name}/...        an extension's own routes (§15)
+GET    /ext/{name}/...            an extension's page files, with the page's own headers
 ```
 
 Settings, the engine path and syncs go through the CLI only. There are no routes for them in
@@ -682,6 +688,11 @@ The shell:
 - The badge counts entries due today or earlier, new ones included, and is hidden at 0.
 - Each view is a module in `js/views/` with `show(root, rest)`. After a change, a view
   dispatches `entries-changed`, and the badge updates.
+- Extensions: before the first route, the shell asks `/api/extensions` and adds a tab and a
+  section for each, after the built-in tabs (and `/ext/<name>/view.css` when it has one).
+  Their `/ext/<name>/view.js` is loaded with `import()` the first time the tab opens and has
+  the same `show(root, rest)`. One that fails to load says so in the error line. Tabs are
+  built with DOM calls and `textContent`, never `innerHTML`.
 
 The page is served with a Content-Security-Policy that allows only its own files
 (`default-src 'self'`, `script-src 'self'`). So: no inline `<script>`, no `onclick=`

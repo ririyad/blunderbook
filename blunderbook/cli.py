@@ -939,6 +939,7 @@ def serve(
         _daily_backup(cfg)
         with closing(_open_database("Can't start: the database can't be used.", cfg)):
             pass  # created or upgraded (backed up first) now, not halfway through a request
+        extensions = _serve_extensions(cfg)
 
         import uvicorn  # here, so the other commands start quickly
 
@@ -946,7 +947,7 @@ def serve(
 
         server = uvicorn.Server(
             uvicorn.Config(
-                create_app(config.db_path()),
+                create_app(config.db_path(), extensions),
                 log_level="warning",
                 access_log=False,
                 timeout_graceful_shutdown=5,
@@ -968,6 +969,37 @@ def serve(
     finally:
         sock.close()
     typer.echo("Stopped.")
+
+
+def _serve_extensions(cfg: config.Config) -> tuple[ext.Extension, ...]:
+    """The extensions that are on and usable, their databases created or upgraded now. One
+    that can't be loaded, or whose database can't be used, is a warning: the app runs
+    without it."""
+    loaded = ext.load(cfg.extensions.enabled)
+    for problem in loaded.problems:
+        _warn(problem)
+    usable: list[ext.Extension] = []
+    for extension in loaded.extensions:
+        if ext.store(extension) is not None:
+
+            def upgraded(path: Path, name: str = extension.name) -> None:
+                typer.echo(f"Backed up the {name} extension's database before upgrading it:")
+                typer.echo(f"  {path}")
+
+            try:
+                with closing(ext.open_db(extension, cfg, on_backup=upgraded)):
+                    pass
+            except connection.StorageError as exc:
+                _warn(f"The {extension.name} extension is left out. {exc}")
+                continue
+        usable.append(extension)
+    if usable:
+        typer.echo("Extensions: " + ", ".join(e.title for e in usable))
+    return tuple(usable)
+
+
+def _warn(problem: str) -> None:
+    typer.echo(f"Warning: {problem[0].lower()}{problem[1:]}", err=True)
 
 
 def _open_browser(url: str) -> bool:
@@ -1293,7 +1325,7 @@ def _daily_backup(cfg: config.Config) -> None:
     for path in done.taken:
         typer.echo(f"Daily backup: {path}")
     for problem in done.problems:
-        typer.echo(f"Warning: {problem[0].lower()}{problem[1:]}", err=True)
+        _warn(problem)
 
 
 def _backup_folder(cfg: config.Config) -> Path:

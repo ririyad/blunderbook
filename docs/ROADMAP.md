@@ -18,11 +18,11 @@ _Last updated: 2026-11-07_
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
-| M9 Extensions | In progress (2/4) | Separate packages that add a tab, routes, commands and their own database |
+| M9 Extensions | In progress (3/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Library | Not started | Extension: openings, traps and tactics to study and practise |
 | M11 Games | Not started | Extension: your game collection (anyone's games), analysed |
 
-**Next up:** 9.3, the page side of extensions: a tab each, their files, and the host API. Still to check
+**Next up:** 9.4, a test-only extension end to end and CLAUDE.md §15 (the contract, written down). Still to check
 from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -613,9 +613,31 @@ Log but never change it. Turned on with `blunderbook ext enable NAME`, then a re
         that's off, and compares the file's tables with the ones that database's migrations
         make, so a renamed file can't put one database's backup in place of another's.
       - Tests: `tests/test_ext_db.py`, with a sample `notes` extension that has a migration.
-- [ ] **9.3 Page + host API.** `GET /api/extensions`, `/ext/<name>/` files, a tab per
+- [x] **9.3 Page + host API.** `GET /api/extensions`, `/ext/<name>/` files, a tab per
       extension loaded with `import()`, `ext_db` / `log_reader` (read-only) dependencies,
       `host.settings()` / `host.engine()`, page checks extensions can reuse.
+      _Done:_
+      - **The app:** `create_app(db, extensions)` mounts each one's router at
+        `/api/ext/<name>` and its page folder at `/ext/<name>/`, with the page's own headers
+        (CSP, `no-cache`, `.js` as `text/javascript`). `GET /api/extensions` lists those with
+        a page.
+      - **`serve`** loads the extensions that are on and opens their databases before the first
+        request (with the `-pre-migrate` backup). One that can't be loaded, or whose database
+        can't be used, is a warning; the app runs without it.
+      - **Loading** also checks the files: a page folder on disk with a `view.js`, and a
+        migrations folder that exists.
+      - **The shell** adds a tab per extension before the first route, so `#notes/abc` works
+        from a bookmark; its `view.js` loads on first visit.
+      - **`blunderbook/host.py`**, the host API: `ExtDb` (its own database per request), `Log`
+        (your Log through a `mode=ro` connection: a write fails in SQLite), `same_origin`,
+        `settings()` (names, thresholds, engine settings; never a token or key), `engine()`,
+        and `read_log()` / `open_db()` for commands.
+      - **`blunderbook/webcheck.py`**: page checks (imports resolve, `/api` calls are routes, no
+        inline scripts or handlers, nothing from elsewhere, `view.js` exports `show`), run on
+        Blunderbook's own page and the sample's.
+      - Checked in Chrome with the sample extension: the tab, a deep link, its styles, tab
+        switching, an unknown route, no console or CSP errors. HTML in its data stays text.
+      - Also removed dead code 9.2 left in `api/jobs.py`.
 - [ ] **9.4 End to end.** A test-only extension that uses all of it; CLAUDE.md §15.
 
 ### M10 Library (extension)

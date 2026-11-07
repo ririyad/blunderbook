@@ -384,3 +384,18 @@ def test_explanation_is_shown_in_the_log_and_after_a_re_test_only() -> None:
     retest = RETEST_JS.read_text("utf-8")
     assert "showExplanation(fb.querySelector" in retest
     assert "r.explanation" in retest and "item.explanation" not in retest
+
+
+# ---------------------------------------------------------------- extension tabs (9.3)
+
+
+def test_extension_tabs_are_built_safely() -> None:
+    """A tab per /api/extensions item, its view.js loaded on first visit. Built with DOM
+    calls and textContent: an extension's title never becomes HTML."""
+    router = (WEB / "js" / "app.js").read_text("utf-8")
+    assert 'api("/api/extensions")' in router
+    assert "import(`/ext/${name}/view.js`)" in router
+    assert "link.href = `/ext/${x.name}/view.css`;" in router
+    assert "tab.textContent = x.title;" in router
+    assert "innerHTML" not in router
+    assert "await addExtensions();" in router.split("route();")[-2]  # before the first route

@@ -19,7 +19,7 @@ from typing import Final, Literal
 
 from blunderbook import config, ext, importer
 from blunderbook.core import engine, pgn
-from blunderbook.db import backup, connection, repo
+from blunderbook.db import connection, repo
 from blunderbook.db.connection import StorageError
 
 JobStatus = Literal["running", "done", "stopped", "failed"]
@@ -372,8 +372,3 @@ def _daily_backup(cfg: config.Config, db: Path) -> list[str]:
     if not cfg.backup.auto:
         return []
     return list(ext.daily_backups(cfg, db).problems)
-    try:
-        backup.auto(db, config.backup_folder(cfg), keep=cfg.backup.keep)
-    except (config.ConfigError, backup.BackupError) as exc:
-        return [f"The daily backup didn't work: {exc}"]
-    return []

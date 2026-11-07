@@ -3,12 +3,14 @@ backup and the database ready before the first request, Ctrl+C stops cleanly. On
 the real server in a thread and talks to it over HTTP."""
 
 import socket
+import sqlite3
 import threading
 import time
 import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import replace
+from importlib.metadata import EntryPoint
 from pathlib import Path
 from typing import Any
 
@@ -304,3 +306,55 @@ def test_real_server_answers(live: str) -> None:
         assert http.get("/api/blunders").json() == []  # a game, but no entries
         refused = http.get("/api/blunders", headers={"Host": "evil.example"})
         assert refused.status_code == 400
+
+
+# ---------------------------------------------------------------- extensions (9.3)
+
+
+@pytest.fixture
+def extensions_on(cfg_file: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
+    from blunderbook import ext
+
+    points = [
+        EntryPoint("notes", "ext_samples:notes", ext.GROUP),
+        EntryPoint("broken", "ext_samples_broken:extension", ext.GROUP),
+    ]
+    monkeypatch.setattr(ext, "entry_points", lambda group: points)
+
+    def turn_on(*names: str) -> None:
+        cfg = config.load(cfg_file)
+        config.save(replace(cfg, extensions=config.ExtensionsConfig(enabled=names)), cfg_file)
+
+    return turn_on
+
+
+def test_extensions_are_served(
+    cfg_file: Path, db_file: Path, runs: Runs, port: int, extensions_on: Callable[..., None]
+) -> None:
+    extensions_on("notes")
+    result = serve(port)
+    assert result.exit_code == 0, result.output
+    assert "Extensions: Notes\n" in result.output
+    (server,) = runs.servers
+    assert list(server.config.app.state.extensions) == ["notes"]
+    with closing(connection.connect(db_file.parent / "notes.db", mode="ro")) as conn:
+        assert connection.table_names(conn) == {"notes"}  # ready before any request
+
+
+def test_a_broken_extension_is_left_out(
+    cfg_file: Path, db_file: Path, runs: Runs, port: int, extensions_on: Callable[..., None]
+) -> None:
+    extensions_on("broken", "missing", "notes")
+    db_file.parent.mkdir(parents=True)
+    with closing(sqlite3.connect(db_file.parent.joinpath("notes.db"))) as conn:
+        conn.execute("PRAGMA user_version = 9")  # made by a newer notes extension
+    result = runner.invoke(app, ["serve", "--port", str(port)])
+    assert result.exit_code == 0, result.output
+    assert "Warning: the broken extension couldn't be loaded" in result.stderr
+    assert "Warning: the missing extension is turned on but isn't installed" in result.stderr
+    assert "Warning: the notes extension is left out. The database was made by a newer" in (
+        result.stderr
+    )
+    assert "Extensions:" not in result.output
+    (server,) = runs.servers
+    assert server.config.app.state.extensions == {}

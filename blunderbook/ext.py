@@ -131,7 +131,27 @@ def load_one(point: EntryPoint) -> tuple[Extension | None, str | None]:
             f"The {name} extension was made for host API {value.host_api}, and this "
             f"Blunderbook has host API {HOST_API}. Update the one that's older."
         )
+    if value.web is not None:
+        folder = web_folder(value)
+        if folder is None:
+            return None, (
+                f"The {name} extension's page files aren't in a folder on disk. "
+                "Install it unzipped."
+            )
+        if not (folder / "view.js").is_file():
+            return None, f"The {name} extension's page folder has no view.js."
+    if value.migrations is not None and not value.migrations.is_dir():
+        return None, f"The {name} extension's migrations folder is missing."
     return value, None
+
+
+def web_folder(extension: Extension) -> Path | None:
+    """The folder with the extension's page files, or None when it has no page or its files
+    aren't a folder on disk (a zipped install: the server can only serve real files)."""
+    if extension.web is None:
+        return None
+    folder = Path(str(extension.web))
+    return folder if folder.is_dir() else None
 
 
 def _points(found: Iterable[EntryPoint] | None) -> dict[str, EntryPoint]:
@@ -149,9 +169,9 @@ def store(extension: Extension) -> Store | None:
     return Store(extension.name, f"the {extension.name} extension", extension.migrations)
 
 
-def db_path(extension: Extension) -> Path:
-    """``<name>.db``, next to Blunderbook's own database."""
-    return config.db_path().parent / f"{extension.name}.db"
+def db_path(extension: Extension, core: Path | None = None) -> Path:
+    """``<name>.db``, next to Blunderbook's own database (``core``, or the usual one)."""
+    return (core or config.db_path()).parent / f"{extension.name}.db"
 
 
 def databases(cfg: config.Config) -> list[tuple[Store, Path]]:
