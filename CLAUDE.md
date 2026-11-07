@@ -125,6 +125,7 @@ blunderbook/
 │       ├── js/ui.js           # esc(), toast, the error line
 │       ├── js/format.js       # pure display helpers: evals, clocks, dates, results
 │       ├── js/causes.js       # the fixed cause list (a test checks it against CAUSES)
+│       ├── js/explain.js      # the optional AI explanation block (Log and Re-test)
 │       ├── js/board.js        # board renderer (ported from the demo)
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
@@ -687,6 +688,14 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
     order. Unsaved text is sent before you switch entries, and when the page closes
     (`keepalive`). A failed save says so in red and keeps the text for the next try.
   - Picking an entry sets `#log/<id>` with `replaceState`, so it doesn't add to the history.
+- **AI explanation** (`js/explain.js`, optional, §7.10): under I played / Best was in the
+  Log, and on the Re-test result after an attempt (never before). `/api/ai` is read each
+  time. AI off and nothing saved: nothing shown. A saved one: an amber dashed box marked
+  "AI explanation · auto", its paragraphs, "Written by {model} on {date}, from Stockfish's
+  lines. It can be wrong", and "Explain again" while AI is on. AI on, nothing saved: "Explain
+  this {judgment}". "What's sent" is a `<details>` that loads the exact prompt when opened.
+  While asking: the button is disabled and an `aria-live` line says so; a failure says why
+  in red.
 - **Re-test:** board facing my side, "White/Black to move — find the best move", tap a piece
   then tap a square (only the legal moves from the API), "Show a hint" (from-square), "I don't
   know — show me". The result panel shows solved or missed, the best line, what I played in
@@ -778,8 +787,10 @@ Design language (from the demo and the paper template):
 6. **Sync:** Lichess and Chess.com adapters against recorded fixtures, `sync` command.
 7. **Print + polish:** print page, `serve --open`, README with install steps (Stockfish on
    macOS/Windows/Linux), empty states, error messages.
+8. **AI explanations (optional):** `[ai]` config and `ai` commands, `core/explain.py` facts and
+   prompt, the OpenRouter client, saved explanations, the Log and Re-test block (§7.10).
 
-Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, optional "coach" explanation of a blunder via an LLM API (opt-in,
+Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 ---

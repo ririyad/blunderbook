@@ -152,6 +152,20 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .chip .auto{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .saved{font-size:12px;color:var(--green);min-height:18px;margin-top:4px}
 .saved.fail{color:var(--red)}
+/* The optional AI explanation (js/explain.js): amber and dashed, like a suggested cause */
+.ai{margin-top:14px}
+.ai:empty{display:none}
+.ai-box{border:1px dashed var(--amber);border-radius:var(--radius-sm);background:#fffaf1;padding:10px 12px}
+.ai-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--amber);display:flex;gap:8px;align-items:center}
+.ai-box p{margin:6px 0 0;line-height:1.5}
+.ai-row{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.ai-sent summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
+.ai-sent[open]{flex-basis:100%}
+.ai-prompt p{margin:6px 0}
+.ai-prompt .lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:10px 0 4px;color:var(--ink)}
+.ai-prompt pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;max-height:320px;overflow:auto;margin:0}
+.ai-msg{min-height:18px;margin-top:4px}
+.ai-msg.fail{color:var(--red)}
 .bad-text{color:var(--red)}
 .other{margin-top:10px}
 .dfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}

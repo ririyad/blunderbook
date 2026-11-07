@@ -7,6 +7,7 @@
 import { api } from "../api.js";
 import { renderBoard, uciSquares } from "../board.js";
 import { CAUSES } from "../causes.js";
+import { showExplanation } from "../explain.js";
 import {
   MARK, SOURCE_NAME, SOURCE_TAG, fmtClock, fmtDate, fmtEval, fmtSpent, isDue, moveLabel,
   outcome, percent, timeControl,
@@ -241,6 +242,7 @@ function renderDetail() {
         <div class="mvbox bad"><div class="k">I played</div><div class="v">${esc(e.played_san)}</div><div class="line">Refutation: ${esc(e.refutation_san || "—")}</div></div>
         <div class="mvbox good"><div class="k">Best was</div><div class="v">${esc(e.best_san)}</div><div class="line">${esc(e.best_line_san)}</div></div>
       </div>
+      <div class="ai" id="explain"></div>
       <div class="evalrow">
         <div class="evalhead"><span>Your winning chances</span><span class="num">${before}% → <b class="bad-text">${after}%</b></span></div>
         <div class="bar" role="img" aria-label="Your winning chances fell from ${before}% to ${after}%"><div class="before" style="width:${before}%"></div><div class="after" style="width:${after}%"></div></div>
@@ -269,6 +271,7 @@ function renderDetail() {
   </div>`;
   drawBoard();
   renderCauses();
+  showExplanation($("explain"), e.id, e.explanation, e.judgment);
   const pos = positions(e);
   const step = (to) => () => { ply = Math.max(0, Math.min(pos.fens.length - 1, to())); drawBoard(); };
   $("nFirst").onclick = step(() => 0);

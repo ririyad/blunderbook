@@ -14,11 +14,13 @@ from pydantic import BaseModel
 from blunderbook.api.app import CONTENT_SECURITY_POLICY, WEB, create_app
 from blunderbook.api.jobs import GameStatus
 from blunderbook.api.schemas import (
+    AiOut,
     AttemptOut,
     CauseCountOut,
     EntryOut,
     EntryRefOut,
     EntrySummary,
+    ExplanationOut,
     FenOut,
     GameOut,
     ImportGameOut,
@@ -26,6 +28,7 @@ from blunderbook.api.schemas import (
     ImportStarted,
     MoveOut,
     PatternsOut,
+    PromptOut,
     RetestedOut,
     RetestItem,
     RetestQueue,
@@ -235,6 +238,7 @@ def test_log_reads_only_fields_the_api_sends(pattern: str, model: type[BaseModel
 RETEST_JS = WEB / "js" / "views" / "retest.js"
 PATTERNS_JS = WEB / "js" / "views" / "patterns.js"
 IMPORT_JS = WEB / "js" / "views" / "import.js"
+EXPLAIN_JS = WEB / "js" / "explain.js"
 
 
 @pytest.mark.parametrize(
@@ -252,6 +256,9 @@ IMPORT_JS = WEB / "js" / "views" / "import.js"
         (IMPORT_JS, r"\bg\.(\w+)", (ImportGameOut,)),
         (IMPORT_JS, r"\ben\.(\w+)", (EntryRefOut,)),
         (IMPORT_JS, r"\bout\.(\w+)", (FenOut,)),
+        (EXPLAIN_JS, r"\bsaved\.(\w+)", (ExplanationOut,)),
+        (EXPLAIN_JS, r"\bai\.(\w+)", (AiOut,)),
+        (EXPLAIN_JS, r"\bprompt\.(\w+)", (PromptOut,)),
     ],
     ids=[
         "queue item",
@@ -266,6 +273,9 @@ IMPORT_JS = WEB / "js" / "views" / "import.js"
         "import game",
         "import entry",
         "fen",
+        "explanation",
+        "ai",
+        "prompt",
     ],
 )
 def test_views_read_only_fields_the_api_sends(
@@ -307,6 +317,9 @@ def test_page_calls_only_routes_that_exist(db_file: Path) -> None:
         "/api/import",
         "/api/import/{}",
         "/api/fen",
+        "/api/ai",
+        "/api/blunders/{}/explanation",
+        "/api/blunders/{}/explanation/prompt",
     } <= seen
 
 
@@ -362,3 +375,12 @@ def test_import_report_knows_every_game_status() -> None:
     statuses = set(get_args(GameStatus))
     pills = set(re.findall(r"^  (\w+): \[", IMPORT_JS.read_text("utf-8"), re.MULTILINE))
     assert pills == statuses
+
+
+def test_explanation_is_shown_in_the_log_and_after_a_re_test_only() -> None:
+    """The Log and the Re-test result pass the saved explanation on; the queue item can't
+    carry one (CLAUDE.md §10)."""
+    assert "showExplanation(" in LOG_JS.read_text("utf-8")
+    retest = RETEST_JS.read_text("utf-8")
+    assert "showExplanation(fb.querySelector" in retest
+    assert "r.explanation" in retest and "item.explanation" not in retest

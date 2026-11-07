@@ -5,6 +5,7 @@
 
 import { api } from "../api.js";
 import { renderBoard, sqIdx, sqName, uciSquares } from "../board.js";
+import { showExplanation } from "../explain.js";
 import { MARK, SOURCE_TAG, fmtDate, moveLabel } from "../format.js";
 import { entriesChanged, esc, showError, toast } from "../ui.js";
 
@@ -226,6 +227,7 @@ function showResult(item, r) {
   fb.innerHTML += r.lesson
     ? `<div class="lesson"><b>Your rule:</b> ${esc(r.lesson)}</div>`
     : `<div class="lesson small">No lesson written for this one yet. <a href="#log/${r.id}">Add it in the Log.</a></div>`;
+  fb.innerHTML += '<div class="ai"></div>';
   const last = index + 1 >= queue.length;
   fb.innerHTML += `<div class="rt-actions"><button class="btn primary" id="rtNext" type="button">${last ? "Finish" : "Next puzzle"}</button></div>`;
   $("rtHint").disabled = true;
@@ -238,4 +240,5 @@ function showResult(item, r) {
     }
   });
   $("rtNext").focus();
+  showExplanation(fb.querySelector(".ai"), r.id, r.explanation, r.judgment);
 }

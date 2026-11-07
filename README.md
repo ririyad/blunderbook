@@ -58,6 +58,7 @@ Everything stays on your computer: one SQLite file, no account, no cloud, no tra
 | **Patterns** | Your most common causes, blunders by time control, and your re-test history. |
 | **Print** | An A4 page per two entries, black and white, like the paper log. |
 | **Backups** | Daily automatic backups, to a folder your cloud drive syncs if you like. |
+| **AI explanations (optional)** | Off unless you turn it on. With your own OpenRouter key, a button explains a blunder in plain words from Stockfish's lines. |
 
 ![Re-test: find the best move in a position where you went wrong](docs/images/retest.png)
 
@@ -301,7 +302,8 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   - the game's details: source, time control, result, ratings, clock left and time on the
     move;
   - the cause chips (dashed ones are suggestions: click one to confirm it), and **What I was
-    thinking** and **Lesson**, which save as you type.
+    thinking** and **Lesson**, which save as you type;
+  - with [AI explanations](#ai-explanations-optional) on, an **Explain this blunder** button.
 - **Re-test** shows each position that's due, from your side. Tap a piece, then a square.
   "Show a hint" lights up the square the best move starts from; "I don't know — show me" gives
   the answer. You then see the best line, what you played in the game, your lesson and when
@@ -311,6 +313,38 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
 - **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
   position, and shows each game's result with links to the new entries. Games that need a side
   must be imported on the command line with `--side`.
+
+### AI explanations (optional)
+
+Off unless you turn it on. With your own [OpenRouter](https://openrouter.ai) key and a model
+you choose, the Log gets an **Explain this blunder** button. It turns the engine's lines into 3
+or 4 plain sentences, such as which piece your move left hanging and what the best move does
+instead. Your thinking and your lesson stay yours to write: the explanation sits in its own
+box and never fills them in.
+
+```sh
+blunderbook ai set-key                 # paste your OpenRouter key (typed hidden)
+blunderbook ai model MODEL_ID          # a model id from openrouter.ai/models
+blunderbook ai on
+blunderbook ai show                    # on or off, the model, and whether a key is set
+blunderbook ai off                     # hides the button; keeps the key and what's saved
+```
+
+- **Nothing is sent until you press the button.** "What's sent" next to it shows the exact
+  text first.
+- **What's sent:** the position, your move, Stockfish's lines and evals, the clock, the
+  opening, and facts Blunderbook works out from the board (each capture along a line, pieces
+  left attacked, a mate threat). **Never** player names, ratings, dates, the PGN, or anything
+  you wrote or confirmed.
+- **Who sees it:** OpenRouter and the company running the model. Blunderbook asks OpenRouter
+  to use only providers that don't collect your data. Some models then have no provider; the
+  page says so, and another model will do.
+- **The model only explains.** It's told to use only the lines it's given, but it can still
+  get things wrong. The engine's lines in the I played / Best was boxes are what to trust.
+- **Saved once.** The explanation is kept with the entry, so each one is paid for once.
+  "Explain again" replaces it. After a re-test, the result shows it too, never before you've
+  tried. An explanation costs a fraction of a cent on most models; check prices on
+  openrouter.ai.
 
 ### Print your Blunder Log
 
@@ -348,13 +382,15 @@ blunderbook restore blunderbook-2026-11-05_081756Z.db
 - **Restore** checks the file first, shows what it holds and asks before replacing anything.
   It keeps a copy of your current database. Stop `blunderbook serve` first. A file name on its
   own is looked up in the backup folder.
-- **Settings aren't in backups.** config.toml, and your Lichess token in it, stay out of them.
+- **Settings aren't in backups.** config.toml, and your Lichess token and OpenRouter key in
+  it, stay out of them. Saved AI explanations are in the database, so they are backed up.
 
 ### Moving to a new computer
 
 1. Install Blunderbook and Stockfish.
 2. Run `blunderbook init`. Give the same names, and the same backup folder if it's a synced
-   one. Put your Lichess token back into config.toml by hand if you used one.
+   one. Put your Lichess token back into config.toml by hand if you used one, and run
+   `blunderbook ai set-key` again if you use AI explanations.
 3. Restore the newest backup: `blunderbook restore <its file name>`. If your cloud drive keeps
    files online only, make it download that file first.
 
@@ -446,6 +482,11 @@ contact = ''        # sent in the User-Agent header, as Chess.com asks
 dir = ''            # empty = the local backups folder; may be a synced folder
 keep = 14           # how many of the newest backups to keep
 auto = true         # back up once a day before import, fen, sync and serve
+
+[ai]
+enabled = false     # set with: blunderbook ai on / off
+model = ''          # an OpenRouter model id: blunderbook ai model NAME
+key = ''            # your OpenRouter key: blunderbook ai set-key; never share this file
 ```
 
 Blunderbook rewrites this file when a command changes a setting, so comments you add aren't
@@ -477,6 +518,10 @@ back to the next one.
 | `blunderbook engine show` | Show which Stockfish is used and where that setting came from. |
 | `blunderbook engine set PATH` | Check a Stockfish program (or its folder) and save it. |
 | `blunderbook engine clear` | Forget the saved path and look on `PATH` again. |
+| `blunderbook ai show` | Show whether AI explanations are on, the model, and whether a key is set. |
+| `blunderbook ai set-key` | Save your OpenRouter key, typed hidden. Empty removes it. |
+| `blunderbook ai model NAME` | Save the model that writes explanations. |
+| `blunderbook ai on` / `off` | Show or hide the "Explain this blunder" button. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games
@@ -497,6 +542,9 @@ or `blunderbook serve --port 8733`.
 **The page says "Can't reach Blunderbook"**: `blunderbook serve` has stopped. Start it again
 and reload the page.
 
+**"No provider for … is available that doesn't keep your data"**: that model is only served by
+providers that may keep requests. Pick another with `blunderbook ai model NAME`.
+
 **Something else**: `blunderbook doctor` checks the setup and says what's wrong.
 
 ## Privacy
@@ -505,7 +553,9 @@ and reload the page.
 - There are no accounts and no telemetry. The web app only answers on `127.0.0.1` and loads
   nothing from the internet.
 - Blunderbook goes online only when you run `blunderbook sync`, and then only to Lichess and
-  Chess.com.
+  Chess.com, or when you press "Explain this blunder" with AI explanations on, and then only
+  to OpenRouter, with the position and the engine's lines (see
+  [AI explanations](#ai-explanations-optional)).
 - Backups are local files. They leave your computer only if you put the backup folder inside
   a folder your cloud drive syncs.
 

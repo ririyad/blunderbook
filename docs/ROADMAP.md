@@ -17,9 +17,10 @@ _Last updated: 2026-11-07_
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
-| M8 AI explanations | In progress (3/4) | Optional "Explain this blunder" via OpenRouter, your own key |
+| M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 
-**Next up:** 8.4, the AI explanation on the page (Log and Re-test), and the README. v1 is complete. Before relying
+**Next up:** try one real explanation with your key (`ai set-key`, `ai model`, `ai on`), and
+check the Log and Re-test at 390 px wide. v1 and M8 are complete. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
@@ -547,8 +548,25 @@ never writes your thinking or lesson and never confirms a cause.
       - Tests use hand-built OpenRouter responses (`tests/fixtures/http/openrouter_*.json`,
         `TODO(verify)`) on `MockTransport`. The "newer app" upgrade tests now add a made-up
         migration after the latest, via `conftest.with_next_migration`.
-- [ ] **8.4 Page.** The explanation block in the Log and on the Re-test result (after an
+- [x] **8.4 Page.** The explanation block in the Log and on the Re-test result (after an
       attempt only), "What's sent", README.
+      _Done:_
+      - **`js/explain.js`**, shared by both views. It reads `/api/ai` each time, so `ai on` /
+        `ai off` show at once. A saved explanation is an amber dashed box like a suggested
+        cause, marked "auto", with the model and date and "It can be wrong". "Explain this
+        blunder" (or mistake / inaccuracy) asks; "Explain again" replaces it. "What's sent"
+        loads the exact prompt when opened.
+      - **Log:** under I played / Best was. **Re-test:** on the result, after the attempt.
+        The queue item has no explanation, and `test_web.py` checks the view only reads it
+        from the attempt's answer.
+      - **Checked in a browser** on a scratch config and database, with AI on and off and no
+        call to OpenRouter: the saved text and its label, "What's sent" (no names or notes in
+        it), the button on an entry with nothing saved, the Re-test result before and after an
+        attempt, and with AI off the saved text without a button and nothing on the others.
+        No console errors. Not checked at 390 px wide: the browser window couldn't be
+        resized (`TODO(verify)`).
+      - README: the AI explanations section (setup, what's sent and what isn't, who sees it,
+        cost), the commands, settings, privacy and a troubleshooting line.
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
