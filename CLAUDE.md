@@ -97,6 +97,7 @@ blunderbook/
 │   │   ├── hints.py           # suggested causes (time trouble, hung piece, ...)
 │   │   ├── retest.py          # spaced-repetition scheduling
 │   │   ├── patterns.py        # aggregates for the Patterns page
+│   │   ├── explain.py         # facts and prompt for the optional AI explanation
 │   │   └── models.py          # dataclasses: Game, Blunder, Eval, Attempt, ...
 │   ├── importer.py            # orchestrates: PGN text -> games -> analysis -> blunders
 │   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
@@ -460,6 +461,28 @@ Suggestions only (dashed "auto" chips in the UI). The user confirms them.
 - Tiles: total entries (per source), due today, % currently solved among re-tested entries,
   "played in ≤3 s" among entries with clock data, entries with < 30 s on the clock.
 - By speed, by source, and "biggest leak" = the cause with the highest total.
+
+### 7.10 AI explanation (`core/explain.py`, optional)
+- The model explains; it never analyses. It gets Stockfish's lines and facts python-chess
+  works out, and the system prompt tells it to use only those, in 3–4 plain sentences,
+  second person, no markdown, no exclamation marks.
+- **What's sent** (`Mistake`, built by `explain.mistake(entry)`): the FEN before the move,
+  your side, your move and the judgment, evals before and after in words from your side,
+  the refutation and the best line, the time control, clock left and time spent, the
+  opening and ECO, and the app's suggested causes (marked unconfirmed).
+- **Never sent:** player names, ratings, dates, the site or event, the PGN, and anything you
+  wrote or confirmed (thinking, lesson, causes, other cause). `Mistake` has no field for them.
+- **Facts:**
+  - After your move: your pieces (not the king) attacked by a cheaper piece, attacked and
+    not defended, or attacked more times than defended (direct attacks only); a check you
+    gave; "they now have a forced mate" when the eval after is a mate against you; the game
+    ending (stalemate, insufficient material).
+  - Each line (read from the stored SAN, stopping at the first unreadable or illegal
+    token): every capture as "Nxd5 takes your knight on d5"; checkmate or stalemate at the
+    end; otherwise your material at the end compared with before your move (P=1, N=B=3,
+    R=5, Q=9), noting when the last move is a capture or check.
+  - The best move: what it captures, a promotion, a check.
+- `PROMPT_VERSION` is stored with each explanation; bump it when the prompt changes.
 
 ---
 

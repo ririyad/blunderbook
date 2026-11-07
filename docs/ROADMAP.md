@@ -17,9 +17,9 @@ _Last updated: 2026-11-07_
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
-| M8 AI explanations | In progress (1/4) | Optional "Explain this blunder" via OpenRouter, your own key |
+| M8 AI explanations | In progress (2/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 
-**Next up:** 8.2, the facts and prompt for an AI explanation. v1 is complete. Before relying
+**Next up:** 8.3, the OpenRouter client, storage and API for AI explanations. v1 is complete. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
@@ -513,9 +513,23 @@ never writes your thinking or lesson and never confirms a cause.
         problem. It never calls OpenRouter.
       - CLAUDE.md principle #3, §3, §6 and §9 now name the AI explanation as the one other place
         that makes a network call, only when you press its button.
-- [ ] **8.2 Facts + prompt.** `core/explain.py` (pure): the facts sent (refutation played out
+- [x] **8.2 Facts + prompt.** `core/explain.py` (pure): the facts sent (refutation played out
       with each capture, pieces left hanging, mate threats, the best move, evals in words,
       clock) and the prompt. Never player names, ratings or your notes.
+      _Done:_
+      - **`Mistake`** holds only what may be sent; `explain.mistake(entry)` copies it out of
+        an entry. A test fills every private field (names, ratings, site, notes, confirmed
+        causes) with marker text and checks none of it reaches the prompt.
+      - **`facts()`** plays out the stored lines with python-chess (`read_line` skips move
+        numbers and stops at the first bad token): each capture with whose piece it was,
+        checkmate or stalemate at the end, material against before your move. After your
+        move it lists your pieces left attacked, and a forced mate against you.
+      - **`build_prompt()`** gives the system and user messages. The user message is plain
+        text, readable as it is, so the page can show it under "What's sent".
+      - Checked on the §12 blunders with their known refutations: the Elephant (two captures
+        and a queen trade, 2 points down mid-exchange), Scholar's mate and the back rank
+        (mate in 1), and Légal's trap (a queen won, then mated).
+      - CLAUDE.md §7.10 holds the rules.
 - [ ] **8.3 Client, storage, API.** `ai.py` (OpenRouter, checked against its docs), migration
       `0002_explanations.sql`, `GET /api/ai`, `GET|POST /api/blunders/{id}/explanation[/prompt]`.
 - [ ] **8.4 Page.** The explanation block in the Log and on the Re-test result (after an
