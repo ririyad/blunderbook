@@ -618,6 +618,11 @@ GET    /api/retest/{id}/hint      the from-square only
 
 GET    /api/patterns
 
+GET    /api/games?source=&result=won|lost|drawn&speed=&blunders=with|clean&q=
+                                  the games you imported (not FEN entries), newest first, each
+                                  with its import (batch, or null) and entries by judgment
+GET    /api/games/{id}            {game (with moves), outcome, imported_at, batch, entries}
+
 POST   /api/import                the PGN as raw bytes (Content-Type: application/x-chess-pgn)
                                   -> 202 {job_id}; 409 while another import runs
 GET    /api/import/{job_id}       status, positions done / total, one row per game, summary
@@ -656,6 +661,14 @@ Web import:
 - The import and FEN routes also refuse a request whose `Origin` isn't the page's own (403),
   and the import route anything that isn't `application/x-chess-pgn` (415). That type needs
   a CORS preflight, which the server never allows, so another website can't send games.
+
+Games: newest first by the date played, and by the day it was imported when there's no
+date. `result` is from your side. `blunders=clean` keeps games with no entries. `q` searches
+the opponent, the opening and its ECO code, ignoring case (beyond ASCII too), at most 100
+characters. Each game carries its import, so the page groups the list by import or by date
+without asking again; games saved before imports were remembered have `batch: null` and are
+grouped by the local day of `imported_at`. The game page's `game` is built by the same code as
+the entry detail's (`api/common.py`). A FEN entry's game is a 404 here.
 
 The list is newest first (one game's entries in move order). `cause=` matches entries where
 the cause is confirmed, or where nothing is confirmed yet and it's suggested, as in the demo.

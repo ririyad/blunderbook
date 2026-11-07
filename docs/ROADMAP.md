@@ -19,11 +19,11 @@ _Last updated: 2026-11-07_
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
-| M10 Your games | In progress (1/3) | A Games tab: every game you imported, by import, with a game page |
+| M10 Your games | In progress (2/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Not started | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 10.2, the games API: `GET /api/games` with filters, and one game with its moves and entries. Still to check
+**Next up:** 10.3, the Games tab: by import or by date, filters, the game page, and links from the Log and Import. Still to check
 from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -679,8 +679,21 @@ that steps through the whole game with your blunders marked. No delete in this m
         your side, speed, clean or not, and a search of the opponent, opening and ECO that
         ignores case beyond ASCII. FEN entries aren't games, so they're left out.
         `repo.get_game_row` and `list_entries(game_id=)` for the game page.
-- [ ] **10.2 API.** `GET /api/games` (filters, each game with its import) and
+- [x] **10.2 API.** `GET /api/games` (filters, each game with its import) and
       `GET /api/games/{id}` (the game, its moves with FENs, its entries).
+      _Done:_
+      - **`GET /api/games`**: each game with your side, the opponent and their rating, the
+        result and its outcome from your side, the date played and the import time, the
+        time control, the opening, its import (`batch`, or null for older games) and its
+        entries by judgment. Filters: `source`, `result=won|lost|drawn`, `speed`,
+        `blunders=with|clean`, `q` (opponent, opening, ECO; at most 100 characters). A bad
+        value is a 422.
+      - **`GET /api/games/{id}`**: the game with its whole mainline (each move with the FEN
+        after it), its outcome, import and entries in move order. A FEN entry's game, or
+        none, is a 404 "No game #N.".
+      - The entry detail and the game page build the game the same way: `moves()` and
+        `game_out()` moved from `routes_blunders.py` to `api/common.py` (a test checks both
+        give the same game).
 - [ ] **10.3 The Games view.** The tab, By import / By date, filters, the game page, links
       from the Log detail and the Import report, 390 px.
 

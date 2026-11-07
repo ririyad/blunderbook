@@ -22,7 +22,14 @@ from starlette.types import Scope
 from blunderbook import __version__, ext
 from blunderbook.db.connection import StorageError
 
-from . import routes_blunders, routes_explain, routes_import, routes_patterns, routes_retest
+from . import (
+    routes_blunders,
+    routes_explain,
+    routes_games,
+    routes_import,
+    routes_patterns,
+    routes_retest,
+)
 from .jobs import ImportJobs
 from .schemas import ExtensionOut
 
@@ -100,6 +107,7 @@ def create_app(db_path: Path, extensions: Sequence[ext.Extension] = ()) -> FastA
     app.state.extensions = {extension.name: extension for extension in extensions}
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(LOCAL_HOSTS))
     app.include_router(routes_blunders.router)
+    app.include_router(routes_games.router)
     app.include_router(routes_retest.router)
     app.include_router(routes_patterns.router)
     app.include_router(routes_import.router)

@@ -9,7 +9,16 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from blunderbook.core.models import CAUSES, Color, Judgment, Source, Speed, Status
+from blunderbook.core.models import (
+    CAUSES,
+    Color,
+    ImportKind,
+    Judgment,
+    Outcome,
+    Source,
+    Speed,
+    Status,
+)
 
 
 def known_cause(cause: str) -> str:
@@ -71,6 +80,61 @@ class GameOut(BaseModel):
     engine_depth: int | None
     start_fen: str
     moves: list[MoveOut]  # the whole mainline; empty if the stored PGN can't be read
+
+
+class ImportOut(BaseModel):
+    """The import a game came from (CLAUDE.md §5)."""
+
+    id: int
+    label: str  # "blitz-week.pgn", "Pasted PGN", "Lichess sync"
+    kind: ImportKind
+    started_at: datetime
+
+
+class GameSummary(BaseModel):
+    """One row of the Games list. Each carries its import, so the page can group the list by
+    import or by date without asking again."""
+
+    id: int
+    source: Source
+    site_label: str | None
+    white: str | None
+    black: str | None
+    my_color: Color
+    opponent: str | None
+    opponent_elo: int | None
+    result: str | None
+    outcome: Outcome | None  # from your side; None when the result is unknown ("*")
+    played_on: date | None
+    imported_at: datetime  # groups games saved before imports were remembered, by day
+    speed: Speed | None
+    tc_label: str | None
+    opening: str | None
+    eco: str | None
+    batch: ImportOut | None  # None: saved before imports were remembered
+    blunders: int
+    mistakes: int
+    inaccuracies: int
+
+
+class GameEntryOut(BaseModel):
+    """One of a game's entries, for the game page's move list and its links to the Log."""
+
+    id: int
+    ply: int
+    move_no: int
+    played_san: str
+    judgment: Judgment
+    status: Status
+    due_on: date
+
+
+class GameDetail(BaseModel):
+    game: GameOut  # with the whole mainline (moves)
+    outcome: Outcome | None
+    imported_at: datetime
+    batch: ImportOut | None
+    entries: list[GameEntryOut]  # in move order
 
 
 class ExplanationOut(BaseModel):

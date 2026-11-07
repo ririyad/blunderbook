@@ -6,12 +6,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from blunderbook.core import detect, pgn
-from blunderbook.core.models import Color, Entry, Game, Source, Status
+from blunderbook.core import detect
+from blunderbook.core.models import Color, Entry, Source, Status
 from blunderbook.db import repo
 
-from .common import Db, explanation_out, found, not_found, opponent, tc_label
-from .schemas import Cause, EntryOut, EntrySummary, GameOut, MoveOut, NotesIn
+from .common import Db, explanation_out, found, game_out, not_found, opponent, tc_label
+from .schemas import Cause, EntryOut, EntrySummary, NotesIn
 
 router = APIRouter(prefix="/api/blunders", tags=["blunders"])
 
@@ -83,46 +83,6 @@ def _summary(entry: Entry) -> EntrySummary:
     )
 
 
-def _moves(game: Game) -> list[MoveOut]:
-    """The mainline, read again from the stored PGN. It was read once to import it, so this
-    only comes back empty if the stored text was changed by hand."""
-    parsed = pgn.parse(game.pgn).games
-    if len(parsed) != 1:
-        return []
-    return [
-        MoveOut(
-            ply=p.index, move_no=p.move_no, color=p.color, san=p.san, uci=p.uci, fen=p.fen_after
-        )
-        for p in parsed[0].plies
-    ]
-
-
-def _game(game: Game) -> GameOut:
-    return GameOut(
-        id=game.id,
-        source=game.source,
-        site_label=game.site_label,
-        white=game.white,
-        black=game.black,
-        white_elo=game.white_elo,
-        black_elo=game.black_elo,
-        my_color=game.my_color,
-        opponent=opponent(game),
-        result=game.result,
-        played_on=game.played_on,
-        time_control=game.time_control,
-        tc_label=tc_label(game),
-        speed=game.speed,
-        opening=game.opening,
-        eco=game.eco,
-        has_clocks=game.has_clocks,
-        engine_name=game.engine_name,
-        engine_depth=game.engine_depth,
-        start_fen=game.start_fen,
-        moves=_moves(game),
-    )
-
-
 def _detail(conn: sqlite3.Connection, entry: Entry) -> EntryOut:
     b, g = entry.blunder, entry.game
     me = g.my_color
@@ -156,6 +116,6 @@ def _detail(conn: sqlite3.Connection, entry: Entry) -> EntryOut:
         due_on=b.due_on,
         created_at=b.created_at,
         updated_at=b.updated_at,
-        game=_game(g),
+        game=game_out(g),
         explanation=explanation_out(repo.get_explanation(conn, b.id)),
     )
