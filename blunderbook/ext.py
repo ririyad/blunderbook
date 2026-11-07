@@ -11,6 +11,7 @@ Core never imports an extension by name. One that is turned on but missing, brok
 for another host API is reported once and left out: the app runs without it.
 """
 
+import ast
 import re
 import sqlite3
 from collections.abc import Callable, Iterable, Sequence
@@ -152,6 +153,39 @@ def web_folder(extension: Extension) -> Path | None:
         return None
     folder = Path(str(extension.web))
     return folder if folder.is_dir() else None
+
+
+# What an extension may import from Blunderbook: the host API, this module and the core.
+HOST_MODULES: Final = ("blunderbook.host", "blunderbook.ext", "blunderbook.core")
+
+
+def boundary_problems(package: Path) -> list[str]:
+    """Imports of Blunderbook outside the host API in the ``.py`` files under ``package``,
+    as plain lines; [] when there are none. For an extension's own tests."""
+    found: list[str] = []
+    for path in sorted(package.rglob("*.py")):
+        tree = ast.parse(path.read_text("utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                if node.module == "blunderbook":
+                    names = [f"blunderbook.{alias.name}" for alias in node.names]
+                else:
+                    names = [node.module]
+            else:
+                continue
+            for name in names:
+                if _outside_host_api(name):
+                    where = f"{path.relative_to(package).as_posix()}:{node.lineno}"
+                    found.append(f"{where} imports {name}, which isn't part of the host API")
+    return found
+
+
+def _outside_host_api(module: str) -> bool:
+    if module != "blunderbook" and not module.startswith("blunderbook."):
+        return False
+    return not any(module == m or module.startswith(m + ".") for m in HOST_MODULES)
 
 
 def _points(found: Iterable[EntryPoint] | None) -> dict[str, EntryPoint]:

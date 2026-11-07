@@ -139,6 +139,7 @@ blunderbook/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
 │   ├── fixtures/http/         # recorded Lichess / Chess.com responses
+│   ├── fixtures/ext_demo/     # a test-only extension, "installed" on sys.path (§15)
 │   └── test_*.py
 └── docs/
     ├── ROADMAP.md             # status, roadmap slices, open decisions and the Decided log
@@ -797,6 +798,9 @@ Design language (from the demo and the paper template):
   - the JS cause list matches `CAUSES`;
   - no inline scripts or `on…=` handlers.
 
+  The page checks are `blunderbook/webcheck.py`, so an extension's tests run the same ones
+  on its own page (§15).
+
   Check views by hand in a browser. When checking JS syntax with Node, check `.mjs` copies:
   Node may not parse a `.js` file as a module.
 - Sync adapter tests use recorded HTTP fixtures (httpx `MockTransport`).
@@ -820,6 +824,10 @@ Design language (from the demo and the paper template):
    macOS/Windows/Linux), empty states, error messages.
 8. **AI explanations (optional):** `[ai]` config and `ai` commands, `core/explain.py` facts and
    prompt, the OpenRouter client, saved explanations, the Log and Re-test block (§7.10).
+9. **Extensions:** the contract, discovery and `ext` commands, extension databases in the
+   backups, routes, pages and the host API, one extension end to end (§15).
+10. **Library (extension):** openings, traps and tactics to study and practise.
+11. **Games (extension):** your game collection, anyone's games, analysed.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -848,3 +856,80 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
   the chess "??" notation.
 - If something can't be verified (e.g. an API parameter), leave a `TODO(verify):` comment
   and mention it in your summary.
+
+---
+
+## 15. Extensions
+
+Bigger features that aren't about your own mistakes are extensions: separate packages, kept
+in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. The first
+two are **Library** (openings, traps and tactics) and **Games** (your game collection).
+`tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
+
+**Found, not imported.** An extension package declares an entry point in the
+`blunderbook.extensions` group, named after it, pointing at an `ext.Extension`:
+
+```toml
+[project.entry-points."blunderbook.extensions"]
+library = "blunderbook_library:extension"
+```
+
+```python
+extension = ext.Extension(
+    name="library",                         # [a-z]+, the entry point's name; not a name
+                                            #   Blunderbook uses (ext.RESERVED)
+    title="Library",                        # the tab's label
+    host_api=ext.HOST_API,                  # the host API it was written for
+    router=router,                          # optional: mounted at /api/ext/library
+    web=files(__name__) / "web",            # optional: view.js (+ view.css) at /ext/library/
+    migrations=files(__name__) / "migrations",  # optional: NNNN_name.sql for library.db
+    cli=commands,                           # optional: `blunderbook library ...`
+)
+```
+
+- Installed with the app (`uv tool install . --with ./extensions/library`), turned on with
+  `blunderbook ext enable NAME` (it's loaded and checked first), seen after `serve` restarts.
+  `ext disable` keeps its data. `[extensions] enabled` in config.toml is the list.
+- Loading never raises. An extension that's on but missing, fails to import, has the wrong
+  name, was made for another `HOST_API`, or is missing its files (a page folder on disk with
+  `view.js`, a migrations folder) is one plain warning: `serve`, `doctor` and `ext list` say
+  why, and the app runs without it. Core never imports an extension by name (a test checks).
+- **`HOST_API`** (now 1) is bumped when something an extension uses changes or goes away.
+  Adding to the host API doesn't bump it.
+
+**What an extension may use** (`ext.boundary_problems(package)` checks its imports):
+- `blunderbook.host`, the host API:
+  - For routes: `ExtDb` (its own database, per request), `Log` (your Log, read-only:
+    `entries()`, `entry(id)`, `game(id)`), and `same_origin` (add
+    `dependencies=[Depends(host.same_origin)]` to every route that changes something).
+  - Anywhere: `settings()` (`my_names` with your site usernames, thresholds, engine depth,
+    threads and hash; never a token or a key), `engine()` (Stockfish, found as §6 says, in a
+    `with` block), and for commands `read_log()` and `open_db(extension)`.
+  - Problems are `host.HostError` (or `StorageError`), with plain messages.
+- `blunderbook.ext` (for `Extension` and `HOST_API`) and the pure `blunderbook.core`
+  modules: `pgn`, `detect`, `retest`, `identity`, `timecontrol`, `engine`, `models`.
+- Nothing else: not `db`, `config`, `api`, `cli`, `importer`, `ai` or `sources`.
+- On the page, Blunderbook's modules by absolute path: `/js/api.js` (`api`, `ApiError`),
+  `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` and `/js/board.js`
+  (`renderBoard`, `fenToBoard`, `squareLabel`, square helpers). A test checks these exports
+  stay. Its own modules by relative path.
+
+**Rules:**
+- **Your Log is read-only to it.** It goes through `Log` / `read_log()`, opened `mode=ro`,
+  so SQLite refuses a write. Nothing is copied into or out of the Log. An extension refers
+  to an entry or game by id or fingerprint and checks it still exists.
+- **Its own database** is `<name>.db` next to Blunderbook's, made by its migrations (the
+  §14 rules: numbered, forward-only, no `BEGIN`/`COMMIT`). It's created and upgraded like
+  Blunderbook's: before the first request in `serve`, or by `host.open_db`, with a
+  `-pre-migrate` backup when it has data. It's in every backup (`<name>-….db`) and restored by
+  name (§6).
+- **The page:** `view.js` exports `show(root, rest)`, like the built-in views, for `#name`
+  and `#name/rest`. The same CSP applies: no inline scripts or handlers, nothing from
+  elsewhere, `esc()` for every text that goes into HTML. Its CSS classes start with its name.
+  The design language of §11 applies.
+- **The same principles (§1):** local-first, no telemetry, network calls only when you ask
+  for them (an extension that has one documents it and keeps it off by default, as `[ai]`
+  does), no build step, degrade gracefully. Its dependencies are asked for like core's (§3).
+- **Tests:** its own suite, which runs `webcheck.problems(folder, app)` on its page and
+  `ext.boundary_problems(package)` on its code. Its settings, if it needs any, wait for a
+  later host API: v1 has none.

@@ -18,16 +18,16 @@ _Last updated: 2026-11-07_
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
-| M9 Extensions | In progress (3/4) | Separate packages that add a tab, routes, commands and their own database |
+| M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Library | Not started | Extension: openings, traps and tactics to study and practise |
 | M11 Games | Not started | Extension: your game collection (anyone's games), analysed |
 
-**Next up:** 9.4, a test-only extension end to end and CLAUDE.md §15 (the contract, written down). Still to check
+**Next up:** 10.1, the Library package: its content format, a validator and the first entries. Still to check
 from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
-In place: all of M1 to M7. `blunderbook import` reads a PGN file, finds your blunders
+In place: all of M1 to M9. `blunderbook import` reads a PGN file, finds your blunders
 with Stockfish (both passes), suggests causes, and saves each game and its entries to the
 database. Importing the same file again adds nothing. `blunderbook fen` logs a single position
 you have no PGN of. The database is backed up once a day before `import` and `fen`, and
@@ -41,6 +41,10 @@ The Import tab imports a pasted or dropped PGN, or one FEN position, on the page
 `blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
 against hand-built responses only; no real download has been checked yet).
 `blunderbook print` writes the A4 Blunder Log page, and `serve --open` opens the page for you.
+"Explain this blunder" asks OpenRouter, with your own key, to put Stockfish's lines into words
+(off until you turn it on). Extensions can be installed and turned on: each adds its own tab,
+routes, commands and database, is backed up with yours, and can read your Log but never change
+it. None ships yet: Library (M10) and Games (M11) are the first.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -638,7 +642,18 @@ Log but never change it. Turned on with `blunderbook ext enable NAME`, then a re
       - Checked in Chrome with the sample extension: the tab, a deep link, its styles, tab
         switching, an unknown route, no console or CSP errors. HTML in its data stays text.
       - Also removed dead code 9.2 left in `api/jobs.py`.
-- [ ] **9.4 End to end.** A test-only extension that uses all of it; CLAUDE.md §15.
+- [x] **9.4 End to end.** A test-only extension that uses all of it; CLAUDE.md §15.
+      _Done:_
+      - **`tests/fixtures/ext_demo`**: a demo package with routes, a page (with a module of
+        its own), commands and a database, using only the host API. A `.dist-info` folder
+        makes `importlib.metadata` find it for real when the folder is on `sys.path`.
+      - **`tests/test_ext_e2e.py`** goes from `ext list` and `ext enable` through its
+        command, `serve`, its routes, page files and checks, `backup` and `restore` of its
+        database, to `ext disable`, with your Log read and never changed.
+      - **`ext.boundary_problems(package)`** lists an extension's imports from Blunderbook
+        outside the host API. A test checks core never imports an extension.
+      - **CLAUDE.md §15** writes the contract down: what an extension declares, what it may
+        use, and the rules it follows. Also §4, §12 and §13 (M9 to M11).
 
 ### M10 Library (extension)
 

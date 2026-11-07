@@ -1,0 +1,2 @@
+[blunderbook.extensions]
+demo = blunderbook_demo:extension
