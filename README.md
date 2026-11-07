@@ -580,3 +580,8 @@ Read these before changing anything:
   and API.
 - [docs/ROADMAP.md](docs/ROADMAP.md) records how v1 was built and the decisions behind it.
 - [docs/reference-demo.html](docs/reference-demo.html) is the original UI prototype.
+
+## Licence
+
+Blunderbook is free software under the [GNU General Public License v3.0](LICENSE) or (at
+your option) any later version.
