@@ -343,6 +343,14 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   when the DB is missing or has no rows). If that backup fails, change nothing. Then copy the
   file in with SQLite's backup API (`Connection.backup`), never by replacing the file (a stale
   `-wal` would corrupt it), and migrate.
+- **Extension databases.** An extension that's on and has migrations keeps its own
+  `<name>.db` next to the DB (`ext.open_db`), and everything above applies to it too: the
+  daily backup, `backup`, `-pre-migrate` and restore. Its backups start with its name
+  (`library-2026-11-07_120000Z.db`), and rotation, the daily check and `keep` count each
+  name's files separately. `restore` picks the database from the file name's prefix (none =
+  Blunderbook's), refuses one for an extension that's off, and checks that the file's tables
+  are exactly the ones that database's migrations make, so one database's backup can't
+  replace another's.
 - **What's not included.** Backups hold the DB only. config.toml (and the token) is never
   backed up. On a new computer, run `init`, then `restore`.
 - **Folder.** The live DB never goes in a synced folder; only backups do. `backup.dir` accepts
@@ -557,8 +565,8 @@ They return **PGN text only**. The importer does everything else.
 | `ext enable NAME` | Load and check an installed extension, then turn it on. Changes nothing if it can't be used. Restart `serve` to see it. |
 | `ext disable NAME` | Turn it off. Its data stays. |
 | `NAME ...` | An extension's own commands, when it's on and has some. |
-| `backup [--to FOLDER]` | Take a verified snapshot now and rotate old ones (see §6 Backups). |
-| `restore FILE [--yes]` | Replace the DB with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
+| `backup [--to FOLDER]` | Take a verified snapshot of the DB and each extension's DB now, and rotate old ones (see §6 Backups). |
+| `restore FILE [--yes]` | Replace the DB (or an extension's, by the file's name) with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
 
 Every command prints a short, readable summary, e.g.
 `2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.

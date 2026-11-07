@@ -1,6 +1,8 @@
 """Extensions for the extension tests (CLAUDE.md §15). Loaded through hand-made entry
 points such as ``EntryPoint("sample", "ext_samples:sample", ext.GROUP)``."""
 
+from pathlib import Path
+
 import typer
 
 from blunderbook import ext
@@ -20,3 +22,9 @@ reserved = ext.Extension(name="log", title="Log", host_api=ext.HOST_API)
 bad_name = ext.Extension(name="Bad1", title="Bad", host_api=ext.HOST_API)
 old_api = ext.Extension(name="old", title="Old", host_api=ext.HOST_API + 1)
 not_an_extension = {"name": "plain"}
+
+# An extension with a database of its own (9.2).
+NOTES_MIGRATIONS = Path(__file__).parent / "fixtures" / "ext_notes"
+notes = ext.Extension(
+    name="notes", title="Notes", host_api=ext.HOST_API, migrations=NOTES_MIGRATIONS
+)

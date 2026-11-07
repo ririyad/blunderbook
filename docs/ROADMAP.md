@@ -18,11 +18,11 @@ _Last updated: 2026-11-07_
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
 | M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
-| M9 Extensions | In progress (1/4) | Separate packages that add a tab, routes, commands and their own database |
+| M9 Extensions | In progress (2/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Library | Not started | Extension: openings, traps and tactics to study and practise |
 | M11 Games | Not started | Extension: your game collection (anyone's games), analysed |
 
-**Next up:** 9.2, a database of its own for each extension, in the backups. Still to check
+**Next up:** 9.3, the page side of extensions: a tab each, their files, and the host API. Still to check
 from M8: one real explanation with your key, and the Log and Re-test at 390 px wide. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -597,8 +597,22 @@ Log but never change it. Turned on with `blunderbook ext enable NAME`, then a re
       - Checked: uv 0.13.7 has `uv tool install --with <requirement>` (a local path works as
         a requirement) and `uv sync --all-packages`. The workspace itself arrives with the
         first extension package (10.1).
-- [ ] **9.2 Own databases.** `open_db(migrations=…)`, backups with a per-extension prefix,
+- [x] **9.2 Own databases.** `open_db(migrations=…)`, backups with a per-extension prefix,
       the daily backup, `-pre-migrate` and `restore` for extension databases.
+      _Done:_
+      - **`connection.Store`** names a database and its migrations. `CORE` is Blunderbook's
+        own and the default everywhere, so core behaviour and messages are unchanged.
+      - **`ext.open_db(extension, cfg)`** opens `<name>.db` next to the DB, creating and
+        migrating it, with a `-pre-migrate` backup first when it has data; if that backup
+        fails it isn't upgraded. A newer database names the extension.
+      - **Backups** start with the database's name (`notes-…db`). Rotation, `keep` and the
+        daily check count each name separately. `backup` and the daily backup cover every
+        extension that's on and has a database (`ext.databases`, `ext.daily_backups`, shared
+        by the CLI and the web import job); a failed one is a warning, as before.
+      - **`restore`** picks the database from the file name, refuses a backup of an extension
+        that's off, and compares the file's tables with the ones that database's migrations
+        make, so a renamed file can't put one database's backup in place of another's.
+      - Tests: `tests/test_ext_db.py`, with a sample `notes` extension that has a migration.
 - [ ] **9.3 Page + host API.** `GET /api/extensions`, `/ext/<name>/` files, a tab per
       extension loaded with `import()`, `ext_db` / `log_reader` (read-only) dependencies,
       `host.settings()` / `host.engine()`, page checks extensions can reuse.

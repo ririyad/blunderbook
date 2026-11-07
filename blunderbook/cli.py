@@ -1197,19 +1197,24 @@ def backup_(
         typer.Option("--to", metavar="FOLDER", help="Back up to this folder this time."),
     ] = None,
 ) -> None:
-    """Back up the database now. Only the newest are kept (keep in config.toml)."""
+    """Back up the database now, and the databases of extensions that are on. Only the
+    newest are kept (keep in config.toml)."""
     cfg = _load_config()
     folder = _backup_folder(cfg) if to is None else Path(os.path.abspath(to.expanduser()))
-    try:
-        snapshot = backup.take(config.db_path(), folder, keep=cfg.backup.keep)
-    except backup.BackupError as exc:
-        _fail(str(exc))
-    typer.echo(f"Backed up the database to\n  {snapshot.backup.path}")
-    if snapshot.removed:
-        typer.echo(
-            f"Deleted {_plural(len(snapshot.removed), 'older backup')}, keeping the newest "
-            f"{cfg.backup.keep}."
-        )
+    for store, db in ext.databases(cfg):
+        if store is not connection.CORE and not db.is_file():
+            continue  # an extension that hasn't made its database yet
+        try:
+            snapshot = backup.take(db, folder, keep=cfg.backup.keep, store=store)
+        except backup.BackupError as exc:
+            _fail(str(exc) if store is connection.CORE else f"{store.label}: {exc}")
+        what = "the database" if store is connection.CORE else f"{store.label}'s database"
+        typer.echo(f"Backed up {what} to\n  {snapshot.backup.path}")
+        if snapshot.removed:
+            typer.echo(
+                f"Deleted {_plural(len(snapshot.removed), 'older backup')}, keeping the newest "
+                f"{cfg.backup.keep}."
+            )
 
 
 @app.command()
@@ -1230,16 +1235,16 @@ def restore(
     cfg = _load_config()
     folder = _backup_folder(cfg)
     path = _find_backup(file, folder)
-    db = config.db_path()
+    store, db = _restore_target(path, cfg)
     try:
-        backup.check_file(path)
+        backup.check_file(path, store)
     except backup.BackupError as exc:
         _fail(f"Can't restore {path}: {exc}\nNothing was changed.")
 
     _row("Backup", str(path))
     _row("", _describe_backup(path))
     _row("Database", str(db))
-    _row("", _describe_database(db))
+    _row("", _describe_database(db, store))
     if not yes:
         typer.echo("\nStop the web app (blunderbook serve) first if it's running.")
         try:
@@ -1250,7 +1255,7 @@ def restore(
             _fail("Nothing was changed.")
 
     try:
-        result = backup.restore(path, db, folder)
+        result = backup.restore(path, db, folder, store=store)
     except backup.BackupError as exc:
         _fail(f"Can't restore {path}: {exc}")
     typer.echo("")
@@ -1263,17 +1268,32 @@ def restore(
     typer.echo(f"Restored {path.name}{held}.")
 
 
+def _restore_target(path: Path, cfg: config.Config) -> tuple[connection.Store, Path]:
+    """Whose database a backup belongs to, from its name: Blunderbook's own, or that of an
+    extension that's on. A file with another name is taken as Blunderbook's, and checked."""
+    named = backup.parse_name(path)
+    if named is None or named.store == connection.CORE.name:
+        return connection.CORE, config.db_path()
+    for store, db in ext.databases(cfg)[1:]:
+        if store.name == named.store:
+            return store, db
+    _fail(
+        f"{path.name} is a backup of the {named.store} extension's database, and that "
+        f"extension isn't on. Turn it on first: blunderbook ext enable {named.store}\n"
+        "Nothing was changed."
+    )
+
+
 def _daily_backup(cfg: config.Config) -> None:
-    """The automatic backup before a command that changes data. It never stops the command."""
+    """The automatic backups before a command that changes data: Blunderbook's database and
+    those of extensions that are on. They never stop the command."""
     if not cfg.backup.auto:
         return
-    try:
-        snapshot = backup.auto(config.db_path(), config.backup_folder(cfg), keep=cfg.backup.keep)
-    except (config.ConfigError, backup.BackupError) as exc:
-        typer.echo(f"Warning: the daily backup didn't work: {exc}", err=True)
-        return
-    if snapshot is not None:
-        typer.echo(f"Daily backup: {snapshot.backup.path}")
+    done = ext.daily_backups(cfg)
+    for path in done.taken:
+        typer.echo(f"Daily backup: {path}")
+    for problem in done.problems:
+        typer.echo(f"Warning: {problem[0].lower()}{problem[1:]}", err=True)
 
 
 def _backup_folder(cfg: config.Config) -> Path:
@@ -1306,9 +1326,11 @@ def _describe_backup(path: Path) -> str:
     return " \N{MIDDLE DOT} ".join(parts) or "a Blunderbook database"
 
 
-def _describe_database(db: Path) -> str:
+def _describe_database(db: Path, store: connection.Store = connection.CORE) -> str:
     if not db.exists():
         return "not created yet"
+    if store is not connection.CORE:
+        return f"holds {store.label}'s data now"
     totals = _totals(db)
     return "can't be read" if totals is None else f"now holds {_describe_totals(totals)}"
 

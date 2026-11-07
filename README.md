@@ -382,6 +382,9 @@ blunderbook restore blunderbook-2026-11-05_081756Z.db
 - **Restore** checks the file first, shows what it holds and asks before replacing anything.
   It keeps a copy of your current database. Stop `blunderbook serve` first. A file name on its
   own is looked up in the backup folder.
+- **Extensions** that keep data (see `blunderbook ext list`) have their own database,
+  backed up with yours as `<name>-…db`, for example `library-2026-11-05_081756Z.db`. Each
+  name keeps its own 14. `restore` works out from the file name which database it replaces.
 - **Settings aren't in backups.** config.toml, and your Lichess token and OpenRouter key in
   it, stay out of them. Saved AI explanations are in the database, so they are backed up.
 
@@ -513,8 +516,8 @@ back to the next one.
 | `blunderbook sync [lichess\|chesscom\|all]` | Download your new games, then import them. |
 | `blunderbook serve [--port 8732] [--open]` | Start the web app on `127.0.0.1`. |
 | `blunderbook print --out FILE.html [--ids 1,2] [--due]` | Write the A4 print page. |
-| `blunderbook backup [--to FOLDER]` | Back up the database now. |
-| `blunderbook restore FILE [--yes]` | Replace the database with a backup, after checking it. |
+| `blunderbook backup [--to FOLDER]` | Back up the database, and each extension's, now. |
+| `blunderbook restore FILE [--yes]` | Replace the database (or an extension's) with a backup, after checking it. |
 | `blunderbook engine show` | Show which Stockfish is used and where that setting came from. |
 | `blunderbook engine set PATH` | Check a Stockfish program (or its folder) and save it. |
 | `blunderbook engine clear` | Forget the saved path and look on `PATH` again. |

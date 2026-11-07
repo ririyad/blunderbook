@@ -1,5 +1,8 @@
 """SQLite connections, PRAGMAs and the forward-only migration runner (CLAUDE.md §5).
 
+Each database Blunderbook looks after is a :class:`Store`: the core one (``CORE``), or an
+extension's own (CLAUDE.md §15), with its own migrations. Everything defaults to ``CORE``.
+
 Connections use SQLite's own autocommit mode (``autocommit=True``). Python never opens a
 transaction behind your back, so PRAGMAs such as ``foreign_keys`` take effect (SQLite
 ignores them inside a transaction). Writes that belong together go in ``transaction()``.
@@ -25,6 +28,18 @@ Mode = Literal["ro", "rw", "rwc"]  # read only · read and write · read, write 
 
 class StorageError(Exception):
     """A database problem, with a message ready to show."""
+
+
+@dataclass(frozen=True, slots=True)
+class Store:
+    """A database: the core one, or an extension's own."""
+
+    name: str  # "blunderbook", or the extension's name; also its backups' prefix
+    label: str  # for messages: "Blunderbook", "the library extension"
+    migrations: Traversable
+
+
+CORE = Store("blunderbook", "Blunderbook", MIGRATIONS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,20 +78,46 @@ def load_migrations(folder: Traversable = MIGRATIONS) -> tuple[Migration, ...]:
     return tuple(found)
 
 
-def latest_version() -> int:
+def store_migrations(store: Store = CORE) -> tuple[Migration, ...]:
+    """The migrations of ``store``."""
+    return load_migrations() if store is CORE else load_migrations(store.migrations)
+
+
+def latest_version(store: Store = CORE) -> int:
     """The schema version this app brings a database up to."""
-    return len(load_migrations())
+    return len(store_migrations(store))
 
 
-def migrate(conn: sqlite3.Connection, migrations: Sequence[Migration] | None = None) -> list[int]:
+def schema_tables(store: Store, version: int) -> set[str]:
+    """The tables a ``store`` database has at schema ``version``: its first ``version``
+    migrations, run on an empty database in memory."""
+    with closing(sqlite3.connect(":memory:", autocommit=True)) as conn:
+        migrate(conn, store_migrations(store)[:version], store=store)
+        return table_names(conn)
+
+
+def table_names(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute(
+        "SELECT name FROM sqlite_schema WHERE type = 'table' "
+        "AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'"
+    ).fetchall()
+    return {str(row[0]) for row in rows}
+
+
+def migrate(
+    conn: sqlite3.Connection,
+    migrations: Sequence[Migration] | None = None,
+    *,
+    store: Store = CORE,
+) -> list[int]:
     """Apply the migrations newer than the database's ``user_version``, each in its own
     transaction together with the version bump. Returns the numbers applied (none when the
     database is up to date). Refuses a database from a newer Blunderbook, and a SQLite file
     that has tables but was never set up by Blunderbook."""
-    known = load_migrations() if migrations is None else tuple(migrations)
+    known = store_migrations(store) if migrations is None else tuple(migrations)
     latest = len(known)
     current = user_version(conn)
-    _check_ours(conn, current, latest)
+    _check_ours(conn, current, latest, store)
     applied: list[int] = []
     for migration in known[current:]:
         try:
@@ -95,20 +136,28 @@ def migrate(conn: sqlite3.Connection, migrations: Sequence[Migration] | None = N
     return applied
 
 
-def _check_ours(conn: sqlite3.Connection, version: int, latest: int) -> None:
-    problem = _version_problem(conn, version, latest)
+def _check_ours(conn: sqlite3.Connection, version: int, latest: int, store: Store) -> None:
+    problem = _version_problem(conn, version, latest, store)
     if problem is not None:
         raise StorageError(problem)
 
 
-def _version_problem(conn: sqlite3.Connection, version: int, latest: int) -> str | None:
+def _version_problem(
+    conn: sqlite3.Connection, version: int, latest: int, store: Store = CORE
+) -> str | None:
     if version > latest:
+        if store is CORE:
+            return (
+                f"The database was made by a newer Blunderbook (schema {version}; this "
+                f"version knows up to {latest}). Update Blunderbook to use it."
+            )
         return (
-            f"The database was made by a newer Blunderbook (schema {version}; this version "
-            f"knows up to {latest}). Update Blunderbook to use it."
+            f"The database was made by a newer version of {store.label} (schema {version}; "
+            f"this one knows up to {latest}). Update the extension to use it."
         )
     if version == 0 and _has_tables(conn):
-        return "This SQLite file isn't a Blunderbook database: it has tables but no schema version."
+        what = "a Blunderbook database" if store is CORE else f"a database of {store.label}"
+        return f"This SQLite file isn't {what}: it has tables but no schema version."
     return None
 
 
@@ -158,7 +207,11 @@ def connect(path: Path, *, mode: Mode = "rw", any_thread: bool = False) -> sqlit
 
 
 def open_db(
-    path: Path, *, create: bool = False, before_migrate: Callable[[], object] | None = None
+    path: Path,
+    *,
+    create: bool = False,
+    before_migrate: Callable[[], object] | None = None,
+    store: Store = CORE,
 ) -> sqlite3.Connection:
     """Open the database for use: check it's ours and not from a newer Blunderbook, switch it
     to WAL, and bring it up to date. With ``create``, a missing file (and folder) is made.
@@ -172,12 +225,12 @@ def open_db(
         path.parent.mkdir(parents=True, exist_ok=True)
     conn = connect(path, mode="rwc" if create else "rw")
     try:
-        version, latest = user_version(conn), latest_version()
-        _check_ours(conn, version, latest)
+        version, latest = user_version(conn), latest_version(store)
+        _check_ours(conn, version, latest, store)
         conn.execute("PRAGMA journal_mode = WAL")
         if before_migrate is not None and version < latest and has_rows(conn):
             before_migrate()
-        migrate(conn)
+        migrate(conn, store=store)
     except sqlite3.Error as exc:
         conn.close()
         raise _open_error(path, exc) from exc
@@ -187,17 +240,17 @@ def open_db(
     return conn
 
 
-def check(path: Path) -> DbCheck:
+def check(path: Path, store: Store = CORE) -> DbCheck:
     """Look at the database without changing it: its schema version and
     ``PRAGMA integrity_check``. Raises ``StorageError`` if it can't be opened."""
     if not path.exists():
         raise StorageError(f"No database at {path} yet. Run: blunderbook init")
-    latest = latest_version()
+    latest = latest_version(store)
     with closing(connect(path, mode="ro")) as conn:
         try:
             version = user_version(conn)
             problems: list[str] = []
-            if (problem := _version_problem(conn, version, latest)) is not None:
+            if (problem := _version_problem(conn, version, latest, store)) is not None:
                 problems.append(problem)
             errors = [str(row[0]) for row in conn.execute("PRAGMA integrity_check")]
         except sqlite3.Error as exc:

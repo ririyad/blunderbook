@@ -17,7 +17,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final, Literal
 
-from blunderbook import config, importer
+from blunderbook import config, ext, importer
 from blunderbook.core import engine, pgn
 from blunderbook.db import backup, connection, repo
 from blunderbook.db.connection import StorageError
@@ -367,9 +367,11 @@ def _stockfish(cfg: config.Config) -> Path:
 
 
 def _daily_backup(cfg: config.Config, db: Path) -> list[str]:
-    """The automatic backup before a change (CLAUDE.md §6). It never stops the import."""
+    """The automatic backups before a change (CLAUDE.md §6): Blunderbook's database and those
+    of extensions that are on. They never stop the import; a failure is a note."""
     if not cfg.backup.auto:
         return []
+    return list(ext.daily_backups(cfg, db).problems)
     try:
         backup.auto(db, config.backup_folder(cfg), keep=cfg.backup.keep)
     except (config.ConfigError, backup.BackupError) as exc:
