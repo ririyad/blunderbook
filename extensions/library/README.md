@@ -127,6 +127,33 @@ traps/legal-trap.toml: next 1: 7. Nd6# isn't legal after 6... Ke7.
 14 entries fine · 1 problem
 ```
 
+### Adding or updating content
+
+`uv tool install` copies the content into uv's tool folder, so the installed app doesn't see
+a new or changed file until you install it again. After editing files in your clone:
+
+```sh
+blunderbook library check blunderbook_library/content   # from extensions/library: check your files first
+uv tool install --reinstall . --with ./extensions/library   # from the Blunderbook folder
+```
+
+Then restart `blunderbook serve`: the tab reads the content once, when the server starts.
+Keep `--with ./extensions/library`. Without it the reinstalled app has no Library, and `serve`
+and `doctor` warn that it's missing. There's no need to run `ext enable` again, and the
+content isn't stored in `library.db`, so nothing there changes.
+
+A file that has a problem is left out (the check names it), so check before you reinstall.
+
+**Your practise progress stays.** It's kept per entry id (the file's name) and position.
+Adding entries, or adding and reordering `[[practise]]` positions, keeps it. A renamed file
+is a new entry, and a position whose line changed is a new position. Both start fresh. The
+old progress isn't deleted: it counts again if the name or position comes back. So when you
+extend an entry, keep its file name.
+
+**Editing often?** Run the app from your clone instead: `uv sync` once, then
+`uv run blunderbook serve` from the Blunderbook folder. The dev environment uses the clone's
+own files, so a change only needs a restart of `serve`, not a reinstall.
+
 ## Tests
 
 `uv run pytest` in the Blunderbook folder runs them with the app's own (the workspace installs
