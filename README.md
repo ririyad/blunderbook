@@ -97,7 +97,14 @@ uv tool install .
 ```
 
 If uv says its tool folder isn't on your `PATH`, run `uv tool update-shell` and open a new
-terminal. To update later, `git pull`, then run `uv tool install --reinstall .`.
+terminal.
+
+To update later, run `blunderbook update`. It fetches the new version into this folder,
+lists what changed, and reinstalls Blunderbook with every extension you've installed
+(`blunderbook update --check` only lists). It won't touch a folder where you've changed
+files. On Windows the reinstall finishes in a new window, which waits for `blunderbook serve`
+to stop first. By hand, it's `git pull`, then
+`uv tool install --reinstall . --with ./extensions/library` (one `--with` per extension).
 
 To run it without installing, use `uv sync` once, then `uv run blunderbook ...` from this
 folder.
@@ -366,13 +373,16 @@ blunderbook ai off                     # hides the button; keeps the key and wha
 ### Extensions
 
 Extensions are separate packages that add to Blunderbook: a tab, commands, a database of
-their own. They can read your Log but never change it. Install one with the app, then turn
-it on:
+their own. They can read your Log but never change it. Install one and turn it on:
 
 ```sh
-uv tool install --reinstall . --with ./extensions/library
-blunderbook ext enable library
+blunderbook ext install library
 ```
+
+It reinstalls Blunderbook with the extension added (keeping any others), then turns it on.
+`blunderbook update` keeps it installed from then on. By hand, it's
+`uv tool install --reinstall . --with ./extensions/library` in the Blunderbook folder, then
+`blunderbook ext enable library`.
 
 `blunderbook ext list` shows what's installed and on; `blunderbook ext disable NAME` turns
 one off and keeps its data.
@@ -575,7 +585,9 @@ back to the next one.
 | `blunderbook ai set-key` | Save your OpenRouter key, typed hidden. Empty removes it. |
 | `blunderbook ai model NAME` | Save the model that writes explanations. |
 | `blunderbook ai on` / `off` | Show or hide the "Explain this blunder" button. |
+| `blunderbook update [--check]` | Update Blunderbook and your extensions from its git folder. `--check` only lists what's new. |
 | `blunderbook ext list` | Show installed extensions and which are on. |
+| `blunderbook ext install NAME` | Install an extension from the `extensions` folder and turn it on. |
 | `blunderbook ext enable NAME` / `disable NAME` | Turn an extension on or off; restart `serve` to see it. Turning one off keeps its data. |
 | `blunderbook library list` | List the Library's entries (with the Library on). |
 | `blunderbook library check [FOLDER]` | Check the Library's entries, or a folder of your own. |

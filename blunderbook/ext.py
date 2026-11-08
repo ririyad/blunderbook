@@ -37,7 +37,7 @@ RESERVED: Final = frozenset(
     {
         "ai", "api", "backup", "blunderbook", "css", "doctor", "engine", "ext", "fen",
         "games", "import", "init", "js", "log", "patterns", "pieces", "print", "restore",
-        "retest", "serve", "sync",
+        "retest", "serve", "sync", "update",
     }
 )  # fmt: skip
 

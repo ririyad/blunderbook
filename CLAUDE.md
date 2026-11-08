@@ -23,8 +23,9 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
    "What I was thinking" or "Lesson", and never confirms a cause on the user's behalf.
 3. **Local-first and private.** All data lives in one SQLite file on the user's machine.
    No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, when
-   the user runs a sync, and in the optional AI explanation (off by default), when the user
-   presses its button. Backups are local files too: the app never uploads them.
+   the user runs a sync, in the optional AI explanation (off by default), when the user
+   presses its button, and in `update`, a `git fetch` from the install folder's own remote,
+   when the user runs it. Backups are local files too: the app never uploads them.
    For an off-site copy, the user points the backup folder at a folder their cloud drive syncs.
 4. **Degrade gracefully.** Missing headers, ratings or clock times are normal (OTB games,
    typed-up score sheets). Show "—", skip the features that need the missing data, never fail
@@ -108,6 +109,7 @@ blunderbook/
 │   ├── ext.py                 # the extension contract, discovery and loading (§15)
 │   ├── host.py                # the host API extensions use: Log (read-only), settings, engine
 │   ├── webcheck.py            # page-file checks, reused by extensions' tests (§12)
+│   ├── update.py              # `update` and `ext install`: git fetch, fast-forward, reinstall
 │   ├── printing.py            # the A4 print page: fills web/print.html, boards as SVG
 │   ├── sources/
 │   │   ├── base.py            # SourceAdapter protocol: fetch_new_pgn(since) -> str
@@ -587,6 +589,8 @@ They return **PGN text only**. The importer does everything else.
 | `ext list` | Installed extensions, which are on, and why any that's on can't be used. |
 | `ext enable NAME` | Load and check an installed extension, then turn it on. Changes nothing if it can't be used. Restart `serve` to see it. |
 | `ext disable NAME` | Turn it off. Its data stays. |
+| `ext install NAME` | Install `extensions/NAME` from the folder Blunderbook was installed from, keeping every extension already installed, then `ext enable` it. Already installed: only turns it on. It doesn't pull. |
+| `update [--check]` | Bring the installed copy up to date with its git folder (found from the install's PEP 610 `direct_url.json`): refuse local changes to tracked files, a branch with no upstream or one that has diverged; `git fetch`, list the new commits (`--check` stops there), fast-forward (never a reset or a stash), then `uv tool install --reinstall FOLDER --with …` with one `--with` per installed extension. It always reinstalls, so running it again finishes a reinstall that failed. On Windows the reinstall runs in a new PowerShell window that waits for this command and any running `serve` (a running program's files are locked). A development copy (editable) is told to `git pull` and `uv sync`. |
 | `NAME ...` | An extension's own commands, when it's on and has some. |
 | `backup [--to FOLDER]` | Take a verified snapshot of the DB and each extension's DB now, and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB (or an extension's, by the file's name) with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
@@ -601,7 +605,10 @@ importing the file again finishes the rest). A report with needs-side games or e
 `doctor` exits 1 when it finds a problem (AI on with no key or model is one; it never calls
 OpenRouter; an extension that's on but missing or broken is one too). Warnings (an old backup, a missing backup folder)
 are shown but don't change the exit code. `serve` exits 1 only when it can't start (bad
-config, busy port, a database it can't use).
+config, busy port, a database it can't use). `update` and `ext install` exit 1 when they
+can't run (not installed from a git folder, no git or uv, local changes, no upstream,
+diverged, the fetch fails, an unknown extension), and with uv's code when the reinstall
+fails; on Windows they exit 0 once the window is started.
 
 ---
 
@@ -939,8 +946,10 @@ extension = ext.Extension(
 )
 ```
 
-- Installed with the app (`uv tool install . --with ./extensions/library`), turned on with
-  `blunderbook ext enable NAME` (it's loaded and checked first), seen after `serve` restarts.
+- Installed with the app (`blunderbook ext install NAME`, which runs
+  `uv tool install --reinstall . --with ./extensions/NAME` keeping the others), turned on with
+  `blunderbook ext enable NAME` (it's loaded and checked first; `ext install` does this
+  too), seen after `serve` restarts. `blunderbook update` keeps every installed extension.
   `ext disable` keeps its data. `[extensions] enabled` in config.toml is the list.
 - Loading never raises. An extension that's on but missing, fails to import, has the wrong
   name, was made for another `HOST_API`, or is missing its files (a page folder on disk with

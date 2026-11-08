@@ -2,7 +2,7 @@
 
 Commands arrive milestone by milestone (see the README roadmap):
 engine (1.3) · init, doctor, import (1.9) · fen (2.4) · backup, restore (2.5) ·
-serve (3.4) · sync (6.4) · print (7.1) · ai (8.1) · ext (9.1).
+serve (3.4) · sync (6.4) · print (7.1) · ai (8.1) · ext (9.1) · update, ext install.
 
 `run()` is the program's entry point: it adds the commands of the extensions turned on
 in config.toml, then runs the app.
@@ -22,7 +22,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from blunderbook import __version__, config, ext, importer, printing, sources
+from blunderbook import __version__, config, ext, importer, printing, sources, update
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Batch, Color, SyncSource, Totals
 from blunderbook.core.source import game_time
@@ -49,7 +49,7 @@ ai_app = typer.Typer(
 app.add_typer(ai_app, name="ai")
 
 ext_app = typer.Typer(
-    help="List, turn on or turn off extensions (separately installed packages).",
+    help="List, install, turn on or turn off extensions (separately installed packages).",
     no_args_is_help=True,
 )
 app.add_typer(ext_app, name="ext")
@@ -277,6 +277,69 @@ def ext_disable(name: Annotated[str, typer.Argument(help="The extension's name."
     enabled = tuple(n for n in cfg.extensions.enabled if n != name)
     config.save(replace(cfg, extensions=replace(cfg.extensions, enabled=enabled)))
     typer.echo(f"Turned off {name}. Its data stays; restart blunderbook serve.")
+
+
+@ext_app.command("install")
+def ext_install(name: Annotated[str, typer.Argument(help="The extension's name.")]) -> None:
+    """Install an extension from the extensions folder of Blunderbook's git folder, and
+    turn it on. Your other extensions stay installed."""
+    if ext.find(name) is not None:
+        typer.echo(f"The {name} extension is already installed.")
+        ext_enable(name)
+        return
+    try:
+        folder = update.source()
+        here = update.available(folder)
+        if not ext.NAME.fullmatch(name) or name not in here:
+            listed = ", ".join(here) if here else "none"
+            _fail(f"There's no extensions/{name} folder. Extensions here: {listed}.")
+        uv = update.program("uv")
+        command = update.uv_command(
+            uv, folder, [*update.extension_specs(), str(folder / "extensions" / name)]
+        )
+        code = update.reinstall(command, done=f"Installed the {name} extension.", enable=name)
+    except update.UpdateError as exc:
+        _fail(f"{exc}")
+    if update.WINDOWS:
+        typer.echo(f"Installing {name} in a new window. It starts when this command ends.")
+    raise typer.Exit(code)
+
+
+# ---------------------------------------------------------------- update
+
+
+@app.command("update")
+def update_(
+    check: Annotated[
+        bool, typer.Option("--check", help="Only say what's new. Changes nothing.")
+    ] = False,
+) -> None:
+    """Update Blunderbook and its extensions to the newest version of its git folder."""
+    try:
+        folder = update.source()
+        uv = None if check else update.program("uv")
+        pending = update.check(folder)
+        for line in update.report(pending):
+            typer.echo(line)
+        if check:
+            if pending.new:
+                typer.echo("Run blunderbook update to install them.")
+            return
+        assert uv is not None
+        if pending.new:
+            typer.echo(f"Updated {folder} to {update.apply(folder)}.")
+        else:
+            typer.echo("Reinstalling it as it is, in case an earlier update didn't finish.")
+        head = pending.upstream if pending.new else pending.head
+        command = update.uv_command(uv, folder, update.extension_specs())
+        code = update.reinstall(command, done=f"Blunderbook is up to date ({head}).")
+    except update.UpdateError as exc:
+        _fail(f"{exc}")
+    if update.WINDOWS:
+        typer.echo("Reinstalling in a new window. It starts when this command ends.")
+    elif code != 0:
+        typer.echo("The reinstall failed. Run blunderbook update again.", err=True)
+    raise typer.Exit(code)
 
 
 # ---------------------------------------------------------------- init

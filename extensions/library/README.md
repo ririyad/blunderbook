@@ -8,18 +8,15 @@ practise with spaced repetition, and your own Log entries from games in each ent
 
 ## Install and turn on
 
-From the Blunderbook folder:
-
 ```sh
-uv tool install . --with ./extensions/library
-blunderbook ext enable library
+blunderbook ext install library      # installs it and turns it on
 blunderbook library list       # the entries
 blunderbook library check      # check every entry (or: check FOLDER)
 ```
 
 ## The tab
 
-Restart `blunderbook serve` after `ext enable library`, and the page has a Library tab:
+Restart `blunderbook serve` after `ext install library`, and the page has a Library tab:
 
 - `#library` lists the entries: openings, traps, then tactics.
 - `#library/legal-trap` opens one on a board facing the side you play: its idea, its moves

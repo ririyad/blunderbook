@@ -16,7 +16,7 @@ _Last updated: 2026-11-08_
 | M4 Re-test + Patterns | Done (4/4) | Scheduling, attempts, hints, both views |
 | M5 Web import | Done (3/3) | Shared import code, background job with progress, Import view |
 | M6 Sync | Done (4/4) | Lichess and Chess.com adapters (recorded fixtures only), CLI `sync` |
-| M7 Print + polish | Done (3/3) | A4 print page, `serve --open`, install docs |
+| M7 Print + polish | Done (4/4) | A4 print page, `serve --open`, install docs |
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
@@ -507,6 +507,22 @@ Each item is one small commit, with its tests in the same change. Every commit m
       on Windows, the archive or the distribution's package on Linux), then `init` and `doctor`,
       and Moving to a new computer. The download page was checked on 2026-11-06 (Stockfish 19,
       universal builds). The winget package isn't checked on Windows yet (`TODO(verify)`).
+- [x] **7.4 `update` and `ext install`.** One command to bring an installed copy up to date,
+      and one to add an extension, instead of remembering the uv command and every `--with`.
+      _Done:_
+      - **`blunderbook update [--check]`** (`update.py`): finds the git folder from the
+        install's own record (PEP 610 `direct_url.json`, no setting), refuses local changes,
+        no upstream or a diverged branch, fetches and lists the new commits, fast-forwards,
+        then reinstalls with one `--with` per installed extension. `--check` stops after the
+        list.
+      - **`blunderbook ext install NAME`**: the same reinstall plus `extensions/NAME`, then
+        `ext enable`. Already installed: it only turns it on.
+      - **Windows:** a new PowerShell window waits for the command, its launcher and any
+        running `serve` of the same install, runs uv, and stays open until you press Enter.
+        Checked on this PC with a stand-in command: the wait, success and failure lines.
+      - **Tests:** real git on temp repos (a bare remote and clones; no network), uv and the
+        window stubbed, and PowerShell's parser on the script. A first real update on an
+        installed copy is still to do (it needs this change pushed first).
 
 ### M8 AI explanations (optional, off by default)
 
@@ -1103,6 +1119,12 @@ None open.
   rest. Those classes are now a written list that a test keeps, and an extension's page check
   refuses any other class that isn't its own. Openings in the Library open at their first
   move. (CLAUDE.md §15)
+- **2026-11-08: `update` and `ext install` (7.4).** One `update` for Blunderbook and every
+  extension: they live in the same repo, so one pull updates them all, and a per-extension
+  update couldn't do anything different. It always reinstalls, even with nothing new, so
+  running it again finishes a reinstall that failed (e.g. `serve` was running). Windows
+  locks a running program's files, so the reinstall is handed to a new window that waits.
+  The fetch is a network call when you run it, like a sync (CLAUDE.md §1.3).
 - **2026-11-08: A favicon.** A notebook with an ink spine and a red "??", in the page's own
   colours (`web/favicon.svg`, served from our own files under the same CSP). The print page
   carries it inlined, so the saved file still stands alone.
