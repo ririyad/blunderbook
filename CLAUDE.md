@@ -954,6 +954,7 @@ extension = ext.Extension(
   - For routes: `ExtDb` (its own database, per request), `Log` (your Log, read-only:
     `entries()`, `entry(id)`, `game(id)`), and `same_origin` (add
     `dependencies=[Depends(host.same_origin)]` to every route that changes something).
+  - `transaction(conn)` groups writes to its own database that belong together (§14).
   - Anywhere: `settings()` (`my_names` with your site usernames, thresholds, engine depth,
     threads and hash; never a token or a key), `engine()` (Stockfish, found as §6 says, in a
     `with` block), and for commands `read_log()` and `open_db(extension)`.
@@ -965,6 +966,18 @@ extension = ext.Extension(
   `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` and `/js/board.js`
   (`renderBoard`, `fenToBoard`, `squareLabel`, square helpers). A test checks these exports
   stay. Its own modules by relative path.
+- On the page, the page's shared CSS classes (`webcheck.SHARED_CLASSES`), so its tab looks
+  like the rest:
+  - panels and text: `panel`, `empty`, `small`, `sr`, `gback`, `head`, `meta`, `sec`;
+  - buttons and pills: `btn` (`primary`, `ghost`, `danger`), `pill` (`p-new`, `p-due`,
+    `p-solved`, `p-missed`, `p-blunder`);
+  - a board with step controls: `detail`, `boardwrap`, `board`, `nav`, `grp`, `icon`,
+    `navlabel`, `legend` (`l-played`, `l-best`, `l-sel`), `side` (`white`, `black`);
+  - a move list: `mlist`, `mbtn` (`bad`), `mempty`, `no`;
+  - a puzzle, in Re-test's layout: `rt`, `prompt`, `q`, `boardnote`, `rtprog`, `feedback`
+    (`on`, `ok`, `no`), `lesson`, `rt-actions`, `queue`, `rt-empty`.
+
+  A test checks app.css keeps them.
 
 **Rules:**
 - **Your Log is read-only to it.** It goes through `Log` / `read_log()`, opened `mode=ro`,
@@ -977,11 +990,12 @@ extension = ext.Extension(
   name (§6).
 - **The page:** `view.js` exports `show(root, rest)`, like the built-in views, for `#name`
   and `#name/rest`. The same CSP applies: no inline scripts or handlers, nothing from
-  elsewhere, `esc()` for every text that goes into HTML. Its CSS classes start with its name.
-  The design language of §11 applies.
+  elsewhere, `esc()` for every text that goes into HTML. Its own CSS classes start with its
+  name (`library`, `library-row`); any other class it uses is a shared one. The design
+  language of §11 applies.
 - **The same principles (§1):** local-first, no telemetry, network calls only when you ask
   for them (an extension that has one documents it and keeps it off by default, as `[ai]`
   does), no build step, degrade gracefully. Its dependencies are asked for like core's (§3).
-- **Tests:** its own suite, which runs `webcheck.problems(folder, app)` on its page and
-  `ext.boundary_problems(package)` on its code. Its settings, if it needs any, wait for a
-  later host API: v1 has none.
+- **Tests:** its own suite, which runs `webcheck.problems(folder, app, prefix=name)` on its
+  page (its classes too) and `ext.boundary_problems(package)` on its code. Its settings, if
+  it needs any, wait for a later host API: v1 has none.

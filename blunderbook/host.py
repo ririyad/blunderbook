@@ -11,6 +11,8 @@ For routes (an extension's router is mounted at ``/api/ext/<name>``):
 - ``Log``: your Log, read-only (the database is opened ``mode=ro``: a write fails in SQLite).
 - ``same_origin``: add ``dependencies=[Depends(host.same_origin)]`` to a route that changes
   something, so only the Blunderbook page can call it.
+- ``transaction(conn)``: writes to the extension's database that belong together, in one
+  ``with`` block (``BEGIN IMMEDIATE`` ... ``COMMIT``, or ``ROLLBACK`` if it raises).
 
 For anything (routes and commands):
 
@@ -36,6 +38,7 @@ from blunderbook.api.common import same_origin
 from blunderbook.core.engine import Engine, EngineError
 from blunderbook.core.models import Entry, Game, Source, Status, Thresholds
 from blunderbook.db import connection, repo
+from blunderbook.db.connection import transaction
 
 __all__ = [
     "ExtDb",
@@ -48,6 +51,7 @@ __all__ = [
     "read_log",
     "same_origin",
     "settings",
+    "transaction",
 ]
 
 

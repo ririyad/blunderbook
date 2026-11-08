@@ -12,8 +12,15 @@
 .library-idea{margin:0;max-width:68ch}
 .library-next{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .library-reply{border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius-sm);padding:8px 12px 10px}
-.library-reply.loses{border-left-color:var(--red)}
-.library-reply.sound{border-left-color:var(--green)}
+.library-loses{border-left-color:var(--red)}
+.library-sound{border-left-color:var(--green)}
 .library-line{display:flex;flex-wrap:wrap;align-items:center;gap:2px;font-variant-numeric:tabular-nums}
 .library-line .pill{margin-right:6px}
 .library-says{margin:4px 0 0;font-size:13px}
+.library-practise{display:flex;justify-content:space-between;align-items:center;gap:10px 16px;flex-wrap:wrap;padding:14px 16px;margin-bottom:14px}
+.library-practise h3{font-size:15px}
+.library-practise p{margin:2px 0 0}
+.library-name .pill{margin-left:6px;vertical-align:1px}
+.library-go{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+@media (max-width:560px){.library-go{align-items:flex-start}}
+.library-said{margin:6px 0 0}

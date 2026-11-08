@@ -378,12 +378,17 @@ blunderbook ext enable library
 one off and keeps its data.
 
 **Library** (in progress) holds openings, traps and tactics to study and practise, 15 to
-start with. Practise comes later. For now:
+start with:
 
 - **The Library tab** (restart `blunderbook serve` after turning it on) lists the entries
   as openings, traps and tactics. Open one to read its idea and step through its moves on a
   board facing the side you play. Its replies show what can come next: a sound one in
   green, one that loses in red. Press a reply to play it out on the board.
+- **Practise** asks you for the move in each entry's positions, like Re-test: tap to move,
+  take a hint or give up, then see the answer and the idea. Positions come back on Re-test's
+  schedule (1, 3, 7, 14, 30, 60 days; tomorrow after a miss). Start from "Practise" at the
+  top of the tab, or "Practise these positions" on an entry. Your progress is kept in
+  `library.db` next to your database, and backed up with it.
 - `blunderbook library list` lists them.
 - `blunderbook library check [FOLDER]` checks every entry: its fields, and that every line
   and every practise answer is a legal move. Each entry is a TOML file, described in

@@ -7,12 +7,16 @@ Blunderbook's own tests run them on ``web/``; an extension's tests run them on i
 folder with the app it's mounted in::
 
     app = create_app(db, [extension])
-    assert webcheck.problems(ext.web_folder(extension), app) == []
+    assert webcheck.problems(ext.web_folder(extension), app, prefix=extension.name) == []
+
+With ``prefix``, it also checks the page's CSS classes: each one is the extension's own
+(``library``, ``library-row``) or one of the page's shared ones (:data:`SHARED_CLASSES`).
 """
 
 import re
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Final
 
 from fastapi import FastAPI
 
@@ -29,11 +33,41 @@ INLINE_HANDLER = re.compile(r"<[^>]*\son[a-z]+\s*=")  # onclick="..."
 REMOTE_URL = re.compile(r"(?:https?:)?//[\w.-]+\.\w+")
 W3 = "http://www.w3.org"  # SVG namespaces, never fetched
 SHOW = re.compile(r"^export\s+(?:async\s+)?function\s+show\s*\(", re.MULTILINE)
+# class="panel detail" in markup; a `${...}` part is left out (it's worked out when it runs).
+CLASS_ATTR = re.compile(r"""\bclass(?:Name)?\s*=\s*["'`]([^"'`]*)["'`]""")
+TEMPLATE_PART = re.compile(r"\$\{[^}]*\}")
+CSS_CLASS = re.compile(r"\.(-?[a-zA-Z_][\w-]*)")
+# Comments and declarations: the innermost {...}, so selectors inside @media stay.
+CSS_SKIP = re.compile(r"/\*.*?\*/|\{[^{}]*\}", re.DOTALL)
+
+# The page's own CSS classes an extension's page may use, so its tab looks like the rest
+# (CLAUDE.md §15). A test checks app.css keeps each one. Anything else an extension styles
+# starts with its name.
+SHARED_CLASSES: Final = frozenset(
+    {
+        # panels, text and links
+        "panel", "empty", "small", "sr", "gback", "head", "meta", "sec",
+        # buttons and pills
+        "btn", "primary", "ghost", "danger", "pill", "p-new", "p-due", "p-solved", "p-missed",
+        "p-blunder",
+        # a board with step controls (the Log and the game page)
+        "detail", "boardwrap", "board", "nav", "grp", "icon", "navlabel", "legend", "l-played",
+        "l-best", "l-sel", "side", "white", "black",
+        # a move list
+        "mlist", "mbtn", "mempty", "no", "bad",
+        # a puzzle (Re-test's layout)
+        "rt", "prompt", "q", "boardnote", "rtprog", "feedback", "on", "ok", "lesson",
+        "rt-actions", "queue", "rt-empty",
+    }
+)  # fmt: skip
 
 
-def problems(folder: Path, app: FastAPI, *, view: bool = True) -> list[str]:
+def problems(
+    folder: Path, app: FastAPI, *, view: bool = True, prefix: str | None = None
+) -> list[str]:
     """Everything wrong with the page files in ``folder``, as plain lines; [] when they're
-    fine. ``view`` also asks for a view.js that exports ``show(root, rest)``."""
+    fine. ``view`` also asks for a view.js that exports ``show(root, rest)``. ``prefix`` (an
+    extension's name) checks its CSS classes are its own or shared."""
     files = sorted(p for p in folder.rglob("*") if p.is_file())
     found: list[str] = []
     if view:
@@ -49,6 +83,12 @@ def problems(folder: Path, app: FastAPI, *, view: bool = True) -> list[str]:
             found.append(f"{name}: an inline <script> (the CSP blocks it)")
         if path.suffix in (".html", ".js") and INLINE_HANDLER.search(text):
             found.append(f"{name}: an on...= handler in HTML (the CSP blocks it)")
+        if prefix is not None:
+            found += [
+                f"{name}: class {c!r} is neither shared nor {prefix}-..."
+                for c in sorted(_classes(text, css=path.suffix == ".css"))
+                if c not in SHARED_CLASSES and c != prefix and not c.startswith(prefix + "-")
+            ]
         if path.suffix == ".js":
             found += [f"{name}: {p}" for p in _import_problems(path, folder)]
             for called in API_CALL.findall(text):
@@ -69,6 +109,18 @@ def _view_problems(folder: Path) -> list[str]:
     if not SHOW.search(view.read_text("utf-8")):
         return ["view.js doesn't export a function show(root, rest)"]
     return []
+
+
+def _classes(text: str, *, css: bool) -> set[str]:
+    """The class names a file uses: in a stylesheet's selectors, or in markup's class
+    attributes, leaving out the parts worked out when it runs."""
+    if css:
+        selectors = CSS_SKIP.sub(" ", text)
+        return {c for c in CSS_CLASS.findall(selectors) if not c[0].isdigit()}
+    names: set[str] = set()
+    for value in CLASS_ATTR.findall(TEMPLATE_PART.sub(" ", text)):
+        names.update(value.split())
+    return names
 
 
 def _remote(text: str) -> Iterable[str]:

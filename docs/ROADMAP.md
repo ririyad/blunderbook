@@ -20,11 +20,10 @@ _Last updated: 2026-11-08_
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
-| M11 Library | In progress (2/4) | Extension: openings, traps and tactics to study and practise |
+| M11 Library | In progress (3/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 11.3, Library practise: quiz positions with spaced repetition, progress in
-`library.db`. Still
+**Next up:** 11.4, the Library's "Your entries in this opening", read from your Log. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -48,8 +47,9 @@ against hand-built responses only; no real download has been checked yet).
 "Explain this blunder" asks OpenRouter, with your own key, to put Stockfish's lines into words
 (off until you turn it on). Extensions can be installed and turned on: each adds its own tab,
 routes, commands and database, is backed up with yours, and can read your Log but never change
-it. The first, Library (M11), has its content, its `check` and `list` commands and a tab
-that steps through each entry and its replies; practise comes next. Collection (M12) follows.
+it. The first, Library (M11), has its content, its `check` and `list` commands, a tab
+that steps through each entry and its replies, and practise with spaced repetition, kept in
+`library.db`; links to your Log come next. Collection (M12) follows.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -776,8 +776,9 @@ that steps through the whole game with your blunders marked. No delete in this m
         attempt in 11.3, the same rule as core's Re-test queue. A test checks that no
         response has an answer that isn't already a move of the line.
       - **The tab** (`web/view.js`, `view.css`): the index in Openings / Traps / Tactics, and
-        an entry's page. The board faces the side you play and opens at the end of the line,
-        where the replies start. It has the game page's step controls and keys (← → Home
+        an entry's page. The board faces the side you play. A trap or tactic opens at the end
+        of its line, where the replies start; an opening at its first move (changed after
+        review, 2026-11-08). It has the game page's step controls and keys (← → Home
         End) and its move list. Each reply is a card, red when it loses and green when it's
         sound, and its moves play it out on the board, with the reply's arrow in the same
         colour. It reuses the page's shared classes (panel, board, step controls, move
@@ -789,7 +790,50 @@ that steps through the whole game with your blunders marked. No delete in this m
         Légal's trap, the Italian Game, the back-rank mate (a FEN start), an unknown id, both
         replies played out to the mate, the keys and the move buttons. No sideways scroll at
         1300 or 390 px, and no console errors besides the unknown id's 404.
-- [ ] **11.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
+- [x] **11.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
+      _Done:_
+      - **`library.db`** (`migrations/0001_progress.sql`): `progress`, one row per position
+        you've tried (status, streak, due date), and `attempts`, every try with its move and
+        whether you took the hint. A position is named by its entry's id and its FEN, so
+        positions added to an entry or reordered keep their progress. An untried one has no
+        row: it's new, and due today. It's backed up and restored with Blunderbook's (9.2).
+      - **Scheduling is core's Re-test** (`core.retest`, CLAUDE.md §7.8): a solve moves it
+        out by 1, 3, 7, 14, 30, then 60 days; a miss or giving up brings it back tomorrow; the
+        hint is recorded and changes nothing. A move counts when it's any of the entry's
+        answers (a bare promotion is a queen). `progress.py` holds the Library's SQL; the
+        try and the new schedule are one transaction (`host.transaction`, new in the host
+        API).
+      - **Routes:** `GET /practise` (due today, new ones included, the oldest due first;
+        `?all=1` every position; `?entry=ID` one entry's), `POST /practise/{id}/{n}/attempt`
+        (refuses another site's `Origin`), `GET /practise/{id}/{n}/hint` (the square the
+        answer starts from). The queue never sends an answer, a reply or the entry's idea,
+        which explains the answer; a test checks each item's fields. The attempt answers
+        with the answers, what the entry says about your move and about the answer ("5...
+        Bxd1 falls into it: 6. Bxf7+ Ke7 7. Nd5#"), the line's own move when you found
+        another right one, the idea, and the next date. The index and each entry carry your
+        counts (positions, tried, solved, due).
+      - **The page:** `#library/practise` (what's due), `/all` and `/<entry>`, in Re-test's
+        layout (`web/practise.js`): tap to move with dots, a hint, "I don't know — show me",
+        and the result with the idea. The index has a Practise panel ("26 positions to
+        practise today", or the next date and "Practise all anyway") and a pill per entry
+        (New, Due, Solved, "0 of 1 solved"); each entry has "Practise these 3 positions".
+      - **The checker** now refuses `practise` and `all` as entry ids (the page's own
+        addresses) and the same position practised twice in one entry (it would share
+        progress).
+      - **Also, after 11.2's review:** openings open at their first move, and the page's
+        shared CSS classes are written down in CLAUDE.md §15 (`webcheck.SHARED_CLASSES`).
+        A test checks app.css keeps them, and `webcheck.problems(..., prefix=name)` checks
+        an extension's page uses only those and its own (`library-…`). That caught two of
+        11.2's: the reply cards' `loses` / `sound` are now `library-loses` / `library-sound`.
+      - **Tests** (`test_library_practise.py`): the queue (all new at first, the order, no
+        answers), solving, falling into a trap, another right answer, giving up, the 1 → 3 →
+        back-to-tomorrow schedule, the hint, an illegal move recording nothing, 404s, another
+        site's `Origin`, and `library.db` in `blunderbook backup` (and not in your Log).
+      - **Checked in Chrome** over the DevTools protocol on a scratch database: Légal's trap
+        solved, the Elephant trap fallen into, a hint then giving up on Scholar's mate, Nc6
+        in the Philidor ("Also right: d6"), the finished session, the index's counts and
+        pills afterwards, a due session from the index. No sideways scroll at 390 px on the
+        index, an entry, a position or a result, and no console errors.
 - [ ] **11.4** "Your entries in this opening", read from your Log.
 
 ### M12 Collection (extension)
@@ -1014,3 +1058,18 @@ None open.
     from the legal moves the API already sends. Tapping the piece again puts it down.
   - Not yet: drag and drop, and a promotion picker (Re-test still promotes to a queen,
     §7.8). (CLAUDE.md §11)
+- **2026-11-08: Library practise (11.3).**
+  - Practise is core's Re-test for the Library's positions: the same intervals, the same
+    reading of a move, the same rule that the answer comes only after a try. One set of
+    rules, already tested, rather than a second scheduler.
+  - Progress is kept by entry and position (its FEN), not by the practise number, so editing
+    an entry doesn't move your progress to another position.
+  - Everything is due on the first day (26 positions), as new Log entries are. No daily cap
+    on new positions: the Library is small.
+  - The idea is shown after a try, never before: for a trap it gives the answer away.
+  - Extensions get `host.transaction` (an addition, so `HOST_API` stays 1).
+- **2026-11-08: The page's shared CSS classes.** An extension's tab uses the page's own
+  panels, buttons, board, step controls, move list and puzzle layout, so it looks like the
+  rest. Those classes are now a written list that a test keeps, and an extension's page check
+  refuses any other class that isn't its own. Openings in the Library open at their first
+  move. (CLAUDE.md §15)

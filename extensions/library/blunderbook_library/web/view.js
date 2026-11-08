@@ -1,13 +1,15 @@
-// The Library tab (ROADMAP 11.2): openings, traps and tactics. `#library` is the index;
-// `#library/legal-trap` opens one entry: its idea, the board stepping through its moves, and
-// the replies that can come next, each played out on the board.
+// The Library tab (ROADMAP 11.2, 11.3): openings, traps and tactics. `#library` is the
+// index; `#library/legal-trap` opens one entry: its idea, the board stepping through its
+// moves, and the replies that can come next, each played out on the board.
+// `#library/practise` (`/all`, `/legal-trap`) is practise, in ./practise.js.
 //
 // The API sends the FEN after every move, so there's no chess logic here (as in core).
-// Practise positions and their answers aren't on this page: they come with 11.3.
 
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
+import { fmtDate } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
+import * as practise from "./practise.js";
 
 const API = "/api/ext/library/entries";
 const KINDS = [["opening", "Openings", "Opening"], ["trap", "Traps", "Trap"], ["tactic", "Tactics", "Tactic"]];
@@ -31,15 +33,20 @@ const sideName = (side) => (side === "white" ? "White" : "Black");
 
 export async function show(section, rest) {
   if (root !== section) build(section);
-  const id = decodeURIComponent(rest || "");
-  if (id) {
-    if ($("libIndex").offsetParent !== null) listScroll = window.scrollY;
-    $("libIndex").hidden = true;
+  const [first, ...more] = (rest || "").split("/");
+  const id = decodeURIComponent(first);
+  if ($("libIndex").offsetParent !== null) listScroll = window.scrollY;
+  for (const part of ["libIndex", "libEntry", "libPractise"]) $(part).hidden = true;
+  if (id === "practise") {
+    entry = null;
+    $("libPractise").hidden = false;
+    ++token; // an index or entry still loading isn't drawn
+    await practise.show($("libPractise"), decodeURIComponent(more.join("/")));
+  } else if (id) {
     $("libEntry").hidden = false;
     await openEntry(id);
   } else {
     entry = null;
-    $("libEntry").hidden = true;
     $("libIndex").hidden = false;
     await openIndex();
     window.scrollTo(0, listScroll);
@@ -48,7 +55,7 @@ export async function show(section, rest) {
 
 function build(section) {
   root = section;
-  section.innerHTML = '<div class="library"><div id="libIndex"></div><div id="libEntry" hidden></div></div>';
+  section.innerHTML = '<div class="library"><div id="libIndex"></div><div id="libEntry" hidden></div><div id="libPractise" hidden></div></div>';
   section.addEventListener("keydown", stepWithKeys);
 }
 
@@ -56,9 +63,9 @@ function build(section) {
 
 async function openIndex() {
   const mine = ++token;
-  let list;
+  let list, due;
   try {
-    list = await api(API);
+    [list, due] = await Promise.all([api(API), api(practise.QUEUE)]);
   } catch (err) {
     if (mine !== token) return;
     showError(err.message);
@@ -73,7 +80,37 @@ async function openIndex() {
     return;
   }
   $("libIndex").innerHTML = '<p class="library-intro">Openings, traps and tactics. Open one to step through its moves and the replies that can come next.</p>'
+    + practisePanel(list, due)
     + KINDS.map(([kind, title]) => group(kind, title, list.filter((e) => e.kind === kind))).join("");
+  const start = $("libStart");
+  if (start) start.addEventListener("click", () => { location.hash = start.dataset.to; });
+}
+
+/** What's due, and a button to start. */
+function practisePanel(list, due) {
+  const total = list.reduce((n, e) => n + e.practise.positions, 0);
+  const solved = list.reduce((n, e) => n + e.practise.solved, 0);
+  const tried = list.reduce((n, e) => n + e.practise.tried, 0);
+  const n = due.items.length;
+  const done = tried ? ` · ${solved} of ${total} solved` : "";
+  let lead, button;
+  if (n) {
+    lead = `${plural(n, "position", "positions")} to practise today${done}.`;
+    button = `<button class="btn primary" type="button" id="libStart" data-to="#library/practise">Practise ${n}</button>`;
+  } else {
+    const next = fmtDate(due.next_due_on);
+    lead = `Nothing due today${next ? `. Next on ${esc(next)}` : ""}${done}.`;
+    button = `<button class="btn ghost" type="button" id="libStart" data-to="#library/practise/all">Practise all ${total} anyway</button>`;
+  }
+  return `<div class="panel library-practise"><div><h3>Practise</h3><p class="small">${lead}</p></div>${button}</div>`;
+}
+
+/** Where your practise of an entry stands, as a pill. */
+function progressPill(c) {
+  if (!c.tried) return '<span class="pill p-new">New</span>';
+  if (c.solved === c.positions && !c.due) return '<span class="pill p-solved">Solved</span>';
+  if (c.due) return '<span class="pill p-due">Due</span>';
+  return `<span class="pill p-missed">${c.solved} of ${c.positions} solved</span>`;
 }
 
 function group(kind, title, items) {
@@ -87,7 +124,7 @@ function group(kind, title, items) {
 function row(e) {
   const where = [e.opening, e.eco].filter(Boolean).map(esc).join(" · ");
   return `<li><a class="library-row" href="#library/${encodeURIComponent(e.id)}">
-    <span class="library-name">${esc(e.name)}</span>
+    <span class="library-name">${esc(e.name)} ${progressPill(e.practise)}</span>
     <span class="small"><span class="side ${e.side}" aria-hidden="true"></span>You play ${sideName(e.side)}${where ? " · " + where : ""}</span>
   </a></li>`;
 }
@@ -110,7 +147,9 @@ async function openEntry(id) {
   showError(null);
   entry = data;
   reply = null;
-  ply = data.moves.length; // the end of the line, where the replies start
+  // An opening is learnt from its first move; a trap or a tactic opens where it matters,
+  // at the end of the line, where the replies start.
+  ply = data.kind === "opening" ? 0 : data.moves.length;
   renderEntry();
   window.scrollTo(0, 0);
 }
@@ -147,12 +186,17 @@ function renderEntry() {
       <div class="head"><div>
         <h2>${esc(e.name)}</h2>
         <div class="meta">${meta.join(" · ")}</div>
+      </div>
+      <div class="library-go">
+        <button class="btn primary" type="button" id="libPractiseIt">Practise ${e.practise.positions === 1 ? "this position" : `these ${e.practise.positions} positions`}</button>
+        <span class="small">${e.practise.tried ? `${e.practise.solved} of ${e.practise.positions} solved` : "Not practised yet"}</span>
       </div></div>
       <div class="sec"><h3>The idea</h3><p class="library-idea">${esc(e.idea)}</p></div>
       <div class="sec"><h3 id="libMovesTitle">Moves</h3>${movesHtml(e.moves)}</div>
       ${e.next.length ? `<div class="sec"><h3>What can come next</h3><ul class="library-next">${e.next.map(replyHtml).join("")}</ul></div>` : ""}
     </div>
   </div>`;
+  $("libPractiseIt").addEventListener("click", () => { location.hash = `#library/practise/${encodeURIComponent(e.id)}`; });
   const go = (to) => () => { ply = Math.max(0, Math.min(path().length, to())); drawEntry(); };
   $("libFirst").addEventListener("click", go(() => 0));
   $("libPrev").addEventListener("click", go(() => ply - 1));
@@ -193,7 +237,7 @@ function replyHtml(n, i) {
     return `<button type="button" class="mbtn${bad}" data-reply="${i}" data-pos="${start + j + 1}" aria-label="${esc(m.label)}">${esc(text)}</button>`;
   }).join("");
   const pill = n.loses ? '<span class="pill p-blunder">Loses</span>' : '<span class="pill p-solved">Sound</span>';
-  return `<li class="library-reply ${n.loses ? "loses" : "sound"}">
+  return `<li class="library-reply ${n.loses ? "library-loses" : "library-sound"}">
     <div class="library-line">${pill}${buttons}</div>
     <p class="library-says">${esc(n.says)}</p>
   </li>`;

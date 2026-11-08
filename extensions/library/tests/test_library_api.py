@@ -1,7 +1,8 @@
 """The Library's routes and page (ROADMAP 11.2): the index, one entry with the FEN after
-every move, and no practise answer anywhere before 11.3 asks for an attempt."""
+every move, and no practise answer in either (11.3 sends them after an attempt)."""
 
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import chess
@@ -9,15 +10,32 @@ import pytest
 from blunderbook_library import content, extension, routes
 from fastapi.testclient import TestClient
 
-from blunderbook import ext, webcheck
+from blunderbook import config, ext, webcheck
 from blunderbook.api.app import create_app
+from blunderbook.db import connection
 
 URL = "http://127.0.0.1"
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> Iterator[TestClient]:
-    with TestClient(create_app(tmp_path / "blunderbook.db", [extension]), base_url=URL) as c:
+def db_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Blunderbook's database and library.db next to it, as `serve` makes them, with the
+    Library on. Nothing touches your real ones."""
+    path = tmp_path / "data" / "blunderbook.db"
+    cfg_file = tmp_path / "home" / "config.toml"
+    monkeypatch.setattr(config, "db_path", lambda: path)
+    monkeypatch.setattr(config, "config_path", lambda: cfg_file)
+    config.save(config.Config(extensions=config.ExtensionsConfig(enabled=("library",))), cfg_file)
+    with closing(connection.open_db(path, create=True)):
+        pass
+    with closing(ext.open_db(extension, config.load(cfg_file))):
+        pass
+    return path
+
+
+@pytest.fixture
+def client(db_file: Path) -> Iterator[TestClient]:
+    with TestClient(create_app(db_file, [extension]), base_url=URL) as c:
         yield c
 
 
@@ -34,6 +52,7 @@ def test_the_index_lists_every_entry_in_kind_order(client: TestClient) -> None:
         "side": "black",
         "opening": "Philidor Defence",
         "eco": "C41",
+        "practise": {"positions": 1, "tried": 0, "solved": 0, "due": 1},
     }
 
 
@@ -93,10 +112,10 @@ def test_an_unknown_entry_is_a_404(client: TestClient) -> None:
 
 
 def test_no_practise_answer_is_sent(client: TestClient) -> None:
-    """Answers come with an attempt in 11.3, never before (as core's Re-test queue)."""
+    """Answers come only with an attempt (11.3), never in an entry, as in core's Re-test."""
     for entry in content.load().entries:
         text = client.get(f"/api/ext/library/entries/{entry.id}").text
-        assert "practise" not in text and "answers" not in text and "prompt" not in text
+        assert "answers" not in text and "prompt" not in text
         # The line's own moves are on the page anyway; any other answer would be a leak.
         shown = {m.uci for m in entry.moves} | {
             m.uci for n in entry.next for m in (n.move, *n.line)
@@ -119,7 +138,8 @@ def test_the_tab_is_listed(client: TestClient) -> None:
 def test_the_page_passes_the_checks(tmp_path: Path) -> None:
     folder = ext.web_folder(extension)
     assert folder is not None
-    assert webcheck.problems(folder, create_app(tmp_path / "blunderbook.db", [extension])) == []
+    app = create_app(tmp_path / "blunderbook.db", [extension])
+    assert webcheck.problems(folder, app, prefix="library") == []
 
 
 def test_entries_are_read_once() -> None:

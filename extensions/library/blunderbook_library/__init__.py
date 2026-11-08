@@ -2,8 +2,9 @@
 and practise. Each is a TOML file under ``content/`` (see :mod:`blunderbook_library.content`).
 
 It has its content, two commands (``blunderbook library check`` and ``blunderbook library
-list``) and a tab: the index and each entry's page, served by :mod:`blunderbook_library.routes`
-(11.2). Practise and links to your Log come next.
+list``) and a tab: the index and each entry's page (11.2), and practise with spaced repetition,
+kept in library.db (11.3, :mod:`blunderbook_library.progress`). The routes are in
+:mod:`blunderbook_library.routes`. Links to your Log come next.
 """
 
 from collections import Counter
@@ -66,5 +67,6 @@ extension = ext.Extension(
     host_api=ext.HOST_API,
     router=router,
     web=files(__name__) / "web",
+    migrations=files(__name__) / "migrations",
     cli=commands,
 )

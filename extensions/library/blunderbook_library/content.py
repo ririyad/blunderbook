@@ -26,6 +26,7 @@ FOLDER: Final = Path(__file__).parent / "content"
 KINDS: Final[dict[Kind, str]] = {"opening": "openings", "trap": "traps", "tactic": "tactics"}
 SIDES: Final[tuple[Side, ...]] = ("white", "black")
 ID: Final = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+RESERVED_IDS: Final = frozenset({"practise", "all"})  # the page's own: #library/practise/all
 ECO: Final = re.compile(r"[A-E][0-9]{2}")
 NUMBER: Final = re.compile(r"(\d+)\.(\.\.)?(.*)")
 
@@ -130,6 +131,8 @@ def read(path: Path, rel: str) -> Entry:
     stem = Path(rel).stem
     if not ID.fullmatch(stem):
         raise Problem("name the file in lowercase letters, digits and dashes (legal-trap.toml).")
+    if stem in RESERVED_IDS:
+        raise Problem(f"the page uses {stem!r} for itself; give the file another name.")
     try:
         data = tomllib.loads(path.read_text("utf-8"))
     except UnicodeDecodeError:
@@ -181,6 +184,11 @@ def entry(data: Mapping[str, object], id: str, rel: str) -> Entry:
         _practise(item, f"practise {i}", kind, side, moves, fens, losing)
         for i, item in enumerate(tables, 1)
     )
+    # Your progress is kept by position, so each one is practised once.
+    for i, p in enumerate(practise, 1):
+        first = next(j for j, q in enumerate(practise, 1) if q.fen == p.fen)
+        if first != i:
+            raise Problem(f"practise {i}: the same position as practise {first}.")
     return Entry(
         id=id,
         path=rel,

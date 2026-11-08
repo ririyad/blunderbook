@@ -21,6 +21,7 @@ from test_api_blunders import NOW, elephant, fen_entry, scholars
 from typer.testing import CliRunner
 
 from blunderbook import cli, config, ext, webcheck
+from blunderbook.api.app import create_app
 from blunderbook.db import backup, connection, repo
 
 DEMO = Path(__file__).parent / "fixtures" / "ext_demo"
@@ -136,7 +137,7 @@ def test_end_to_end(
         assert (missing.status_code, missing.json()) == (404, {"detail": "No entry #999."})
         assert [m["note"] for m in page.get("/api/ext/demo/marks").json()] == ["Again"]
         assert page.get("/api/ext/demo/settings").json() == {"engine_depth": 13}
-    assert webcheck.problems(PACKAGE / "web", app) == []
+    assert webcheck.problems(PACKAGE / "web", app, prefix="demo") == []
 
     # Backed up with Blunderbook's database, and restored on its own.
     assert "Backed up the demo extension's database to" in invoke("backup")
@@ -224,3 +225,34 @@ def test_the_host_page_modules_keep_their_exports(module: str) -> None:
             module,
             name,
         )
+
+
+# ---------------------------------------------------------------- the shared CSS classes
+
+
+def test_the_page_keeps_the_shared_classes() -> None:
+    """Every class CLAUDE.md §15 lets an extension use is still styled by app.css."""
+    css = (webcheck.HOST_WEB / "css" / "app.css").read_text("utf-8")
+    defined = webcheck._classes(css, css=True)
+    assert sorted(webcheck.SHARED_CLASSES - defined) == []
+
+
+def test_the_class_check_finds_other_classes(tmp_path: Path) -> None:
+    (tmp_path / "view.js").write_text(
+        "export function show(root) {\n"
+        '  root.innerHTML = `<div class="panel demo-list ${x ? "a" : "b"}"><p class="log">`;\n'
+        '  root.firstChild.className = "rt stray";\n'
+        "}\n",
+        "utf-8",
+    )
+    (tmp_path / "view.css").write_text(
+        "/* .commented-out */\n.demo{color:red}\n"
+        "@media (max-width:480px){.demo .pill,.list{margin:0}}\n",
+        "utf-8",
+    )
+    app = create_app(tmp_path / "blunderbook.db")
+    assert webcheck.problems(tmp_path, app, prefix="demo") == [
+        "view.css: class 'list' is neither shared nor demo-...",
+        "view.js: class 'log' is neither shared nor demo-...",
+        "view.js: class 'stray' is neither shared nor demo-...",
+    ]

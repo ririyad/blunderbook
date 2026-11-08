@@ -3,8 +3,8 @@
 A Blunderbook extension: openings, traps and tactics to study and practise. It's a separate
 package (CLAUDE.md §15). It can read your Log but never changes it, and it makes no network calls.
 
-Status: 11.2 of the roadmap. It has its content, a checker, two commands and a tab. Practise
-and the links to your Log come in 11.3 and 11.4.
+Status: 11.3 of the roadmap. It has its content, a checker, two commands, a tab, and
+practise with spaced repetition. The links to your Log come in 11.4.
 
 ## Install and turn on
 
@@ -22,19 +22,45 @@ blunderbook library check      # check every entry (or: check FOLDER)
 Restart `blunderbook serve` after `ext enable library`, and the page has a Library tab:
 
 - `#library` lists the entries: openings, traps, then tactics.
-- `#library/legal-trap` opens one at the end of its line, on a board facing the side you
-  play: its idea, its moves (step through them with the buttons or ← → Home End), and its
-  replies. A sound reply is green and one that loses is red. Press any move of a reply to
-  play it out on the board.
+- `#library/legal-trap` opens one on a board facing the side you play: its idea, its moves
+  (step through them with the buttons or ← → Home End), and its replies. An opening starts
+  at its first move; a trap or a tactic at the end of its line, where the replies start. A
+  sound reply is green and one that loses is red. Press any move of a reply to play it out on
+  the board.
+- `#library/practise` is practise: the positions due today. `#library/practise/all` is every
+  position, and `#library/practise/legal-trap` one entry's ("Practise these positions" on its
+  page).
 
-The routes, at `/api/ext/library`:
+## Practise
+
+Each `[[practise]]` is a position to find the move in, from the entry's side. Tap a piece,
+then a square; "Show a hint" lights the square the answer starts from, and "I don't know —
+show me" gives up. Then you see the answers, what the entry says about your move ("5... Bxd1
+falls into it: 6. Bxf7+ Ke7 7. Nd5#") and its idea.
+
+It's scheduled like Blunderbook's Re-test: every position is due the first day; a solve brings
+it back after 1, 3, 7, 14, 30, then 60 days; a miss or giving up, tomorrow. The hint is noted
+and changes nothing.
+
+Your progress is in `library.db`, next to Blunderbook's database, and it's in every
+`blunderbook backup` as `library-….db`. A position is kept by its entry and its FEN, so you
+can add positions to an entry, or reorder them, without losing what you've done.
+
+## Routes
+
+At `/api/ext/library`:
 
 | Route | Gives |
 |---|---|
 | `GET /entries` | Every entry: `id`, `kind`, `name`, `side`, `opening`, `eco` |
 | `GET /entries/{id}` | The same, plus `idea`, `start_fen`, `moves` and `next` (each reply's `moves`, `says`, `loses`). Each move has its `label`, `san`, `uci`, `move_no`, `color` and the `fen` after it, so the page needs no chess logic. 404 for an unknown id. |
+| `GET /practise` | The positions due today, new ones included, the oldest due first: each with its entry, `n` (its `[[practise]]` number), `fen`, `prompt`, `last_move`, `legal_uci`, `status` and `due_on`. `?all=1` gives every position, `?entry=ID` one entry's. Also `total` and `next_due_on`. |
+| `POST /practise/{id}/{n}/attempt` | `{move_uci, used_hint}` (`null` gives up): whether it's right, the answers, the replies the entry has for your move and the answer, the idea, and the next date. Only from the page itself. |
+| `GET /practise/{id}/{n}/hint` | `{from_square}`: where the answer starts. |
 
-Practise positions and their answers are never sent here: they come with an attempt in 11.3.
+The entries and the queue never send an answer, a reply's text or the idea: those come only
+with an attempt. `GET /entries` and `/entries/{id}` also carry your `practise` counts
+(`positions`, `tried`, `solved`, `due`).
 
 ## Content
 
@@ -71,9 +97,10 @@ answers = ["d6", "Nc6"]       # the line's own next move (d6) must be one of the
   (`Bxf7+`, `Nd5#`). Move numbers are optional, and checked when they're there: `5.` before
   White's move and `5...` before Black's.
 - **`fen`** instead of (or before) `moves` starts from another position. Tactics use it.
-- **Practise positions** must have your `side` to move. When the line goes on after one, its
+- **Practise positions** must have your `side` to move, and each is a different position. When the line goes on after one, its
   next move must be among the answers. A move marked `loses` in `next` can't be an answer.
-- Anything else is a problem: unknown fields, a bad ECO code, two entries with the same name.
+- Anything else is a problem: unknown fields, a bad ECO code, two entries with the same name,
+  or a file named `practise` or `all` (the page's own addresses).
 
 `blunderbook library check` reads every file and plays every line:
 

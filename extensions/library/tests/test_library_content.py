@@ -300,4 +300,19 @@ def test_it_is_found_and_loads() -> None:
     assert extension is not None
     assert (extension.name, extension.title) == ("library", "Library")
     assert extension.router is not None and extension.web is not None  # 11.2
-    assert extension.migrations is None  # library.db comes with 11.3
+    assert extension.migrations is not None  # library.db, 11.3
+
+
+@pytest.mark.parametrize("name", sorted(content.RESERVED_IDS))
+def test_the_page_s_own_names_are_kept(tmp_path: Path, name: str) -> None:
+    assert problems(tmp_path, LEGAL, f"traps/{name}.toml") == [
+        f"traps/{name}.toml: the page uses {name!r} for itself; give the file another name."
+    ]
+
+
+def test_a_position_is_practised_once(tmp_path: Path) -> None:
+    """Your progress is kept by position, so the same one twice would share it."""
+    twice = LEGAL + '\n[[practise]]\nanswers = ["dxe5"]\n'
+    assert problems(tmp_path, twice) == [
+        "traps/legal-trap.toml: practise 2: the same position as practise 1."
+    ]
