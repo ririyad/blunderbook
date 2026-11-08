@@ -377,7 +377,7 @@ blunderbook ext enable library
 `blunderbook ext list` shows what's installed and on; `blunderbook ext disable NAME` turns
 one off and keeps its data.
 
-**Library** (in progress) holds openings, traps and tactics to study and practise, 15 to
+**Library** holds openings, traps and tactics to study and practise, 15 to
 start with:
 
 - **The Library tab** (restart `blunderbook serve` after turning it on) lists the entries
@@ -389,6 +389,8 @@ start with:
   schedule (1, 3, 7, 14, 30, 60 days; tomorrow after a miss). Start from "Practise" at the
   top of the tab, or "Practise these positions" on an entry. Your progress is kept in
   `library.db` next to your database, and backed up with it.
+- **From your Log**, at the end of each entry, lists your own Log entries from games that
+  reached its position, marking the ones where you fell into the trap. Each opens in the Log.
 - `blunderbook library list` lists them.
 - `blunderbook library check [FOLDER]` checks every entry: its fields, and that every line
   and every practise answer is a legal move. Each entry is a TOML file, described in

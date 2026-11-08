@@ -1,6 +1,7 @@
 """The Library's routes, mounted at ``/api/ext/library``: the index and one entry (ROADMAP
-11.2), and practise (11.3). Every move comes with the FEN after it, so the page needs no
-chess logic (as in core).
+11.2), practise (11.3), and your Log entries from games in an entry's opening (11.4, read
+through ``host.Log``, which can't change your Log). Every move comes with the FEN after it,
+so the page needs no chess logic (as in core).
 
 Practise is core's Re-test, for the Library's positions (CLAUDE.md §7.8, §10): the queue never
 sends an answer, nor the entry's idea (it gives the answer away). The server checks every
@@ -17,7 +18,8 @@ from pydantic import BaseModel, ConfigDict
 
 from blunderbook import host
 from blunderbook.core import retest
-from blunderbook_library import content, progress
+from blunderbook.core.models import Judgment, Source, Status
+from blunderbook_library import content, progress, yours
 
 router = APIRouter()
 
@@ -103,6 +105,46 @@ def get_entry(entry_id: str, db: host.ExtDb) -> EntryDetail:
             for n in entry.next
         ],
     )
+
+
+# ---------------------------------------------------------------- from your Log
+
+
+class LogEntryOut(BaseModel):
+    """One of your Log entries, from a game that reached the Library entry's position."""
+
+    id: int  # the Log entry: #log/<id>
+    move: str  # "5... Bxd1", your move
+    judgment: Judgment
+    status: Status  # its Re-test status
+    source: Source
+    opponent: str | None
+    played_on: date | None
+    fell_in: bool  # you played one of the entry's losing replies, there
+    on_line: bool  # the mistake was on the entry's line itself
+
+
+@router.get("/entries/{entry_id}/log")
+def from_log(entry_id: str, log: host.Log) -> list[LogEntryOut]:
+    """Your Log entries from games that reached this entry's position, newest first."""
+    entry = _entry(entry_id)
+    out = []
+    for m in yours.matches(entry, log.entries()):
+        b, g = m.log.blunder, m.log.game
+        out.append(
+            LogEntryOut(
+                id=b.id,
+                move=f"{b.move_no}{'.' if g.my_color == 'white' else '...'} {b.played_san}",
+                judgment=b.judgment,
+                status=b.status,
+                source=g.source,
+                opponent=g.black if g.my_color == "white" else g.white,
+                played_on=g.played_on,
+                fell_in=m.fell_in,
+                on_line=m.on_line,
+            )
+        )
+    return out
 
 
 # ---------------------------------------------------------------- practise

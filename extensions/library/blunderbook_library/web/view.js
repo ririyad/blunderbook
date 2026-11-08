@@ -1,13 +1,14 @@
-// The Library tab (ROADMAP 11.2, 11.3): openings, traps and tactics. `#library` is the
+// The Library tab (ROADMAP 11.2 to 11.4): openings, traps and tactics. `#library` is the
 // index; `#library/legal-trap` opens one entry: its idea, the board stepping through its
-// moves, and the replies that can come next, each played out on the board.
+// moves, the replies that can come next, each played out on the board, and your own Log
+// entries from games that reached its position.
 // `#library/practise` (`/all`, `/legal-trap`) is practise, in ./practise.js.
 //
 // The API sends the FEN after every move, so there's no chess logic here (as in core).
 
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
-import { fmtDate } from "/js/format.js";
+import { MARK, fmtDate } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
 import * as practise from "./practise.js";
 
@@ -194,6 +195,7 @@ function renderEntry() {
       <div class="sec"><h3>The idea</h3><p class="library-idea">${esc(e.idea)}</p></div>
       <div class="sec"><h3 id="libMovesTitle">Moves</h3>${movesHtml(e.moves)}</div>
       ${e.next.length ? `<div class="sec"><h3>What can come next</h3><ul class="library-next">${e.next.map(replyHtml).join("")}</ul></div>` : ""}
+      <div class="sec"><h3 id="libYoursTitle">From your Log</h3><div id="libYours" aria-live="polite"><p class="small">Looking through your Log…</p></div></div>
     </div>
   </div>`;
   $("libPractiseIt").addEventListener("click", () => { location.hash = `#library/practise/${encodeURIComponent(e.id)}`; });
@@ -210,6 +212,42 @@ function renderEntry() {
     });
   }
   drawEntry();
+  loadYours(e);
+}
+
+/** Your Log entries from games that reached this position, linking to the Log. They're
+ *  asked for after the entry is drawn, so the Log can never keep the entry from showing. */
+async function loadYours(e) {
+  let found;
+  try {
+    found = await api(`${API}/${encodeURIComponent(e.id)}/log`);
+  } catch (err) {
+    if (entry !== e) return;
+    $("libYours").innerHTML = `<p class="small">Your Log couldn't be read: ${esc(err.message)}</p>`;
+    return;
+  }
+  if (entry !== e) return; // another entry was opened meanwhile
+  if (!found.length) {
+    $("libYours").innerHTML = '<p class="small">None of your Log entries come from a game that reached this position.</p>';
+    return;
+  }
+  const fell = found.filter((m) => m.fell_in).length;
+  const lead = `${plural(found.length, "entry", "entries")} from your games that reached this position`
+    + (fell ? `, and you fell into it ${fell === 1 ? "once" : `${fell} times`}` : "") + ".";
+  $("libYours").innerHTML = `<p class="small">${lead}</p><ul class="library-yours" aria-labelledby="libYoursTitle">${found.map(mineHtml).join("")}</ul>`;
+}
+
+function mineHtml(m) {
+  const where = m.fell_in
+    ? '<span class="pill p-blunder">Fell into it</span>'
+    : m.on_line ? '<span class="pill p-new">On this line</span>' : "";
+  const game = [`vs ${esc(m.opponent || "Unknown")}`, m.played_on ? esc(fmtDate(m.played_on)) : null].filter(Boolean).join(" · ");
+  return `<li><a class="library-mine" href="#log/${m.id}">
+    <span class="pill p-blunder" aria-label="${esc(m.judgment)}">${MARK[m.judgment]}</span>
+    <b>${esc(m.move)}</b>${where}
+    <span class="small">${game}</span>
+    <span class="small library-open">Open in the Log</span>
+  </a></li>`;
 }
 
 /** The entry's moves in rows of a move number, White's move and Black's, as on the game

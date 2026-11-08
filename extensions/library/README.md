@@ -3,8 +3,8 @@
 A Blunderbook extension: openings, traps and tactics to study and practise. It's a separate
 package (CLAUDE.md §15). It can read your Log but never changes it, and it makes no network calls.
 
-Status: 11.3 of the roadmap. It has its content, a checker, two commands, a tab, and
-practise with spaced repetition. The links to your Log come in 11.4.
+Status: done (M11 of the roadmap). It has its content, a checker, two commands, a tab,
+practise with spaced repetition, and your own Log entries from games in each entry's line.
 
 ## Install and turn on
 
@@ -46,6 +46,16 @@ Your progress is in `library.db`, next to Blunderbook's database, and it's in ev
 `blunderbook backup` as `library-….db`. A position is kept by its entry and its FEN, so you
 can add positions to an entry, or reorder them, without losing what you've done.
 
+## From your Log
+
+At the end of each entry, "From your Log" lists your Log entries from games that reached the
+position at the end of its line: "Fell into it" when you played one of its losing replies,
+"On this line" when the mistake was on the line itself. Each links to the entry in the Log.
+
+It's matched by position, so a game with no opening header counts, and so does one that got
+there in another move order. A game that left the line before its end isn't listed. Your Log
+is only read, through `host.Log`; nothing from it is copied into `library.db`.
+
 ## Routes
 
 At `/api/ext/library`:
@@ -57,6 +67,7 @@ At `/api/ext/library`:
 | `GET /practise` | The positions due today, new ones included, the oldest due first: each with its entry, `n` (its `[[practise]]` number), `fen`, `prompt`, `last_move`, `legal_uci`, `status` and `due_on`. `?all=1` gives every position, `?entry=ID` one entry's. Also `total` and `next_due_on`. |
 | `POST /practise/{id}/{n}/attempt` | `{move_uci, used_hint}` (`null` gives up): whether it's right, the answers, the replies the entry has for your move and the answer, the idea, and the next date. Only from the page itself. |
 | `GET /practise/{id}/{n}/hint` | `{from_square}`: where the answer starts. |
+| `GET /entries/{id}/log` | Your Log entries from games that reached the entry's position, newest first: `id`, `move`, `judgment`, `status`, `source`, `opponent`, `played_on`, `fell_in`, `on_line`. |
 
 The entries and the queue never send an answer, a reply's text or the idea: those come only
 with an attempt. `GET /entries` and `/entries/{id}` also carry your `practise` counts

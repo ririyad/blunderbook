@@ -57,7 +57,12 @@ warn_redundant_casts = true
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["blunderbook.core", "blunderbook.core.*", "blunderbook_library.content"]
+module = [
+    "blunderbook.core",
+    "blunderbook.core.*",
+    "blunderbook_library.content",
+    "blunderbook_library.yours",
+]
 disallow_any_generics = true
 disallow_subclassing_any = true
 disallow_untyped_calls = true

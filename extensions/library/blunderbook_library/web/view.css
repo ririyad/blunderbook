@@ -24,3 +24,7 @@
 .library-go{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
 @media (max-width:560px){.library-go{align-items:flex-start}}
 .library-said{margin:6px 0 0}
+.library-yours{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.library-mine{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);color:inherit;text-decoration:none;transition:background .12s}
+.library-mine:hover{background:var(--hover)}
+.library-open{margin-left:auto}

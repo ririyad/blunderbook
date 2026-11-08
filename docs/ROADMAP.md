@@ -20,10 +20,11 @@ _Last updated: 2026-11-08_
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
-| M11 Library | In progress (3/4) | Extension: openings, traps and tactics to study and practise |
+| M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 11.4, the Library's "Your entries in this opening", read from your Log. Still
+**Next up:** 12.1, the Collection extension: its package, `collection.db`, importing games
+into collections, and `engine.score_positions()` (pass 1). Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -49,7 +50,8 @@ against hand-built responses only; no real download has been checked yet).
 routes, commands and database, is backed up with yours, and can read your Log but never change
 it. The first, Library (M11), has its content, its `check` and `list` commands, a tab
 that steps through each entry and its replies, and practise with spaced repetition, kept in
-`library.db`; links to your Log come next. Collection (M12) follows.
+`library.db`, and each entry lists your own Log entries from games that reached its position.
+Collection (M12) is next.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -834,7 +836,29 @@ that steps through the whole game with your blunders marked. No delete in this m
         in the Philidor ("Also right: d6"), the finished session, the index's counts and
         pills afterwards, a due session from the index. No sideways scroll at 390 px on the
         index, an entry, a position or a result, and no console errors.
-- [ ] **11.4** "Your entries in this opening", read from your Log.
+- [x] **11.4** "Your entries in this opening", read from your Log.
+      _Done:_
+      - **Matched by position** (`yours.py`, pure and mypy-strict): a Log entry belongs to a
+        Library entry when its game reaches the position at the end of the entry's line,
+        compared without the move counters. So a typed-up OTB game with no ECO header counts,
+        and so does another move order (1... d6 2. Nf3 e5 for Légal's trap). Each game is
+        read again from its stored PGN with `core.pgn`, as core's game page does, and its
+        positions are cached (a saved game's text never changes).
+      - **Marked:** "Fell into it" when you played one of the entry's losing replies there,
+        and "On this line" when the mistake was on the entry's line itself. Each of the §12
+        trap games finds its own blunder (Légal's, Scholar's mate, the Elephant, Petrov's
+        queen trap, the Blackburne Shilling).
+      - **Route:** `GET /entries/{id}/log`, through `host.Log`, so your Log is only read (a
+        test checks it's unchanged). Newest first, in the Log's order. Its own route, asked
+        for after the entry is drawn, so the Log can never keep an entry from showing.
+      - **The page:** "From your Log" at the end of each entry: how many entries, how often
+        you fell into it, and each entry with its mark, the opponent and date, linking to
+        `#log/<id>`. None: "None of your Log entries come from a game that reached this
+        position."
+      - **Checked in Chrome** on a scratch database seeded with three §12 games: Légal's trap
+        (g6 on the line, Bxd1 fell into it), the Elephant and Scholar's mate, the Italian and
+        a tactic with none, and a click through to the Log entry. No sideways scroll at
+        390 px, no console errors.
 
 ### M12 Collection (extension)
 
@@ -1068,6 +1092,12 @@ None open.
     on new positions: the Library is small.
   - The idea is shown after a try, never before: for a trap it gives the answer away.
   - Extensions get `host.transaction` (an addition, so `HOST_API` stays 1).
+- **2026-11-08: Your entries in a Library entry (11.4).** Matched by position, not by ECO
+  or opening name: headers are often missing (OTB, typed-up games) and an ECO code covers
+  many lines, while a position is exact and catches other move orders. The position is the
+  end of the entry's line, so a game that left the line early isn't listed; an entry that
+  should also catch earlier positions can get a shorter line. Read on request from your Log,
+  never copied into `library.db`.
 - **2026-11-08: The page's shared CSS classes.** An extension's tab uses the page's own
   panels, buttons, board, step controls, move list and puzzle layout, so it looks like the
   rest. Those classes are now a written list that a test keeps, and an extension's page check
