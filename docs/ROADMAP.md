@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-07_
+_Last updated: 2026-11-08_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -20,10 +20,11 @@ _Last updated: 2026-11-07_
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
-| M11 Library | In progress (1/4) | Extension: openings, traps and tactics to study and practise |
+| M11 Library | In progress (2/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 11.2, the Library's API and page: the index and an entry's view. Still
+**Next up:** 11.3, Library practise: quiz positions with spaced repetition, progress in
+`library.db`. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -47,8 +48,8 @@ against hand-built responses only; no real download has been checked yet).
 "Explain this blunder" asks OpenRouter, with your own key, to put Stockfish's lines into words
 (off until you turn it on). Extensions can be installed and turned on: each adds its own tab,
 routes, commands and database, is backed up with yours, and can read your Log but never change
-it. The first, Library (M11), has its content and its `check` and `list` commands; its page
-and practise come next. Collection (M12) follows.
+it. The first, Library (M11), has its content, its `check` and `list` commands and a tab
+that steps through each entry and its replies; practise comes next. Collection (M12) follows.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -764,7 +765,30 @@ that steps through the whole game with your blunders marked. No delete in this m
         extensions with a page.
       - **Checked by hand:** `uv tool install . --with ./extensions/library` in a scratch
         tool folder, then `ext list`, `ext enable library` and both commands.
-- [ ] **11.2** API, index and entry views (board through the mainline and each consequence).
+- [x] **11.2** API, index and entry views (board through the mainline and each consequence).
+      _Done:_
+      - **Routes** (`blunderbook_library/routes.py`, at `/api/ext/library`): `GET /entries`
+        (the index, in kind order) and `GET /entries/{id}` (the idea, the start position,
+        the moves and each reply played out from the end of the line). Every move carries
+        the FEN after it (`content.positions()`, now public), so the page has no chess
+        logic, as in core. An unknown id is a 404. The content is read and checked once.
+      - **No practise answer is sent.** Practise positions and their answers come with an
+        attempt in 11.3, the same rule as core's Re-test queue. A test checks that no
+        response has an answer that isn't already a move of the line.
+      - **The tab** (`web/view.js`, `view.css`): the index in Openings / Traps / Tactics, and
+        an entry's page. The board faces the side you play and opens at the end of the line,
+        where the replies start. It has the game page's step controls and keys (← → Home
+        End) and its move list. Each reply is a card, red when it loses and green when it's
+        sound, and its moves play it out on the board, with the reply's arrow in the same
+        colour. It reuses the page's shared classes (panel, board, step controls, move
+        buttons); its own start with `library-`.
+      - **Tests** (`test_library_api.py`): the index, the FENs move by move, the replies
+        (Légal's ends in checkmate), a tactic from a FEN, every entry opening, the 404, no
+        answers, the tab in `/api/extensions`, and `webcheck` on the page.
+      - **Checked in Chrome** over the DevTools protocol on a scratch database: the index,
+        Légal's trap, the Italian Game, the back-rank mate (a FEN start), an unknown id, both
+        replies played out to the mate, the keys and the move buttons. No sideways scroll at
+        1300 or 390 px, and no console errors besides the unknown id's 404.
 - [ ] **11.3** Practise: quiz positions with spaced repetition, progress in `library.db`.
 - [ ] **11.4** "Your entries in this opening", read from your Log.
 

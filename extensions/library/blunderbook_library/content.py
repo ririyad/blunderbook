@@ -169,8 +169,8 @@ def entry(data: Mapping[str, object], id: str, rel: str) -> Entry:
     start_fen = board.fen()
 
     moves = _line(board, _maybe(data, "moves") or "", "moves")
-    positions = _positions(start_fen, moves)
-    end = chess.Board(positions[-1])
+    fens = positions(start_fen, moves)
+    end = chess.Board(fens[-1])
 
     nexts = tuple(_next(end, item, f"next {i}") for i, item in enumerate(_tables(data, "next"), 1))
     tables = _tables(data, "practise")
@@ -178,7 +178,7 @@ def entry(data: Mapping[str, object], id: str, rel: str) -> Entry:
         raise Problem("add at least one [[practise]] position.")
     losing = {n.move.uci for n in nexts if n.loses}
     practise = tuple(
-        _practise(item, f"practise {i}", kind, side, moves, positions, losing)
+        _practise(item, f"practise {i}", kind, side, moves, fens, losing)
         for i, item in enumerate(tables, 1)
     )
     return Entry(
@@ -220,7 +220,7 @@ def _practise(
     kind: Kind,
     side: Side,
     moves: tuple[Move, ...],
-    positions: list[str],
+    fens: list[str],
     losing: set[str],
 ) -> Practise:
     _keys(item, PRACTISE_KEYS, where + ": ")
@@ -234,7 +234,7 @@ def _practise(
             labels = ", ".join(m.label for m in moves[:3])
             raise Problem(f"{where}: after {after!r} isn't a move of the line ({labels}, ...).")
         ply = plies[0]
-    board = chess.Board(positions[ply])
+    board = chess.Board(fens[ply])
     mover: Side = "white" if board.turn == chess.WHITE else "black"
     if mover != side:
         raise Problem(
@@ -318,7 +318,9 @@ def _number(board: chess.Board) -> str:
     )
 
 
-def _positions(start_fen: str, moves: tuple[Move, ...]) -> list[str]:
+def positions(start_fen: str, moves: Iterable[Move]) -> list[str]:
+    """The FEN of ``start_fen`` and of the position after each move: one more than the
+    moves. The page steps through these, so it needs no chess logic of its own."""
     board = chess.Board(start_fen)
     fens = [board.fen()]
     for move in moves:

@@ -299,4 +299,5 @@ def test_it_is_found_and_loads() -> None:
     assert problem is None
     assert extension is not None
     assert (extension.name, extension.title) == ("library", "Library")
-    assert extension.web is None and extension.migrations is None  # 11.2 and 11.3
+    assert extension.router is not None and extension.web is not None  # 11.2
+    assert extension.migrations is None  # library.db comes with 11.3

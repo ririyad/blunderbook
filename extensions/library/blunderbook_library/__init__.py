@@ -1,11 +1,13 @@
 """The Library extension (CLAUDE.md §15, ROADMAP M11): openings, traps and tactics to study
 and practise. Each is a TOML file under ``content/`` (see :mod:`blunderbook_library.content`).
 
-So far (11.1) it has its content and two commands: ``blunderbook library check`` and
-``blunderbook library list``. The page, practise and links to your Log come next.
+It has its content, two commands (``blunderbook library check`` and ``blunderbook library
+list``) and a tab: the index and each entry's page, served by :mod:`blunderbook_library.routes`
+(11.2). Practise and links to your Log come next.
 """
 
 from collections import Counter
+from importlib.resources import files
 from pathlib import Path
 from typing import Annotated
 
@@ -13,6 +15,7 @@ import typer
 
 from blunderbook import ext
 from blunderbook_library import content
+from blunderbook_library.routes import router
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -61,5 +64,7 @@ extension = ext.Extension(
     name="library",
     title="Library",
     host_api=ext.HOST_API,
+    router=router,
+    web=files(__name__) / "web",
     cli=commands,
 )

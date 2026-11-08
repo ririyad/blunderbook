@@ -3,8 +3,8 @@
 A Blunderbook extension: openings, traps and tactics to study and practise. It's a separate
 package (CLAUDE.md §15). It can read your Log but never changes it, and it makes no network calls.
 
-Status: 11.1 of the roadmap. It has its content, a checker, and two commands. The page, practise
-and the links to your Log come in 11.2 to 11.4.
+Status: 11.2 of the roadmap. It has its content, a checker, two commands and a tab. Practise
+and the links to your Log come in 11.3 and 11.4.
 
 ## Install and turn on
 
@@ -16,6 +16,25 @@ blunderbook ext enable library
 blunderbook library list       # the entries
 blunderbook library check      # check every entry (or: check FOLDER)
 ```
+
+## The tab
+
+Restart `blunderbook serve` after `ext enable library`, and the page has a Library tab:
+
+- `#library` lists the entries: openings, traps, then tactics.
+- `#library/legal-trap` opens one at the end of its line, on a board facing the side you
+  play: its idea, its moves (step through them with the buttons or ← → Home End), and its
+  replies. A sound reply is green and one that loses is red. Press any move of a reply to
+  play it out on the board.
+
+The routes, at `/api/ext/library`:
+
+| Route | Gives |
+|---|---|
+| `GET /entries` | Every entry: `id`, `kind`, `name`, `side`, `opening`, `eco` |
+| `GET /entries/{id}` | The same, plus `idea`, `start_fen`, `moves` and `next` (each reply's `moves`, `says`, `loses`). Each move has its `label`, `san`, `uci`, `move_no`, `color` and the `fen` after it, so the page needs no chess logic. 404 for an unknown id. |
+
+Practise positions and their answers are never sent here: they come with an attempt in 11.3.
 
 ## Content
 

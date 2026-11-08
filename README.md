@@ -377,9 +377,13 @@ blunderbook ext enable library
 `blunderbook ext list` shows what's installed and on; `blunderbook ext disable NAME` turns
 one off and keeps its data.
 
-**Library** (in progress) holds openings, traps and tactics to study and practise. Its tab
-and practise come later; for now it has its starter set of 15 entries and two commands:
+**Library** (in progress) holds openings, traps and tactics to study and practise, 15 to
+start with. Practise comes later. For now:
 
+- **The Library tab** (restart `blunderbook serve` after turning it on) lists the entries
+  as openings, traps and tactics. Open one to read its idea and step through its moves on a
+  board facing the side you play. Its replies show what can come next: a sound one in
+  green, one that loses in red. Press a reply to play it out on the board.
 - `blunderbook library list` lists them.
 - `blunderbook library check [FOLDER]` checks every entry: its fields, and that every line
   and every practise answer is a legal move. Each entry is a TOML file, described in
