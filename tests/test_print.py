@@ -75,6 +75,7 @@ def test_the_page_stands_alone(ids: dict[str, int], db_file: Path) -> None:
     assert page.startswith("<!DOCTYPE html>")
     assert "<style>" in page and "@page { size: A4; margin: 10mm; }" in page
     assert 'href="css/print.css"' not in page
+    assert 'href="favicon.svg"' not in page and 'href="data:image/svg+xml;base64,' in page
     assert "<!-- entries -->" not in page and "filled in by" not in page
     assert "<script" not in page
     urls = set(re.findall(r"(?:https?:)?//[\w.-]+\.\w+", page)) - {"http://www.w3.org"}

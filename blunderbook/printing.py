@@ -1,10 +1,12 @@
 """The A4 print page (CLAUDE.md §9 `print`, §11): entries laid out like the paper Blunder Log,
 two per page, black and white, printed through the browser's print dialog.
 
-`render()` fills `web/print.html` with the entries and inlines `web/css/print.css`, so the
-file it gives works on its own, opened straight from disk. Boards are SVG from python-chess.
+`render()` fills `web/print.html` with the entries and inlines `web/css/print.css` and the
+favicon, so the file it gives works on its own, opened straight from disk. Boards are SVG
+from python-chess.
 """
 
+import base64
 import html
 from collections.abc import Sequence
 from datetime import date
@@ -41,6 +43,7 @@ BOARD_COLORS: Final = {
 ARROW: Final = "#1b1b1bcc"
 _ENTRIES: Final = ("<!-- entries -->", "<!-- /entries -->")
 _STYLESHEET: Final = '<link rel="stylesheet" href="css/print.css">'
+_ICON: Final = 'href="favicon.svg"'
 
 
 def render(entries: Sequence[Entry], *, today: date) -> str:
@@ -52,7 +55,9 @@ def render(entries: Sequence[Entry], *, today: date) -> str:
     body = _intro(len(entries), len(sheets), today) + "".join(
         '<div class="sheet">' + "".join(_entry(e) for e in sheet) + "</div>\n" for sheet in sheets
     )
+    icon = base64.b64encode((WEB / "favicon.svg").read_bytes()).decode("ascii")
     page = page[:start] + body + page[end:]
+    page = page.replace(_ICON, f'href="data:image/svg+xml;base64,{icon}"')
     return page.replace(_STYLESHEET, f"<style>\n{css}</style>")
 
 

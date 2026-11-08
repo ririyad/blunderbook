@@ -1103,3 +1103,6 @@ None open.
   rest. Those classes are now a written list that a test keeps, and an extension's page check
   refuses any other class that isn't its own. Openings in the Library open at their first
   move. (CLAUDE.md §15)
+- **2026-11-08: A favicon.** A notebook with an ink spine and a red "??", in the page's own
+  colours (`web/favicon.svg`, served from our own files under the same CSP). The print page
+  carries it inlined, so the saved file still stands alone.

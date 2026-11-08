@@ -88,7 +88,12 @@ def test_no_add_games_button() -> None:
 def test_every_file_is_served_with_its_type(client: TestClient, path: Path) -> None:
     response = client.get(served(path))
     assert response.status_code == 200
-    expected = {".html": "text/html", ".css": "text/css", ".js": "text/javascript"}
+    expected = {
+        ".html": "text/html",
+        ".css": "text/css",
+        ".js": "text/javascript",
+        ".svg": "image/svg+xml",
+    }
     assert response.headers["content-type"].startswith(expected[path.suffix])
 
 
@@ -161,6 +166,18 @@ def test_board_coordinates_are_readable() -> None:
     """Each square's coordinate is drawn in the other square's colour: at least 4.5:1."""
     light, dark = sorted((luminance("#ebe9d8"), luminance("#4c688d")), reverse=True)
     assert (light + 0.05) / (dark + 0.05) >= 4.5
+
+
+# ---------------------------------------------------------------- the favicon
+
+
+def test_the_favicon_is_served(client: TestClient) -> None:
+    """A notebook with a red "??", from our own files (the CSP allows nothing else)."""
+    response = client.get("/favicon.svg")
+    assert response.status_code == 200
+    assert response.text.startswith("<svg ") and "#b83227" in response.text
+    page = (WEB / "index.html").read_text("utf-8")
+    assert '<link rel="icon" href="favicon.svg" type="image/svg+xml">' in page
 
 
 # ---------------------------------------------------------------- the pieces

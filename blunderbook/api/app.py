@@ -89,6 +89,7 @@ def create_app(db_path: Path, extensions: Sequence[ext.Extension] = ()) -> FastA
     # served that way. Python reads the registry, so set the types the page needs.
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
+    mimetypes.add_type("image/svg+xml", ".svg")  # the favicon
 
     # The /docs pages load their scripts from a CDN, so they're off: the app stays offline.
     jobs = ImportJobs(db_path)
