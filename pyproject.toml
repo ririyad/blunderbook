@@ -33,6 +33,7 @@ members = ["extensions/*"]
 
 [tool.uv.sources]
 blunderbook-library = { workspace = true }
+blunderbook-collection = { workspace = true }
 
 # ---------------------------------------------------------------- ruff
 
@@ -45,13 +46,22 @@ extend-exclude = ["*.md"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# The Collection's tests import their fixtures from collection_fakes (it can't be a
+# conftest.py, see there), so each fixture parameter "redefines" an import.
+"extensions/collection/tests/test_*.py" = ["F811"]
+
 # ---------------------------------------------------------------- mypy
 # Whole package is type-checked; blunderbook/core is strict (CLAUDE.md §3).
 # `strict = true` isn't allowed in per-module sections, so the strict flags are listed.
 
 [tool.mypy]
 python_version = "3.15"
-files = ["blunderbook", "extensions/library/blunderbook_library"]
+files = [
+    "blunderbook",
+    "extensions/library/blunderbook_library",
+    "extensions/collection/blunderbook_collection",
+]
 warn_unused_configs = true
 warn_redundant_casts = true
 check_untyped_defs = true
@@ -62,6 +72,7 @@ module = [
     "blunderbook.core.*",
     "blunderbook_library.content",
     "blunderbook_library.yours",
+    "blunderbook_collection.games",
 ]
 disallow_any_generics = true
 disallow_subclassing_any = true
@@ -78,7 +89,7 @@ extra_checks = true
 # ---------------------------------------------------------------- pytest
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "extensions/library/tests"]
+testpaths = ["tests", "extensions/library/tests", "extensions/collection/tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "engine: needs a Stockfish binary; skipped when none is found",
@@ -94,6 +105,7 @@ filterwarnings = [
 
 [dependency-groups]
 dev = [
+    "blunderbook-collection",
     "blunderbook-library",
     "mypy>=2.4.1",
     "pytest>=9.2.0",

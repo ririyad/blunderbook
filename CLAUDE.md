@@ -140,9 +140,13 @@ blunderbook/
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
 ├── extensions/
-│   └── library/               # the Library extension (§15): its own package, content and tests
-│       ├── blunderbook_library/   # __init__.py (the Extension, commands), content.py,
-│       │                          #   content/{openings,traps,tactics}/*.toml
+│   ├── library/               # the Library extension (§15): its own package, content and tests
+│   │   ├── blunderbook_library/   # __init__.py (the Extension, commands), content.py,
+│   │   │                          #   content/{openings,traps,tactics}/*.toml
+│   │   └── tests/
+│   └── collection/            # the Collection extension (§15): anyone's games, analysed
+│       ├── blunderbook_collection/  # __init__.py (the Extension, commands), games.py (pure),
+│       │                            #   store.py (its SQL), collect.py (adding games)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -966,10 +970,12 @@ extension = ext.Extension(
   - `transaction(conn)` groups writes to its own database that belong together (§14).
   - Anywhere: `settings()` (`my_names` with your site usernames, thresholds, engine depth,
     threads and hash; never a token or a key), `engine()` (Stockfish, found as §6 says, in a
-    `with` block), and for commands `read_log()` and `open_db(extension)`.
-  - Problems are `host.HostError` (or `StorageError`), with plain messages.
+    `with` block), and for commands `read_log()`, `open_db(extension)` and
+    `daily_backup()` (§6's daily backups, before a command that changes data).
+  - Problems are `host.HostError` (or `host.StorageError`), with plain messages.
 - `blunderbook.ext` (for `Extension` and `HOST_API`) and the pure `blunderbook.core`
-  modules: `pgn`, `detect`, `retest`, `identity`, `timecontrol`, `engine`, `models`.
+  modules: `pgn`, `detect`, `retest`, `identity`, `source`, `timecontrol`, `engine`
+  (`score_positions` is pass 1 on its own), `models`.
 - Nothing else: not `db`, `config`, `api`, `cli`, `importer`, `ai` or `sources`.
 - On the page, Blunderbook's modules by absolute path: `/js/api.js` (`api`, `ApiError`),
   `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` and `/js/board.js`

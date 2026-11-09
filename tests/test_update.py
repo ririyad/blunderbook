@@ -425,7 +425,7 @@ def test_ext_install(
 
 
 @needs_git
-@pytest.mark.parametrize("name", ["collection", "../library", "Library"])
+@pytest.mark.parametrize("name", ["nope", "../library", "Library"])
 def test_ext_install_of_an_unknown_name(installed_from: list[list[str]], name: str) -> None:
     result = runner.invoke(cli.app, ["ext", "install", name])
     assert result.exit_code == 1

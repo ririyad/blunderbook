@@ -3,8 +3,9 @@
 - :func:`probe` checks that a program is Stockfish and reads its version.
 - :class:`Engine` is one running Stockfish process. Always use it as a context manager,
   so the process is closed even when analysis fails.
-- :func:`analyse_game` runs pass 1 (every position, once) and pass 2 (MultiPV 3 on
-  flagged positions only) and returns the findings for one side.
+- :func:`score_positions` is pass 1: every position of a game, scored once.
+- :func:`analyse_game` runs pass 1 and pass 2 (MultiPV 3 on flagged positions only) and
+  returns the findings for one side.
 
 Scores leave this module as :class:`Eval` from White's point of view.
 """
@@ -318,15 +319,7 @@ def analyse_game(
     key = object()  # one ucinewgame per game
     n = len(game.plies)
     total = n + 1
-
-    board = chess.Board(game.start_fen)
-    pass1: list[Line] = []
-    for i in range(n + 1):
-        pass1.append(_evaluate(analyser, board, depth, key, game, i))
-        if progress is not None:
-            progress(i + 1, total)
-        if i < n:
-            board.push(chess.Move.from_uci(game.plies[i].uci))
+    pass1 = score_positions(game, analyser, depth=depth, progress=progress, key=key)
 
     flagged: list[tuple[Ply, float]] = []
     for ply in game.plies:
@@ -354,6 +347,38 @@ def analyse_game(
         evals=tuple(line.score for line in pass1),
         findings=tuple(findings),
     )
+
+
+def score_positions(
+    game: ParsedGame,
+    analyser: Analyser,
+    *,
+    depth: int,
+    progress: Progress | None = None,
+    key: object | None = None,
+) -> tuple[Line, ...]:
+    """Pass 1 (CLAUDE.md §7.6): score every position of ``game`` once, at ``depth``.
+
+    Position 0 is the start and position i + 1 the one after ply i. Each is sent with the
+    moves that led to it, so Stockfish sees repetitions. Finished positions are scored
+    without the engine (:func:`terminal_line`). Scores are White POV; each line's first
+    move is the engine's best (none for a finished position).
+
+    ``progress(done, total)`` is called after each position, with ``total`` = N + 1.
+    ``key`` names the game for ``ucinewgame``: pass the same one to later calls for the
+    same game. By default each call is a new game.
+    """
+    key = object() if key is None else key
+    n = len(game.plies)
+    board = chess.Board(game.start_fen)
+    lines: list[Line] = []
+    for i in range(n + 1):
+        lines.append(_evaluate(analyser, board, depth, key, game, i))
+        if progress is not None:
+            progress(i + 1, n + 1)
+        if i < n:
+            board.push(chess.Move.from_uci(game.plies[i].uci))
+    return tuple(lines)
 
 
 def _evaluate(

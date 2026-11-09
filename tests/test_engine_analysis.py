@@ -20,6 +20,7 @@ from blunderbook.core.engine import (
     EngineInfo,
     Line,
     analyse_game,
+    score_positions,
     terminal_line,
 )
 from blunderbook.core.models import Eval, ParsedGame, Thresholds
@@ -154,6 +155,33 @@ def test_configured_blunder_line_is_used() -> None:
     game, script = qgd_script()
     strict = Thresholds(inaccuracy=0.4, mistake=0.4, blunder=0.4)
     assert analyse_game(game, "white", script, depth=12, thresholds=strict).findings == ()
+
+
+def test_score_positions_is_pass_one_on_its_own() -> None:
+    game, script = qgd_script()
+    seen: list[tuple[int, int]] = []
+    lines = score_positions(game, script, depth=12, progress=lambda d, t: seen.append((d, t)))
+    nxd5 = game.plies[10]
+    assert len(lines) == len(game.plies) + 1
+    assert lines[10] == script.pass1[nxd5.fen_before]
+    assert lines[11].score == Eval(cp=-409)
+    assert {c[2] for c in script.calls} == {1}  # pass 1 only: no MultiPV
+    assert [c[0] for c in script.calls] == [game.plies[0].fen_before] + [
+        p.fen_after for p in game.plies
+    ]
+    assert len({c[3] for c in script.calls}) == 1  # one ucinewgame
+    assert seen == [(i, len(lines)) for i in range(1, len(lines) + 1)]
+
+
+def test_score_positions_keeps_the_game_key_it_is_given() -> None:
+    game, script = qgd_script()
+    key = object()
+    score_positions(game, script, depth=12, key=key)
+    score_positions(game, script, depth=12)
+    keys = [c[3] for c in script.calls]
+    n = len(game.plies) + 1
+    assert set(keys[:n]) == {key}
+    assert key not in keys[n:] and len(set(keys[n:])) == 1
 
 
 # ---------------------------------------------------------------- finished positions

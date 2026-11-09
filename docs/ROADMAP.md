@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-08_
+_Last updated: 2026-11-09_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -21,10 +21,10 @@ _Last updated: 2026-11-08_
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
-| M12 Collection | Not started | Extension: a collection of anyone's games, analysed |
+| M12 Collection | In progress (1/4) | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 12.1, the Collection extension: its package, `collection.db`, importing games
-into collections, and `engine.score_positions()` (pass 1). Still
+**Next up:** 12.2, the Collection's stats: accuracy, average centipawn loss, judgments,
+phases and openings, per player or any filter, from the evals 12.1 stores. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -51,7 +51,9 @@ routes, commands and database, is backed up with yours, and can read your Log bu
 it. The first, Library (M11), has its content, its `check` and `list` commands, a tab
 that steps through each entry and its replies, and practise with spaced repetition, kept in
 `library.db`, and each entry lists your own Log entries from games that reached its position.
-Collection (M12) is next.
+The second, Collection (M12), adds anyone's games to collections on the CLI
+(`blunderbook collection import FILE --into NAME`), every position scored once, in
+`collection.db`; its stats and tab are next.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -878,8 +880,38 @@ that steps through the whole game with your blunders marked. No delete in this m
 
 ### M12 Collection (extension)
 
-- [ ] **12.1** Package, `collection.db`, import into collections, `engine.score_positions()`
+- [x] **12.1** Package, `collection.db`, import into collections, `engine.score_positions()`
       (pass 1).
+      _Done:_
+      - **Core:** `engine.score_positions()` is pass 1 on its own (every position once, with
+        the game's moves, finished positions without the engine), and `analyse_game` uses it,
+        so a collection's game is scored exactly as your own are. The host API gets
+        `daily_backup()` and `StorageError` (additions: `HOST_API` stays 1), and `core.source`
+        joins the core modules an extension may use (§15).
+      - **The package** (`extensions/collection`, a workspace member): `games.py` (pure,
+        mypy-strict) queues a PGN's games with core's parser, fingerprints and source
+        detection, and scores them; `store.py` holds all its SQL; `collect.py` adds games and
+        is what 12.4's page import will reuse.
+      - **`collection.db`** (`0001_collections.sql`): `collections`, `games` (each once, by
+        fingerprint, with its headers, PGN, engine and depth), `positions` (every position:
+        FEN, the move and clock, the eval, Stockfish's move and up to 10 moves of its line)
+        and `members`. Judgments aren't stored: 12.2 works them out from the evals and your
+        thresholds.
+      - **Commands:** `blunderbook collection import FILE --into NAME [--depth N]` and
+        `blunderbook collection list [NAME]`. No side to pick. A collection is made with its
+        first game. The same file again adds nothing; a game already analysed goes into
+        another collection without the engine. Each game is saved as soon as it's analysed,
+        so a stopped engine or Ctrl+C keeps the games before it (exit 1 / 130), and the daily
+        backup runs first.
+      - **Tests** (`extensions/collection/tests`, 34): the queue, pass 1 with a scripted
+        engine, the headers kept, saving and dedupe, a game in two collections, no empty
+        collection, the engine stopping, Ctrl+C, no Stockfish, the commands' output,
+        Windows-1252, the backups, the host-API boundary, and Légal's game with real Stockfish
+        (mate in 2 after 5... Bxd1, mate 0 at the end). Their fixtures are in
+        `collection_fakes.py`: a second `conftest.py` would shadow core's.
+      - **Checked by hand** on a scratch home with Stockfish at depth 12: five classic games
+        into "Classics", the same file again (all skipped), `list`, `list classics`, the daily
+        backup of `collection.db`, and `doctor`.
 - [ ] **12.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
 - [ ] **12.3** API, collection / game / player views with filters and an eval graph.
 - [ ] **12.4** Import on the page, and links to your Log.
@@ -1128,3 +1160,14 @@ None open.
 - **2026-11-08: A favicon.** A notebook with an ink spine and a red "??", in the page's own
   colours (`web/favicon.svg`, served from our own files under the same CSP). The print page
   carries it inlined, so the saved file still stands alone.
+- **2026-11-09: The Collection's games (12.1).**
+  - A game is analysed once and can be in any number of collections (`members`), so the
+    same game in two collections costs one analysis, and the stats of both use the same
+    evals.
+  - Only pass 1 is stored, for every position: the eval, Stockfish's move and its line.
+    Judgments, accuracy and the rest are worked out when they're shown, so a changed
+    threshold applies everywhere, as it would if your Log were re-imported.
+  - A game already analysed at another depth is reused as it is; its depth is kept with it.
+  - Collection names ignore ASCII case and are made by the first game added, like core's
+    imports, so an import that adds nothing leaves no empty collection.
+  - Importing is on the CLI first; the page comes in 12.4.

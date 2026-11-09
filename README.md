@@ -406,6 +406,18 @@ start with:
   and every practise answer is a legal move. Each entry is a TOML file, described in
   [extensions/library/README.md](extensions/library/README.md).
 
+**Collection** keeps collections of anyone's games, analysed by the same Stockfish and the
+same rules as yours (`blunderbook ext install collection`). It's being built: for now it adds
+games and lists them, and its tab comes later.
+
+- `blunderbook collection import FILE.pgn --into NAME` scores every position of every game,
+  both sides' moves, and adds the games to the collection, made if it's new. A game already
+  analysed for another collection isn't analysed again, and importing the same file twice
+  adds nothing.
+- `blunderbook collection list [NAME]` lists your collections, or the games in one.
+- Its games are kept in `collection.db` next to your database, backed up with it, and never
+  in your Log. More in [extensions/collection/README.md](extensions/collection/README.md).
+
 ### Print your Blunder Log
 
 ```sh
@@ -591,6 +603,8 @@ back to the next one.
 | `blunderbook ext enable NAME` / `disable NAME` | Turn an extension on or off; restart `serve` to see it. Turning one off keeps its data. |
 | `blunderbook library list` | List the Library's entries (with the Library on). |
 | `blunderbook library check [FOLDER]` | Check the Library's entries, or a folder of your own. |
+| `blunderbook collection import FILE --into NAME [--depth N]` | Analyse a PGN file's games and add them to a collection (with the Collection on). |
+| `blunderbook collection list [NAME]` | List your collections, or the games in one. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games

@@ -18,9 +18,13 @@ For anything (routes and commands):
 
 - ``settings()``: your names, thresholds and engine settings. Never a token or a key.
 - ``engine()``: Stockfish, found as Blunderbook finds it, in a ``with`` block.
+- ``daily_backup()``: the daily backups, for a command that changes data (CLAUDE.md §6).
 - ``read_log()``: your Log, read-only, outside a request (``with host.read_log() as log``).
 - ``open_db(extension)``: the extension's own database outside a request, created and
   upgraded (backed up first) if needed.
+
+Problems are ``HostError`` or ``StorageError`` (a database that can't be used), with plain
+messages.
 """
 
 import sqlite3
@@ -38,7 +42,7 @@ from blunderbook.api.common import same_origin
 from blunderbook.core.engine import Engine, EngineError
 from blunderbook.core.models import Entry, Game, Source, Status, Thresholds
 from blunderbook.db import connection, repo
-from blunderbook.db.connection import transaction
+from blunderbook.db.connection import StorageError, transaction
 
 __all__ = [
     "ExtDb",
@@ -46,6 +50,8 @@ __all__ = [
     "Log",
     "LogReader",
     "Settings",
+    "StorageError",
+    "daily_backup",
     "engine",
     "open_db",
     "read_log",
@@ -99,6 +105,17 @@ def engine() -> Engine:
         )
     except EngineError as exc:
         raise HostError(f"Can't start Stockfish: {exc}") from None
+
+
+def daily_backup() -> ext.DailyBackups:
+    """The automatic backups before a command that changes data (CLAUDE.md §6): Blunderbook's
+    database and each extension's that's on, when the newest backup is over 24 h old and
+    ``backup.auto`` is on. A backup that fails is in ``problems``, never an exception: show
+    it as a warning and go on. Raises HostError for a broken config.toml."""
+    cfg = _config()
+    if not cfg.backup.auto:
+        return ext.DailyBackups()
+    return ext.daily_backups(cfg)
 
 
 def _config() -> config.Config:

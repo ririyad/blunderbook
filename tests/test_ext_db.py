@@ -12,7 +12,7 @@ import pytest
 from ext_samples import NOTES_MIGRATIONS, notes
 from typer.testing import CliRunner
 
-from blunderbook import cli, config, ext
+from blunderbook import cli, config, ext, host
 from blunderbook.config import BackupConfig, Config, ExtensionsConfig
 from blunderbook.db import backup, connection
 
@@ -228,6 +228,20 @@ def test_a_failed_extension_backup_is_only_a_warning(
     assert done.problems == (
         "The daily backup of the notes extension's database didn't work: disk full",
     )
+
+
+def test_the_host_daily_backup(
+    cfg_file: Path, db_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(config, "db_path", lambda: db_file)
+    cfg = settings(cfg_file, "notes", auto=False)
+    core_with_data(db_file)
+    note(cfg, "first")
+    assert host.daily_backup() == ext.DailyBackups()  # auto = false: none
+    settings(cfg_file, "notes")
+    done = host.daily_backup()
+    assert sorted(p.name.split("-")[0] for p in done.taken) == ["blunderbook", "notes"]
+    assert host.daily_backup() == ext.DailyBackups()
 
 
 # ---------------------------------------------------------------- restore
