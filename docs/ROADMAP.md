@@ -21,10 +21,10 @@ _Last updated: 2026-11-09_
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
-| M12 Collection | In progress (1/4) | Extension: a collection of anyone's games, analysed |
+| M12 Collection | In progress (2/4) | Extension: a collection of anyone's games, analysed |
 
-**Next up:** 12.2, the Collection's stats: accuracy, average centipawn loss, judgments,
-phases and openings, per player or any filter, from the evals 12.1 stores. Still
+**Next up:** 12.3, the Collection's tab: its routes, and a page for each collection, game
+(with an eval graph) and player, with 12.2's filters. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -53,7 +53,8 @@ that steps through each entry and its replies, and practise with spaced repetiti
 `library.db`, and each entry lists your own Log entries from games that reached its position.
 The second, Collection (M12), adds anyone's games to collections on the CLI
 (`blunderbook collection import FILE --into NAME`), every position scored once, in
-`collection.db`; its stats and tab are next.
+`collection.db`, and shows their stats (`collection stats`, `collection players`); its tab
+is next.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -912,7 +913,33 @@ that steps through the whole game with your blunders marked. No delete in this m
       - **Checked by hand** on a scratch home with Stockfish at depth 12: five classic games
         into "Classics", the same file again (all skipped), `list`, `list classics`, the daily
         backup of `collection.db`, and `doctor`.
-- [ ] **12.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
+- [x] **12.2** Stats: accuracy, ACPL, judgments, phases, repertoire, per player or any filter.
+      _Done:_
+      - **`stats.py`** (pure, mypy-strict) works it all out from 12.1's evals:
+        - each move's swing and mark, with core's `detect` and your thresholds (never a
+          mark for the engine's own move);
+        - its accuracy (Lichess's formula), and each side's accuracy per game (the average
+          of the mean and the harmonic mean);
+        - centipawn loss with evals capped at ±1000;
+        - and its phase.
+        `report()` adds it up by side, phase, opening and game, and `players()` lists who
+        played. `store.load()` reads one collection's games, or every collection's with each
+        game once.
+      - **Filters:** a player (ignoring case: their moves next to their opponents'), a colour,
+        a result (`won` / `lost` from the player's side, `drawn`, or the side that won), an
+        opening (an ECO start such as `C4`, or part of the name) and a phase.
+      - **Commands:** `blunderbook collection stats [NAME]` with `--player`, `--color`,
+        `--result`, `--opening` and `--phase`, and `blunderbook collection players [NAME]`.
+        Without a name, every collection.
+      - **Tests** (32 more, 66 in all): the accuracy and swing maths with exact values, marks
+        and your thresholds, the engine's own move, phases (a game from a FEN at move 40),
+        every filter, openings, players, loading from `collection.db`, and the commands'
+        output and problems.
+      - **Checked by hand** on the five classics from 12.1. It found that Stockfish with two
+        threads can score the same position differently from run to run at depth 12:
+        8... Nxe4 in Réti–Tartakower came out as mate in 3 in some runs and +1 in others.
+        Depth 16, or one thread, was steady. Noted in the Collection's README; it affects
+        your own imports too (`engine_threads = 2` is the default).
 - [ ] **12.3** API, collection / game / player views with filters and an eval graph.
 - [ ] **12.4** Import on the page, and links to your Log.
 
@@ -1171,3 +1198,15 @@ None open.
   - Collection names ignore ASCII case and are made by the first game added, like core's
     imports, so an import that adds nothing leaves no empty collection.
   - Importing is on the CLI first; the page comes in 12.4.
+- **2026-11-09: The Collection's stats (12.2).**
+  - **Marks** are your Log's rules exactly: the swing, your thresholds, and none for the
+    engine's own move.
+  - **Accuracy** is Lichess's per-move formula, and per game the average of the mean and
+    the harmonic mean. Lichess also weights moves by how sharp the position is; that's left
+    out to keep the number simple to explain.
+  - **ACPL** caps evals at ±1000, as Lichess does.
+  - **Phases:** the endgame at six pieces or fewer besides kings and pawns (both sides),
+    else the opening to move 10 and the middlegame after. Move numbers come from the
+    position, so a game from a FEN at move 40 has no opening.
+  - **Players** are matched by name, ignoring case, so "Anderssen, A." and
+    "Adolf Anderssen" are two players. Merging names waits until it's needed.

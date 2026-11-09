@@ -408,13 +408,16 @@ start with:
 
 **Collection** keeps collections of anyone's games, analysed by the same Stockfish and the
 same rules as yours (`blunderbook ext install collection`). It's being built: for now it adds
-games and lists them, and its tab comes later.
+games and shows their stats on the command line, and its tab comes later.
 
 - `blunderbook collection import FILE.pgn --into NAME` scores every position of every game,
   both sides' moves, and adds the games to the collection, made if it's new. A game already
   analysed for another collection isn't analysed again, and importing the same file twice
   adds nothing.
 - `blunderbook collection list [NAME]` lists your collections, or the games in one.
+- `blunderbook collection stats [NAME]` shows accuracy, average centipawn loss and `??` / `?` /
+  `?!` marks by side, phase, opening and game. Filter with `--player`, `--color`, `--result`,
+  `--opening` and `--phase`. `blunderbook collection players [NAME]` lists who played.
 - Its games are kept in `collection.db` next to your database, backed up with it, and never
   in your Log. More in [extensions/collection/README.md](extensions/collection/README.md).
 
@@ -605,6 +608,8 @@ back to the next one.
 | `blunderbook library check [FOLDER]` | Check the Library's entries, or a folder of your own. |
 | `blunderbook collection import FILE --into NAME [--depth N]` | Analyse a PGN file's games and add them to a collection (with the Collection on). |
 | `blunderbook collection list [NAME]` | List your collections, or the games in one. |
+| `blunderbook collection stats [NAME] [--player P] [--color C] [--result R] [--opening O] [--phase P]` | A collection's stats: accuracy, ACPL and marks by side, phase, opening and game. |
+| `blunderbook collection players [NAME]` | Everyone who played, with games, score and accuracy. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games

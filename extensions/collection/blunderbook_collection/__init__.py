@@ -3,13 +3,15 @@ Stockfish and the same rules as your own, kept in collection.db and never in you
 
 12.1 has the database, ``blunderbook collection import FILE --into NAME`` (pass 1 for every
 position of every game, :mod:`blunderbook_collection.collect`) and ``blunderbook collection
-list``. Stats, the tab and import on the page come next.
+list``. 12.2 has ``stats`` and ``players`` (:mod:`blunderbook_collection.stats`). The tab and
+import on the page come next.
 """
 
 import sqlite3
 import sys
 from collections.abc import Callable
 from contextlib import closing
+from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -18,7 +20,8 @@ import typer
 
 from blunderbook import ext, host
 from blunderbook.core import engine, pgn
-from blunderbook_collection import collect, games, store
+from blunderbook.core.models import Thresholds
+from blunderbook_collection import collect, games, stats, store
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -113,7 +116,266 @@ def list_(
             typer.echo(_game_line(g))
 
 
+class _Color(StrEnum):
+    white = "white"
+    black = "black"
+
+
+class _Result(StrEnum):
+    won = "won"
+    lost = "lost"
+    drawn = "drawn"
+    white = "white"
+    black = "black"
+
+
+class _Phase(StrEnum):
+    opening = "opening"
+    middlegame = "middlegame"
+    endgame = "endgame"
+
+
+@commands.command("stats")
+def stats_(
+    name: Annotated[
+        str | None, typer.Argument(help="A collection. Default: every collection.")
+    ] = None,
+    player: Annotated[
+        str | None, typer.Option(help="Only this player's games, and their moves.")
+    ] = None,
+    color: Annotated[
+        _Color | None,
+        typer.Option(help="With --player, the colour they played; else one side's moves."),
+    ] = None,
+    result: Annotated[
+        _Result | None,
+        typer.Option(help="won / lost (from --player's side), drawn, or the side that won."),
+    ] = None,
+    opening: Annotated[
+        str | None, typer.Option(help="An ECO code or its start (C4), or part of a name.")
+    ] = None,
+    phase: Annotated[_Phase | None, typer.Option(help="Only the moves of this phase.")] = None,
+) -> None:
+    """Accuracy, centipawn loss and ??/?/?! marks, by side, phase, opening and game."""
+    f = stats.Filter(
+        player=" ".join(player.split()) if player else None,
+        color=None if color is None else ("white" if color is _Color.white else "black"),
+        result=None if result is None else _RESULTS[result],
+        opening=opening.strip() if opening and opening.strip() else None,
+        phase=None if phase is None else _PHASES[phase],
+    )
+    problem = f.problem()
+    if problem:
+        _fail(problem)
+    title, loaded = _load(name)
+    if not loaded:
+        _nothing(title)
+        return
+    report = stats.report(loaded, _thresholds(), f)
+    only = _filters(f)
+    if report.games == 0:
+        whose = f" of {f.player}" if f.player else ""
+        typer.echo(f"No games{whose} in {title}" + (f" ({only})." if only else "."))
+        return
+    n = report.games
+    typer.echo(f"{title}{DOT}{n} {_s(n, 'game')}{DOT}{_score_text(report.score, f.player)}")
+    if only:
+        typer.echo(f"Only: {only}")
+    typer.echo()
+    head = ["", "Games", "Moves", "Accuracy", "ACPL", "??", "?", "?!"]
+    rows = [
+        [label, str(t.games), str(t.moves), _num(t.accuracy, 1), _num(t.acpl), *_marks(t)]
+        for label, t in zip(report.labels, report.sides, strict=True)
+    ]
+    _table(head, rows)
+    typer.echo()
+    whose = report.labels[0] + "'s" if (f.player or f.color) else "both sides'"
+    typer.echo(f"By phase ({whose} moves; the endgame is six pieces or fewer)")
+    _table(
+        ["", "Moves", "ACPL", "??", "?", "?!"],
+        [
+            [p.capitalize(), str(t.moves), _num(t.acpl), *_marks(t)]
+            for p, t in report.phases.items()
+            if t.moves or f.phase is None
+        ],
+    )
+    typer.echo()
+    typer.echo("Openings")
+    a, b = (x[:1] if not f.player else x for x in report.labels)
+    _table(
+        ["", "Games", "Score", f"Accuracy {a} {DOT.strip()} {b}"],
+        [
+            [
+                _opening_label(o),
+                str(o.sides[0].games),
+                _wdl(o.score),
+                f"{_num(o.sides[0].accuracy)} {DOT.strip()} {_num(o.sides[1].accuracy)}",
+            ]
+            for o in report.openings
+        ],
+    )
+    typer.echo()
+    typer.echo("Games")
+    _table(
+        ["", "Result", "Accuracy W \u00b7 B", "ACPL W \u00b7 B", "Marks W \u00b7 B"],
+        [
+            [
+                f"#{line.game.id} {line.game.white or '?'} vs {line.game.black or '?'}",
+                line.game.result or "*",
+                f"{_num(line.white.accuracy)} {DOT.strip()} {_num(line.black.accuracy)}",
+                f"{_num(line.white.acpl)} {DOT.strip()} {_num(line.black.acpl)}",
+                f"{_mark_text(line.white)} {DOT.strip()} {_mark_text(line.black)}",
+            ]
+            for line in report.lines
+        ],
+    )
+
+
+@commands.command("players")
+def players_(
+    name: Annotated[
+        str | None, typer.Argument(help="A collection. Default: every collection.")
+    ] = None,
+) -> None:
+    """Everyone who played in a collection: games, colours, score and accuracy."""
+    title, loaded = _load(name)
+    if not loaded:
+        _nothing(title)
+        return
+    found = stats.players(loaded, _thresholds())
+    if not found:
+        typer.echo(f"No player names in {title}'s games.")
+        return
+    typer.echo(f"{title}{DOT}{len(found)} {_s(len(found), 'player')}")
+    _table(
+        ["", "Games", "White", "Black", "Won", "Drawn", "Lost", "Accuracy"],
+        [
+            [
+                p.name,
+                str(p.games),
+                str(p.as_white),
+                str(p.as_black),
+                str(p.score.won),
+                str(p.score.drawn),
+                str(p.score.lost),
+                _num(p.accuracy, 1),
+            ]
+            for p in found
+        ],
+    )
+
+
+_RESULTS: dict[_Result, stats.Result] = {
+    _Result.won: "won",
+    _Result.lost: "lost",
+    _Result.drawn: "drawn",
+    _Result.white: "white",
+    _Result.black: "black",
+}
+_PHASES: dict[_Phase, stats.Phase] = {
+    _Phase.opening: "opening",
+    _Phase.middlegame: "middlegame",
+    _Phase.endgame: "endgame",
+}
+
+
 # ---------------------------------------------------------------- helpers
+
+
+def _load(name: str | None) -> tuple[str, list[stats.Game]]:
+    """The collection's title and its games; every collection's without a name."""
+    with closing(_open()) as conn:
+        if name is None:
+            return _ALL, store.load(conn)
+        found = store.find(conn, " ".join(name.split()))
+        if found is None:
+            _fail(f"No collection called {name}.")
+        return found.name, store.load(conn, found.id)
+
+
+def _nothing(title: str) -> None:
+    where = "" if title == _ALL else f" in {title}"
+    typer.echo(f"No games{where} yet. Add games with: {_HOW}")
+
+
+_ALL = "All collections"
+_HOW = "blunderbook collection import FILE --into NAME"
+
+
+def _thresholds() -> Thresholds:
+    try:
+        return host.settings().thresholds
+    except host.HostError as exc:
+        _fail(str(exc))
+
+
+def _filters(f: stats.Filter) -> str:
+    parts: list[str] = []
+    if f.color:
+        parts.append(
+            f"as {f.color.capitalize()}" if f.player else f"{f.color.capitalize()}'s moves"
+        )
+    if f.result:
+        parts.append(
+            {
+                "won": "won",
+                "lost": "lost",
+                "drawn": "drawn",
+                "white": "White won",
+                "black": "Black won",
+            }[f.result]
+        )
+    if f.opening:
+        parts.append(f"opening {f.opening}")
+    if f.phase:
+        parts.append(f"the {f.phase}")
+    return DOT.join(parts)
+
+
+def _score_text(score: stats.Score, player: str | None) -> str:
+    if player:
+        text = f"won {score.won}{DOT}drawn {score.drawn}{DOT}lost {score.lost}"
+    else:
+        text = f"White won {score.won}{DOT}drawn {score.drawn}{DOT}Black won {score.lost}"
+    return text + (f"{DOT}{score.unfinished} unfinished" if score.unfinished else "")
+
+
+def _wdl(score: stats.Score) -> str:
+    return f"{score.won}\u2013{score.drawn}\u2013{score.lost}"
+
+
+def _opening_label(o: stats.Opening) -> str:
+    name = " ".join(x for x in (o.eco, o.name) if x) or "Unknown opening"
+    if len(name) > 40:
+        name = name[:39] + "\u2026"
+    return f"As {o.color.capitalize()}: {name}" if o.color else name
+
+
+def _num(value: float | None, digits: int = 0) -> str:
+    return "\u2014" if value is None else f"{value:.{digits}f}"
+
+
+def _marks(t: stats.Tally) -> list[str]:
+    return [str(t.blunders), str(t.mistakes), str(t.inaccuracies)]
+
+
+def _mark_text(t: stats.Tally) -> str:
+    parts = [
+        f"{n}{mark}"
+        for n, mark in ((t.blunders, "??"), (t.mistakes, "?"), (t.inaccuracies, "?!"))
+        if n
+    ]
+    return " ".join(parts) or "clean"
+
+
+def _table(head: list[str], rows: list[list[str]]) -> None:
+    """Columns padded to fit: the first left-aligned, the rest right-aligned."""
+    widths = [max(len(r[i]) for r in [head, *rows]) for i in range(len(head))]
+    for r in [head, *rows]:
+        cells = [r[0].ljust(widths[0])] + [
+            c.rjust(w) for c, w in zip(r[1:], widths[1:], strict=True)
+        ]
+        typer.echo("  ".join(cells).rstrip())
 
 
 def _open() -> sqlite3.Connection:

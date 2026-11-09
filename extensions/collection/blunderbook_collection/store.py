@@ -6,10 +6,13 @@ A game is analysed once and kept by its fingerprint; ``members`` puts it in coll
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from blunderbook.core.models import Eval
+from blunderbook_collection import stats
 from blunderbook_collection.games import GameInfo, Position
 
 
@@ -95,16 +98,53 @@ def positions(conn: sqlite3.Connection, game_id: int) -> list[Position]:
         "FROM positions WHERE game_id = ? ORDER BY ply",
         (game_id,),
     )
+    return [_position(r) for r in rows]
+
+
+def _position(r: Sequence[Any]) -> Position:
+    return Position(
+        ply=r[0],
+        fen=r[1],
+        move_uci=r[2],
+        move_san=r[3],
+        clock_s=r[4],
+        score=Eval.from_dict(json.loads(r[5])),
+        best_uci=r[6],
+        pv_uci=tuple(r[7].split()),
+    )
+
+
+def load(conn: sqlite3.Connection, collection_id: int | None = None) -> list[stats.Game]:
+    """The games of a collection (every collection's with None, each game once), with their
+    positions, for the stats. In the order they were first added."""
+    where = "WHERE m.collection_id = ?" if collection_id is not None else ""
+    params: tuple[int, ...] = (collection_id,) if collection_id is not None else ()
+    rows = conn.execute(
+        "SELECT g.id, g.white, g.black, g.result, g.eco, g.opening, g.date, g.event "
+        f"FROM games g JOIN members m ON m.game_id = g.id {where} "
+        "GROUP BY g.id ORDER BY MIN(m.added_at), g.id",
+        params,
+    ).fetchall()
+    found: dict[int, list[Position]] = {row[0]: [] for row in rows}
+    if found:
+        marks = ", ".join("?" * len(found))
+        for r in conn.execute(
+            "SELECT game_id, ply, fen, move_uci, move_san, clock_s, eval, best_uci, pv_uci "
+            f"FROM positions WHERE game_id IN ({marks}) ORDER BY game_id, ply",
+            tuple(found),
+        ):
+            found[r[0]].append(_position(r[1:]))
     return [
-        Position(
-            ply=r[0],
-            fen=r[1],
-            move_uci=r[2],
-            move_san=r[3],
-            clock_s=r[4],
-            score=Eval.from_dict(json.loads(r[5])),
-            best_uci=r[6],
-            pv_uci=tuple(r[7].split()),
+        stats.Game(
+            id=r[0],
+            white=r[1],
+            black=r[2],
+            result=r[3],
+            eco=r[4],
+            opening=r[5],
+            date=r[6],
+            event=r[7],
+            positions=tuple(found[r[0]]),
         )
         for r in rows
     ]

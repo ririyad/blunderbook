@@ -4,8 +4,8 @@ A Blunderbook extension: collections of anyone's games, analysed by the same Sto
 same rules as your own. It's a separate package (CLAUDE.md §15). Nothing here goes into your
 Log, and it makes no network calls.
 
-Status: 12.1 of the roadmap (M12). It has its database and two commands: `import` and
-`list`. Stats (12.2), a tab with each collection, game and player (12.3), and importing on
+Status: 12.2 of the roadmap (M12). It has its database and four commands: `import`, `list`,
+`stats` and `players`. A tab with each collection, game and player (12.3), and importing on
 the page with links to your Log (12.4) come next.
 
 ## Install and turn on
@@ -60,6 +60,66 @@ Classics · 3 games
   #1 Paul Morphy vs Duke Karl / Count Isouard · 1-0 · Paris · 1858 · C41 Philidor Defence · 17 moves
   ...
 ```
+
+## Stats
+
+```sh
+blunderbook collection stats Classics                       # every game, both sides
+blunderbook collection stats Classics --player "Adolf Anderssen"
+blunderbook collection stats --color black --opening C4     # every collection
+blunderbook collection players Classics                     # who played, and how well
+```
+
+```
+Classics · 2 games · won 2 · drawn 0 · lost 0
+
+                 Games  Moves  Accuracy  ACPL  ??  ?  ?!
+Adolf Anderssen      2     47      84.7    41   4  1   2
+Opponents            2     45      77.5    81   6  1   7
+
+By phase (Adolf Anderssen's moves; the endgame is six pieces or fewer)
+            Moves  ACPL  ??  ?  ?!
+Opening        20    27   1  1   1
+Middlegame     27    51   3  0   1
+Endgame         0     —   0  0   0
+```
+
+Then the openings (games, score, accuracy) and each game (result, both sides' accuracy,
+ACPL and marks). Without a name, `stats` and `players` cover every collection, each game
+once.
+
+**Filters:**
+
+- `--player NAME` (ignoring case): their games, and their moves next to their opponents'.
+- `--color white|black`: with `--player`, the colour they played; without, one side's moves.
+- `--result`: `won` or `lost` (from `--player`'s side), `drawn`, or `white` / `black` for the side
+  that won.
+- `--opening`: an ECO code or its start (`C4` is C40 to C49), or part of the opening's name
+  (`gambit`).
+- `--phase opening|middlegame|endgame`: only the moves of that phase.
+
+**How a move is judged**, the same way as your own (CLAUDE.md §7.6):
+
+- **Marks:** `??` / `?` / `?!` come from the move's swing in winning chances and your
+  `[thresholds]`. The engine's own move is never marked.
+- **Accuracy** of a move is Lichess's formula on the mover's winning chances, from 0 to 100.
+  A side's accuracy in a game is the average of the mean and the harmonic mean of its moves,
+  so one bad move costs more than a plain average would show. Accuracy over several games is
+  the mean of the games'.
+- **ACPL** is the average centipawn loss: how far the mover's eval dropped, with evals capped
+  at ±10 pawns (a mate counts as 10), so throwing away a won position doesn't swamp it.
+- **Phases** are read from the position before the move. It's the endgame once there are six
+  pieces or fewer besides kings and pawns, both sides together. Otherwise it's the opening up
+  to move 10, then the middlegame.
+
+Nothing about the marks is stored. They're worked out from the stored evals each time, so a
+changed threshold applies at once.
+
+**Stockfish with more than one thread** doesn't always give the same answer at the same
+depth. With `engine_threads = 2`, Réti–Tartakower's 8... Nxe4 was scored as mate in 3 in
+some runs and about +1 in others at depth 12. The default depth of 16, and one thread
+(`engine_threads = 1`), gave the same answer in every run tried. It affects your own imports
+the same way.
 
 ## collection.db
 

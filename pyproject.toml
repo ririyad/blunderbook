@@ -73,6 +73,7 @@ module = [
     "blunderbook_library.content",
     "blunderbook_library.yours",
     "blunderbook_collection.games",
+    "blunderbook_collection.stats",
 ]
 disallow_any_generics = true
 disallow_subclassing_any = true

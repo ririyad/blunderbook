@@ -198,3 +198,88 @@ def test_with_stockfish() -> None:
     assert after_bxd1.score.mate is not None and after_bxd1.score.mate > 0
     assert after_bxd1.best_uci == "c4f7"  # 6. Bxf7+
     assert kept[-1].score.mate == 0 and kept[-1].best_uci is None
+
+
+# ---------------------------------------------------------------- stats and players (12.2)
+
+
+def stats_(*args: str) -> tuple[int, str]:
+    result = runner.invoke(commands, ["stats", *args])
+    return result.exit_code, result.output
+
+
+def test_stats(fake: FakeEngine) -> None:
+    import_(str(CLASSICS), "--into", "Classics")
+    code, out = stats_("classics")
+    assert code == 0, out
+    lines = out.splitlines()
+    assert lines[0] == f"Classics {DOT} 2 games {DOT} White won 2 {DOT} drawn 0 {DOT} Black won 0"
+    assert lines[2].split() == ["Games", "Moves", "Accuracy", "ACPL", "??", "?", "?!"]
+    assert lines[3].split() == ["White", "2", "24", "100.0", "0", "0", "0", "0"]
+    assert lines[4].split() == ["Black", "2", "22", "100.0", "0", "0", "0", "0"]
+    assert "By phase (both sides' moves; the endgame is six pieces or fewer)" in lines
+    assert f"#1 {MORPHY}" in out and "clean \N{MIDDLE DOT} clean" in out
+    assert "C41 Philidor Defence" in out
+
+
+def test_stats_of_a_player(fake: FakeEngine) -> None:
+    import_(str(CLASSICS), "--into", "Classics")
+    code, out = stats_("Classics", "--player", "paul  MORPHY", "--phase", "opening")
+    assert code == 0, out
+    lines = out.splitlines()
+    assert lines[0] == f"Classics {DOT} 1 game {DOT} won 1 {DOT} drawn 0 {DOT} lost 0"
+    assert lines[1] == "Only: the opening"
+    assert lines[4].split()[:4] == ["Paul", "Morphy", "1", "10"]  # moves 1 to 10
+    assert lines[5].split()[:3] == ["Opponents", "1", "10"]
+    assert "As White: C41 Philidor Defence" in out
+
+
+def test_stats_of_every_collection(fake: FakeEngine) -> None:
+    import_(str(CLASSICS), "--into", "Classics")
+    import_(str(CLASSICS), "--into", "Again")
+    _, out = stats_("--color", "black", "--opening", "C41")
+    assert out.splitlines()[:2] == [
+        f"All collections {DOT} 2 games {DOT} White won 2 {DOT} drawn 0 {DOT} Black won 0",
+        f"Only: Black's moves {DOT} opening C41",
+    ]
+
+
+def test_stats_problems(fake: FakeEngine) -> None:
+    import_(str(CLASSICS), "--into", "Classics")
+    assert stats_("Classics", "--result", "won") == (
+        1,
+        "--result won needs --player: whose result is it?\n",
+    )
+    assert stats_("Nope") == (1, "No collection called Nope.\n")
+    assert stats_("Classics", "--player", "Nobody") == (0, "No games of Nobody in Classics.\n")
+    assert stats_("Classics", "--result", "drawn") == (
+        0,
+        "No games in Classics (drawn).\n",
+    )
+    code, out = stats_("Classics", "--phase", "late")
+    assert code == 2 and "late" in out
+
+
+def test_players(fake: FakeEngine) -> None:
+    hint = "Add games with: blunderbook collection import FILE --into NAME\n"
+    assert runner.invoke(commands, ["players"]).output == "No games yet. " + hint
+    assert stats_() == (0, "No games yet. " + hint)
+    import_(str(CLASSICS), "--into", "Classics")
+    out = runner.invoke(commands, ["players", "Classics"]).output.splitlines()
+    assert out[0] == f"Classics {DOT} 4 players"
+    assert out[1].split() == ["Games", "White", "Black", "Won", "Drawn", "Lost", "Accuracy"]
+    assert out[2].split() == [
+        "Duke",
+        "Karl",
+        "/",
+        "Count",
+        "Isouard",
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1",
+        "100.0",
+    ]
+    assert [line.split()[0] for line in out[2:]] == ["Duke", "Kermur", "Paul", "Saint"]
