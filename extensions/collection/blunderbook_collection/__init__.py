@@ -3,8 +3,9 @@ Stockfish and the same rules as your own, kept in collection.db and never in you
 
 12.1 has the database, ``blunderbook collection import FILE --into NAME`` (pass 1 for every
 position of every game, :mod:`blunderbook_collection.collect`) and ``blunderbook collection
-list``. 12.2 has ``stats`` and ``players`` (:mod:`blunderbook_collection.stats`). The tab and
-import on the page come next.
+list``. 12.2 has ``stats`` and ``players`` (:mod:`blunderbook_collection.stats`). 12.3 has
+the tab: its routes in :mod:`blunderbook_collection.routes` and its page in ``web/``.
+Importing on the page comes next.
 """
 
 import sqlite3
@@ -22,6 +23,7 @@ from blunderbook import ext, host
 from blunderbook.core import engine, pgn
 from blunderbook.core.models import Thresholds
 from blunderbook_collection import collect, games, stats, store
+from blunderbook_collection.routes import router
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -467,6 +469,8 @@ extension = ext.Extension(
     name="collection",
     title="Collection",
     host_api=ext.HOST_API,
+    router=router,
+    web=files(__name__) / "web",
     migrations=files(__name__) / "migrations",
     cli=commands,
 )

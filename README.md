@@ -422,8 +422,8 @@ start with:
   [extensions/library/README.md](extensions/library/README.md).
 
 **Collection** keeps collections of anyone's games, analysed by the same Stockfish and the
-same rules as yours (`blunderbook ext install collection`). It's being built: for now it adds
-games and shows their stats on the command line, and its tab comes later.
+same rules as yours (`blunderbook ext install collection`). You add games on the command
+line; its tab shows them (adding games on the page comes later).
 
 - `blunderbook collection import FILE.pgn --into NAME` scores every position of every game,
   both sides' moves, and adds the games to the collection, made if it's new. A game already
@@ -433,6 +433,12 @@ games and shows their stats on the command line, and its tab comes later.
 - `blunderbook collection stats [NAME]` shows accuracy, average centipawn loss and `??` / `?` /
   `?!` marks by side, phase, opening and game. Filter with `--player`, `--color`, `--result`,
   `--opening` and `--phase`. `blunderbook collection players [NAME]` lists who played.
+- **The Collection tab** lists your collections. Each one shows the same stats with the same
+  filters: tiles for games, score, accuracy, centipawn loss and blunders, then by phase, the
+  openings and every game. A player's name (from **Players**, or the filter) shows their games,
+  their moves next to their opponents'. A game opens on a board you can step through, with an
+  eval graph (click it to jump), both sides' accuracy, and every marked move with Stockfish's
+  move instead.
 - Its games are kept in `collection.db` next to your database, backed up with it, and never
   in your Log. More in [extensions/collection/README.md](extensions/collection/README.md).
 

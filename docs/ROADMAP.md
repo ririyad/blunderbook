@@ -21,11 +21,11 @@ _Last updated: 2026-11-09_
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
-| M12 Collection | In progress (2/4) | Extension: a collection of anyone's games, analysed |
+| M12 Collection | In progress (3/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 
-**Next up:** back to 12.3, the Collection's tab: its routes, and a page for each
-collection, game (with an eval graph) and player, with 12.2's filters. Still
+**Next up:** 12.4, importing into a collection on the page, and links from a collection's
+game to your Log entries from the same position. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -54,8 +54,8 @@ that steps through each entry and its replies, and practise with spaced repetiti
 `library.db`, and each entry lists your own Log entries from games that reached its position.
 The second, Collection (M12), adds anyone's games to collections on the CLI
 (`blunderbook collection import FILE --into NAME`), every position scored once, in
-`collection.db`, and shows their stats (`collection stats`, `collection players`); its tab
-is next.
+`collection.db`, and shows their stats on the CLI (`collection stats`, `collection players`)
+and in its tab: each collection, its players, and each game with an eval graph.
 Missed wins (M13): a mate or a big gain you didn't take is logged too, even when you stay
 winning, shown as "Missed win" (no mark), with "Missed my tactic" suggested.
 
@@ -943,7 +943,30 @@ that steps through the whole game with your blunders marked. No delete in this m
         8... Nxe4 in Réti–Tartakower came out as mate in 3 in some runs and +1 in others.
         Depth 16, or one thread, was steady. Noted in the Collection's README; it affects
         your own imports too (`engine_threads = 2` is the default).
-- [ ] **12.3** API, collection / game / player views with filters and an eval graph.
+- [x] **12.3** API, collection / game / player views with filters and an eval graph.
+      _Done:_
+      - **Routes** (`routes.py`, at `/api/ext/collection`, all GET): `collections`; `stats`
+        with `collection` (a number or `all`) and 12.2's filters (`player`, `color`,
+        `result`, `opening`, `phase`), plus the filter menus' players and openings and the
+        engines used; `players`; and `games/{id}` with every position (its FEN, eval and
+        White's winning chances, for the graph) and every move judged (its mark, accuracy,
+        centipawn loss and phase; for a marked move, Stockfish's move, its line and the line
+        after). Your thresholds are read from config.toml on each request. `store.py` gains
+        `by_id`, `count_games`, `engines` and `game_detail`.
+      - **The tab** (`web/view.js`, `view.css`, classes `collection-…`): the collections; a
+        collection's tiles, filters (kept in the address: `#collection/1?player=…`), by
+        phase, openings and games; its players, each opening their stats; and a game page
+        on core's board and step controls, with arrow keys, "next marked move", an eval
+        graph (an SVG; dots for marked moves; click to jump) and the marked move's lines.
+      - **Tests** (21 more, 87 in all): the routes with a scripted engine (Légal's 5... Bxd1
+        a blunder, its best move and refutation), every filter and its refusals, thresholds
+        read each time, players, a game's positions and chances, a 404, the date label, the
+        tab listed, the page checks, and that every route is a GET.
+      - **Checked in Chrome** on a scratch home (classics at depth 12): the collections, the
+        stats, a filter by player and result, clearing the player (the result resets), the
+        phase filter, players, and a game page with the graph and next marked move. No
+        console errors. Not checked at 390 px: the window couldn't be resized
+        (`TODO(verify)`).
 - [ ] **12.4** Import on the page, and links to your Log.
 
 ### M13 Missed wins
@@ -1289,3 +1312,12 @@ None open.
     material). Only a suggestion, like the others.
   - **Not in it:** games imported before aren't re-analysed (no re-analyse command), the
     Collection's stats, and their threats you missed beyond today's hints.
+- **2026-11-11: The Collection's tab (12.3).**
+  - **A player's page is the collection's page with the player filter**, not a page of its
+    own: the same tiles, phases, openings and games, from their side. One layout to keep.
+  - **Filters live in the address** (`#collection/1?player=…&phase=opening`), so the browser's
+    Back and a bookmark keep them.
+  - **The server does the maths**, as in core: the page gets each move's mark and accuracy,
+    and each position's winning chances, for the graph.
+  - **Missed wins** (M13) aren't in the Collection's stats yet: its marks stay `??` / `?` /
+    `?!`, as decided for M13.

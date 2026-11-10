@@ -4,9 +4,9 @@ A Blunderbook extension: collections of anyone's games, analysed by the same Sto
 same rules as your own. It's a separate package (CLAUDE.md §15). Nothing here goes into your
 Log, and it makes no network calls.
 
-Status: 12.2 of the roadmap (M12). It has its database and four commands: `import`, `list`,
-`stats` and `players`. A tab with each collection, game and player (12.3), and importing on
-the page with links to your Log (12.4) come next.
+Status: 12.3 of the roadmap (M12). It has its database, four commands (`import`, `list`,
+`stats` and `players`) and a tab with each collection, its players and each game. Importing
+on the page, with links to your Log (12.4), comes next.
 
 ## Install and turn on
 
@@ -120,6 +120,28 @@ depth. With `engine_threads = 2`, Réti–Tartakower's 8... Nxe4 was scored as m
 some runs and about +1 in others at depth 12. The default depth of 16, and one thread
 (`engine_threads = 1`), gave the same answer in every run tried. It affects your own imports
 the same way.
+
+## The tab
+
+Restart `blunderbook serve` after turning the Collection on, and it has a tab.
+
+- **Collections:** each one with its number of games, and "All collections" (each game once)
+  when you have more than one.
+- **A collection:** the stats `collection stats` shows, with the same filters as menus
+  (player, colour, result, opening, phase). Tiles for the games, the score, both sides'
+  accuracy and centipawn loss, and the blunders; then the moves by phase, the openings, and
+  every game with both sides' accuracy and marks. The filters are in the address
+  (`#collection/1?player=Paul%20Morphy`), so a view can be bookmarked.
+- **Players:** who played, with their games, colours, score and accuracy. Open one to see the
+  collection's stats for them, their moves next to their opponents'.
+- **A game:** the board, stepped with the buttons, the move list or the arrow keys (Home and
+  End too); "next marked move"; an eval graph of White's winning chances, with each marked
+  move as a dot (red `??`, amber `?`, blue `?!`), which you click to jump; both sides'
+  accuracy, centipawn loss and marks; and for a marked move, Stockfish's move instead, its
+  line, and the line after the move.
+
+Your thresholds are read from config.toml each time a page loads, so a changed threshold
+shows at once. The tab only reads: nothing on it changes a collection.
 
 ## collection.db
 

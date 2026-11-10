@@ -1,0 +1,71 @@
+/* The Collection tab (ROADMAP 12.3). The board, step controls, move list and panels are the
+   page's own (app.css); these are the Collection's parts, each class starting with
+   "collection". Colours are app.css's: red for ??, amber for ?, blue for ?!. */
+
+.collection-intro{margin:4px 2px 12px;font-size:13px;color:var(--muted)}
+.collection-group{overflow:hidden}
+.collection-head{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--soft)}
+.collection-head h3{font-size:15px}
+.collection-list{list-style:none;margin:0;padding:6px}
+.collection-row{display:flex;justify-content:space-between;align-items:baseline;gap:2px 12px;flex-wrap:wrap;padding:9px 10px;border-radius:var(--radius-sm);color:inherit;text-decoration:none;transition:background .12s}
+.collection-row:hover{background:var(--hover)}
+.collection-name{font-weight:700;overflow-wrap:anywhere}
+
+/* a collection's stats */
+.collection-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.collection-top h2{font-size:26px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.collection-filters{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;margin-bottom:14px}
+.collection-filter{display:flex;min-width:0}
+.collection-filter select{font-size:13px;max-width:100%}
+.collection-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+.collection-tile{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.collection-value{font-size:26px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.collection-label{font-weight:700}
+.collection-bad{color:var(--red)}
+.collection-two{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-bottom:14px}
+.collection-two>*{flex:1 1 420px;min-width:0}
+.collection-panel{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.collection-bare{padding:0}
+.collection-title{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap}
+.collection-title h3{font-size:17px}
+.collection-prow{display:grid;grid-template-columns:130px minmax(0,1fr) auto;gap:12px;align-items:center}
+@media (max-width:560px){.collection-prow{grid-template-columns:1fr auto}.collection-meter{grid-column:1/-1;order:3}}
+.collection-phase{font-weight:600}
+.collection-meter{display:flex;align-items:center;gap:10px}
+.collection-track{flex:1;height:10px;background:#ebe7de;border-radius:999px;overflow:hidden}
+.collection-fill{display:block;height:100%;background:var(--ink);border-radius:999px}
+.collection-num{min-width:72px;text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.collection-marks{font-size:13px;text-align:right}
+.collection-b{color:var(--red);font-weight:700}
+.collection-m{color:var(--amber);font-weight:700}
+.collection-i{color:var(--blue);font-weight:700}
+.collection-clean{color:var(--green);font-weight:700}
+
+/* tables: they scroll sideways when the page is narrow */
+.collection-scroll{overflow-x:auto}
+.collection-table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.collection-wide{min-width:760px}
+.collection-table th{text-align:left;padding:8px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line);white-space:nowrap}
+.collection-table tbody th{font-size:13.5px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:600}
+.collection-table td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.collection-table tbody tr:last-child>*{border-bottom:0}
+.collection-table .collection-r{text-align:right}
+.collection-game{font-weight:700;text-decoration:none}
+.collection-result{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border-radius:6px;font-weight:700;font-size:12.5px;background:#f3f1ec}
+
+/* one game */
+.collection-vs{color:var(--muted);font-weight:500;font-size:18px}
+.collection-graphwrap p{margin:4px 0 0}
+.collection-graph{cursor:pointer;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;line-height:0}
+.collection-graph svg{width:100%;height:auto;display:block}
+.collection-black{fill:var(--dark)}
+.collection-white{fill:var(--light)}
+.collection-mid{stroke:var(--muted);stroke-width:1;stroke-dasharray:4 4;opacity:.6}
+.collection-now{stroke:var(--red);stroke-width:2}
+.collection-dot{stroke:#fff;stroke-width:1.5}
+.collection-dot-blunder{fill:var(--red)}
+.collection-dot-mistake{fill:var(--amber)}
+.collection-dot-inaccuracy{fill:var(--blue)}
+.collection-move{border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius-sm);padding:8px 12px;display:flex;flex-direction:column;gap:4px}
+.collection-marked{border-left-color:var(--red)}
+.collection-source{margin-top:18px}

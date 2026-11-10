@@ -57,6 +57,16 @@ def find(conn: sqlite3.Connection, name: str) -> CollectionRow | None:
     return None if row is None else CollectionRow(*row)
 
 
+def by_id(conn: sqlite3.Connection, collection_id: int) -> CollectionRow | None:
+    row = conn.execute(_COLLECTIONS + " WHERE c.id = ? GROUP BY c.id", (collection_id,)).fetchone()
+    return None if row is None else CollectionRow(*row)
+
+
+def count_games(conn: sqlite3.Connection) -> int:
+    """How many games there are, each once, in every collection."""
+    return int(conn.execute("SELECT COUNT(*) FROM games").fetchone()[0])
+
+
 def collections(conn: sqlite3.Connection) -> list[CollectionRow]:
     """Every collection, by name."""
     rows = conn.execute(_COLLECTIONS + " GROUP BY c.id ORDER BY c.name, c.id")
@@ -114,11 +124,22 @@ def _position(r: Sequence[Any]) -> Position:
     )
 
 
-def load(conn: sqlite3.Connection, collection_id: int | None = None) -> list[stats.Game]:
-    """The games of a collection (every collection's with None, each game once), with their
-    positions, for the stats. In the order they were first added."""
-    where = "WHERE m.collection_id = ?" if collection_id is not None else ""
-    params: tuple[int, ...] = (collection_id,) if collection_id is not None else ()
+def load(
+    conn: sqlite3.Connection,
+    collection_id: int | None = None,
+    *,
+    game_ids: Sequence[int] | None = None,
+) -> list[stats.Game]:
+    """The games of a collection (every collection's with None, each game once), or the
+    games ``game_ids``, with their positions, for the stats. In the order they were first
+    added."""
+    if game_ids is not None:
+        where = f"WHERE g.id IN ({', '.join('?' * len(game_ids))})"
+        params: tuple[int, ...] = tuple(game_ids)
+    elif collection_id is not None:
+        where, params = "WHERE m.collection_id = ?", (collection_id,)
+    else:
+        where, params = "", ()
     rows = conn.execute(
         "SELECT g.id, g.white, g.black, g.result, g.eco, g.opening, g.date, g.event "
         f"FROM games g JOIN members m ON m.game_id = g.id {where} "
@@ -148,6 +169,63 @@ def load(conn: sqlite3.Connection, collection_id: int | None = None) -> list[sta
         )
         for r in rows
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class GameDetail:
+    """One game for its page: the stats' game, and what the page shows besides."""
+
+    game: stats.Game
+    white_elo: int | None
+    black_elo: int | None
+    site_label: str
+    round: str | None
+    start_fen: str
+    engine_name: str
+    engine_depth: int
+    collections: tuple[tuple[int, str], ...]  # (id, name), by name
+
+
+def game_detail(conn: sqlite3.Connection, game_id: int) -> GameDetail | None:
+    """One game, with its positions and the collections it's in; None when there's none."""
+    row = conn.execute(
+        "SELECT white_elo, black_elo, site_label, round, start_fen, engine_name, engine_depth "
+        "FROM games WHERE id = ?",
+        (game_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    (game,) = load(conn, game_ids=(game_id,))
+    named = conn.execute(
+        "SELECT c.id, c.name FROM members m JOIN collections c ON c.id = m.collection_id "
+        "WHERE m.game_id = ? ORDER BY c.name, c.id",
+        (game_id,),
+    )
+    return GameDetail(
+        game=game,
+        white_elo=row[0],
+        black_elo=row[1],
+        site_label=row[2],
+        round=row[3],
+        start_fen=row[4],
+        engine_name=row[5],
+        engine_depth=row[6],
+        collections=tuple((r[0], r[1]) for r in named),
+    )
+
+
+def engines(conn: sqlite3.Connection, collection_id: int | None = None) -> list[tuple[str, int]]:
+    """The engines and depths the games were analysed with (a collection's, or every
+    game's), most games first."""
+    where = "WHERE m.collection_id = ?" if collection_id is not None else ""
+    params: tuple[int, ...] = (collection_id,) if collection_id is not None else ()
+    rows = conn.execute(
+        "SELECT g.engine_name, g.engine_depth FROM games g "
+        f"WHERE g.id IN (SELECT m.game_id FROM members m {where}) "
+        "GROUP BY g.engine_name, g.engine_depth ORDER BY COUNT(*) DESC, g.engine_depth DESC",
+        params,
+    )
+    return [(r[0], r[1]) for r in rows]
 
 
 # ---------------------------------------------------------------- writing
