@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-11_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -21,12 +21,10 @@ _Last updated: 2026-11-09_
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
-| M12 Collection | In progress (3/4) | Extension: a collection of anyone's games, analysed |
+| M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 
-**Next up:** 12.4, importing into a collection on the page, and links from a collection's
-game to your Log entries from the same position. Still
-to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** v1's milestones are all done. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -55,7 +53,8 @@ that steps through each entry and its replies, and practise with spaced repetiti
 The second, Collection (M12), adds anyone's games to collections on the CLI
 (`blunderbook collection import FILE --into NAME`), every position scored once, in
 `collection.db`, and shows their stats on the CLI (`collection stats`, `collection players`)
-and in its tab: each collection, its players, and each game with an eval graph.
+and in its tab: each collection, its players, and each game with an eval graph and links to
+your Log entries from its positions. Games can be added on the tab too.
 Missed wins (M13): a mate or a big gain you didn't take is logged too, even when you stay
 winning, shown as "Missed win" (no mark), with "Missed my tactic" suggested.
 
@@ -895,7 +894,7 @@ that steps through the whole game with your blunders marked. No delete in this m
       - **The package** (`extensions/collection`, a workspace member): `games.py` (pure,
         mypy-strict) queues a PGN's games with core's parser, fingerprints and source
         detection, and scores them; `store.py` holds all its SQL; `collect.py` adds games and
-        is what 12.4's page import will reuse.
+        is what 12.4's page import reuses.
       - **`collection.db`** (`0001_collections.sql`): `collections`, `games` (each once, by
         fingerprint, with its headers, PGN, engine and depth), `positions` (every position:
         FEN, the move and clock, the eval, Stockfish's move and up to 10 moves of its line)
@@ -967,7 +966,39 @@ that steps through the whole game with your blunders marked. No delete in this m
         phase filter, players, and a game page with the graph and next marked move. No
         console errors. Not checked at 390 px: the window couldn't be resized
         (`TODO(verify)`).
-- [ ] **12.4** Import on the page, and links to your Log.
+- [x] **12.4** Import on the page, and links to your Log.
+      _Done:_
+      - **The import job** (`jobs.py`): one import into a collection at a time, in a thread
+        with its own connection to `collection.db` and one Stockfish, through the same
+        `collect.add` as `collection import` (now with `should_stop`, checked between
+        positions). It takes the daily backup first (a failure is a note). Each game's status
+        (waiting, analysing, added, added already analysed, skipped, can't be read, not
+        analysed), the percentage and the CLI's summary line (`collect.summary`, now printed by
+        `collection import` too) are read while it runs. The last job is kept for its report.
+      - **Routes:** `POST /api/ext/collection/import?into=NAME` (the PGN's bytes, as core's
+        import: `application/x-chess-pgn` or 415, the page's own `Origin` or 403, 10 MB or
+        413, no games or a bad name 422, busy 409) → 202 `{job_id}`; `GET /import/{job_id}`.
+        Stopping `serve` stops the job: the router's lifespan, which FastAPI merges into the
+        app's.
+      - **Your Log:** `games/{id}` gains `yours`, your Log entries whose position before your
+        move is one of the game's positions (the FEN's first four fields), each with the ply
+        it's at. Read through `host.Log`, read-only.
+      - **The tab:** "Add games" on the collections, the empty state and a collection's page
+        (with its name filled in), a form (name with your collections offered, paste, choose or
+        drop), the progress bar and report, linked to each game and the collection; a game's
+        "From your Log", linked to `#log/<id>`, with "Show it here".
+      - **Tests** (15 more, 102 in all): an import end to end with one engine, the same games
+        again (skipped), into a second collection (reused), Windows-1252 and an unreadable
+        game, no Stockfish, every refusal, an unknown job, a second import while one runs,
+        stopping `serve`, `should_stop`, and your Log's entry on Légal's game (and not on
+        Morphy's). Every route but the import is still a GET.
+      - **Checked in Chrome** on a scratch home: three games into a new "Traps" (two analysed,
+        Légal's reused from Classics), the progress and report, "Open Traps"; the same game
+        again, skipped; "Add games" from a collection filling in its name; Légal's game listing
+        your 5... Bxd1?? (entry #5) and "Show it here" stepping to the position after 5. Nxe5.
+        It found the report out of view when an import started (it scrolls to it now), and
+        "Already in Traps — skipped" next to "Already in this collection" (now "Skipped").
+        No console errors. Not checked at 390 px (`TODO(verify)`).
 
 ### M13 Missed wins
 
@@ -1321,3 +1352,14 @@ None open.
     and each position's winning chances, for the graph.
   - **Missed wins** (M13) aren't in the Collection's stats yet: its marks stay `??` / `?` /
     `?!`, as decided for M13.
+- **2026-11-11: Adding games on the Collection's tab, and links to your Log (12.4).**
+  - **Its own import job**, not core's: core's job saves to your Log, and an extension can't
+    use it (§15). The two don't share a slot, so one of each can run at once, each with its own
+    Stockfish. That's two engines' threads at worst; a shared slot would need a host API
+    addition, and waits until it's a problem.
+  - **The same rules as core's web import** (§10): the PGN's bytes, decoded as §7.1 says, the
+    same refusals, one at a time, in memory, stopped with `serve`.
+  - **Your Log is matched by position**, not by game: an entry is listed when its position
+    before your move (pieces, side to move, castling, en passant) is in the game, so a master
+    game that reached the position you went wrong in shows it, as the Library does. Move
+    numbers are ignored: the same position comes up at different moves.

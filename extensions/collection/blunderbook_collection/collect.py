@@ -51,10 +51,13 @@ def add(
     depth: int,
     progress_for: ProgressFor | None = None,
     on_engine: Callable[[engine.Engine], object] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> Result:
     """Add the ``known`` games, then analyse and add the ``ready`` ones. Never raises for
     the engine: a failure is ``error`` (``host.HostError`` when there's no Stockfish,
-    ``EngineError`` when it stops), and Ctrl+C is ``stopped``."""
+    ``EngineError`` when it stops), and Ctrl+C is ``stopped``. So is ``should_stop()``
+    turning true, checked between positions (the page's import, when ``serve`` stops): the
+    game being analysed isn't saved."""
     result = Result(queued)
     known = store.analysed(conn)
     for q in queued:
@@ -71,7 +74,10 @@ def add(
                 on_engine(sf)
             for k, q in enumerate(ready, start=1):
                 assert q.game is not None
+                if should_stop is not None and should_stop():
+                    raise _Stop
                 progress = progress_for(q, k, len(ready)) if progress_for else None
+                progress = _stopping(progress, should_stop)
                 scored = games.score(q.game, sf, depth=depth, progress=progress)
                 at = store.now()
                 with host.transaction(conn):
@@ -86,9 +92,52 @@ def add(
                     _member(conn, result, name, game_id, q.number, inside=True)
     except (host.HostError, engine.EngineError) as exc:
         result.error = str(exc)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt, _Stop:
         result.stopped = True
     return result
+
+
+class _Stop(Exception):
+    """``should_stop()`` turned true."""
+
+
+def _stopping(
+    progress: engine.Progress | None, should_stop: Callable[[], bool] | None
+) -> engine.Progress | None:
+    if should_stop is None:
+        return progress
+    check = should_stop
+
+    def hook(done: int, total: int) -> None:
+        if progress is not None:
+            progress(done, total)
+        if check():
+            raise _Stop
+
+    return hook
+
+
+def summary(result: Result) -> str:
+    """``"4 games read · 2 added · 1 skipped · 1 error"``: what an import did."""
+    added = skipped = errors = left = 0
+    for q in result.queue:
+        if q.number in result.added:
+            added += 1
+        elif q.status in ("member", "duplicate"):
+            skipped += 1
+        elif q.status == "error":
+            errors += 1
+        else:
+            left += 1
+    n = len(result.queue)
+    parts = [f"{n} {'game' if n == 1 else 'games'} read", f"{added} added"]
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if errors:
+        parts.append(f"{errors} {'error' if errors == 1 else 'errors'}")
+    if left:
+        parts.append(f"{left} not analysed")
+    return " \N{MIDDLE DOT} ".join(parts)
 
 
 def _member(

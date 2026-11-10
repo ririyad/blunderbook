@@ -1,25 +1,51 @@
-"""The Collection's routes, mounted at ``/api/ext/collection`` (ROADMAP 12.3): the
-collections, a collection's stats with 12.2's filters, its players, and one game with every
-move judged and the eval of every position.
+"""The Collection's routes, mounted at ``/api/ext/collection``: the collections, a
+collection's stats with 12.2's filters, its players, and one game with every move judged,
+the eval of every position and your Log entries from its positions (ROADMAP 12.3, 12.4);
+and adding games on the page (12.4, :mod:`blunderbook_collection.jobs`).
 
 Everything is worked out here, with :mod:`blunderbook_collection.stats` and your thresholds
 read from config.toml on each request, so the page does no chess or maths (as in core).
-Nothing here changes anything: importing on the page is 12.4.
+Only the import changes anything, and only collection.db. Your Log is read through
+``host.Log``, which can't change it.
 """
 
+import sqlite3
+from collections.abc import AsyncIterator, Iterable
+from contextlib import asynccontextmanager
+from datetime import date
 from typing import Annotated, Final, Literal
 
 import chess
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from blunderbook import host
 from blunderbook.core import detect
-from blunderbook.core.models import Color, Judgment, Thresholds
-from blunderbook_collection import stats, store
+from blunderbook.core.models import Color, Entry, Judgment, Source, Status, Thresholds
+from blunderbook_collection import games, jobs, stats, store
 from blunderbook_collection.games import Position
 
-router = APIRouter()
+
+def _open_db() -> sqlite3.Connection:
+    """collection.db, for the import's thread."""
+    from blunderbook_collection import extension  # here: the package imports this module
+
+    return host.open_db(extension)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """One import at a time, kept with the app; stopping ``serve`` stops it."""
+    running = jobs.Jobs(_open_db)
+    app.state.collection_jobs = running
+    try:
+        yield
+    finally:
+        await run_in_threadpool(running.stop)
+
+
+router = APIRouter(lifespan=lifespan)
 
 ALL: Final = "all"  # every collection, each game once
 ALL_TITLE: Final = "All collections"
@@ -245,6 +271,19 @@ class MoveOut(BaseModel):
     refutation: str | None  # Stockfish's line after the move, for a marked move
 
 
+class YoursOut(BaseModel):
+    """One of your Log entries whose position (before your move) is in this game."""
+
+    id: int  # #log/<id>
+    label: str  # "5... Bxd1", your move
+    judgment: Judgment
+    status: Status  # its Re-test status
+    source: Source
+    opponent: str | None
+    played_on: date | None
+    ply: int  # where this game has the position: its index in ``positions``
+
+
 class GameOut(BaseModel):
     id: int
     white: str | None
@@ -264,10 +303,11 @@ class GameOut(BaseModel):
     by_side: list[TallyOut]  # White's, then Black's
     positions: list[PositionOut]
     moves: list[MoveOut]
+    yours: list[YoursOut]  # newest first, as the Log
 
 
 @router.get("/games/{game_id}")
-def get_game(game_id: int, db: host.ExtDb) -> GameOut:
+def get_game(game_id: int, db: host.ExtDb, log: host.Log) -> GameOut:
     detail = store.game_detail(db, game_id)
     if detail is None:
         raise HTTPException(404, f"No game #{game_id} in your collections.")
@@ -299,7 +339,40 @@ def get_game(game_id: int, db: host.ExtDb) -> GameOut:
             for p in g.positions
         ],
         moves=[_move(m, g.positions[m.ply], g.positions[m.ply + 1]) for m in moves],
+        yours=yours(g.positions, log.entries()),
     )
+
+
+def key(fen: str) -> str:
+    """A position without its move counters: pieces, side to move, castling, en passant."""
+    return " ".join(fen.split()[:4])
+
+
+def yours(positions: tuple[Position, ...], log: Iterable[Entry]) -> list[YoursOut]:
+    """Your Log entries whose position before your move is one of ``positions``."""
+    at: dict[str, int] = {}
+    for p in positions:
+        at.setdefault(key(p.fen), p.ply)
+    found = []
+    for entry in log:
+        b, g = entry.blunder, entry.game
+        ply = at.get(key(b.fen_before))
+        if ply is None:
+            continue
+        mover = chess.Board(b.fen_before).turn == chess.WHITE
+        found.append(
+            YoursOut(
+                id=b.id,
+                label=f"{b.move_no}{'.' if mover else '...'} {b.played_san}",
+                judgment=b.judgment,
+                status=b.status,
+                source=g.source,
+                opponent=g.black if g.my_color == "white" else g.white,
+                played_on=g.played_on,
+                ply=ply,
+            )
+        )
+    return found
 
 
 def white_chances(p: Position) -> float:
@@ -336,6 +409,113 @@ def _move(m: stats.Move, before: Position, after: Position) -> MoveOut:
         best_san=best_san,
         best_line=best_line,
         refutation=refutation,
+    )
+
+
+# ---------------------------------------------------------------- adding games
+
+
+PGN_TYPE: Final = "application/x-chess-pgn"
+MAX_BYTES: Final = 10 * 1024 * 1024
+TOO_BIG: Final = "That PGN is over 10 MB. Split it into smaller files."
+
+
+class ImportStarted(BaseModel):
+    job_id: str
+
+
+class ImportGameOut(BaseModel):
+    number: int
+    players: str
+    status: jobs.GameStatus
+    reason: str | None
+    warnings: list[str]
+    game_id: int | None
+
+
+class ImportJobOut(BaseModel):
+    id: str
+    status: jobs.JobStatus
+    collection: str
+    collection_id: int | None
+    created: bool
+    percent: int
+    game_index: int
+    games_to_analyse: int
+    engine_name: str | None
+    games: list[ImportGameOut]
+    summary: str  # "4 games read · 2 added · 1 skipped · 1 error", when it's finished
+    notes: list[str]
+    error: str | None
+
+
+def _jobs(request: Request) -> jobs.Jobs:
+    running: jobs.Jobs = request.app.state.collection_jobs
+    return running
+
+
+@router.post("/import", status_code=202, dependencies=[Depends(host.same_origin)])
+async def start_import(
+    request: Request,
+    db: host.ExtDb,
+    into: Annotated[str, Query(max_length=200)] = "",
+) -> ImportStarted:
+    """Add the PGN sent as the body (its raw bytes, like a .pgn file) to the collection
+    ``into``, made if it's new. The same rules as core's import (CLAUDE.md §10)."""
+    kind = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if kind != PGN_TYPE:
+        raise HTTPException(415, f"Send the PGN as {PGN_TYPE}.")
+    length = request.headers.get("content-length")
+    if length is not None and length.isdigit() and int(length) > MAX_BYTES:
+        raise HTTPException(413, TOO_BIG)
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > MAX_BYTES:
+            raise HTTPException(413, TOO_BIG)
+    try:
+        job = await run_in_threadpool(_jobs(request).start, db, bytes(data), into)
+    except jobs.Busy as exc:
+        raise HTTPException(409, str(exc)) from None
+    except jobs.CantStart as exc:
+        raise HTTPException(exc.status, str(exc)) from None
+    except games.BadName as exc:
+        raise HTTPException(422, str(exc)) from None
+    except host.HostError as exc:
+        raise HTTPException(503, str(exc)) from None
+    return ImportStarted(job_id=job.id)
+
+
+@router.get("/import/{job_id}")
+def import_status(job_id: str, request: Request) -> ImportJobOut:
+    job = _jobs(request).get(job_id)
+    if job is None:
+        raise HTTPException(404, "That import isn't known: Blunderbook was restarted since.")
+    v = job.view()
+    return ImportJobOut(
+        id=v.id,
+        status=v.status,
+        collection=v.collection,
+        collection_id=v.collection_id,
+        created=v.created,
+        percent=v.percent,
+        game_index=v.game_index,
+        games_to_analyse=v.games_to_analyse,
+        engine_name=v.engine_name,
+        games=[
+            ImportGameOut(
+                number=g.number,
+                players=g.players,
+                status=g.status,
+                reason=g.reason,
+                warnings=list(g.warnings),
+                game_id=g.game_id,
+            )
+            for g in v.games
+        ],
+        summary=v.summary,
+        notes=list(v.notes),
+        error=v.error,
     )
 
 

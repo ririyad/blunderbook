@@ -4,9 +4,9 @@ A Blunderbook extension: collections of anyone's games, analysed by the same Sto
 same rules as your own. It's a separate package (CLAUDE.md §15). Nothing here goes into your
 Log, and it makes no network calls.
 
-Status: 12.3 of the roadmap (M12). It has its database, four commands (`import`, `list`,
-`stats` and `players`) and a tab with each collection, its players and each game. Importing
-on the page, with links to your Log (12.4), comes next.
+Status: done (M12 of the roadmap). It has its database, four commands (`import`, `list`,
+`stats` and `players`) and a tab with each collection, its players and each game, where you
+can add games too. A game that reached a position from your own Log links to that entry.
 
 ## Install and turn on
 
@@ -47,6 +47,21 @@ Classics: 3 games.
 - Before it changes anything, it takes the daily backup, as `blunderbook import` does.
 
 Your own games belong in `blunderbook import`, so their blunders reach your Log.
+
+### On the page
+
+**Add games** (on the Collection tab, or on a collection's page, which fills in its name)
+opens a form: the collection's name (a new one or one you have), and a PGN pasted, chosen or
+dropped on the box. It runs on the server as `collection import` does, with the same rules
+and the same report: a progress bar while Stockfish works, then each game's status, linked to
+its game page, and the summary line.
+
+- One import into a collection at a time; a second one waits ("Games are already being added
+  to a collection"). It's separate from the Import tab's: one of each can run together, each
+  with its own Stockfish.
+- At most 10 MB of PGN. The depth is `engine_depth` from config.toml (there's no `--depth`).
+- Stopping `blunderbook serve` stops the import between positions: the games added so far
+  stay, and adding the same games again finishes the rest.
 
 ## See them
 
@@ -139,9 +154,13 @@ Restart `blunderbook serve` after turning the Collection on, and it has a tab.
   move as a dot (red `??`, amber `?`, blue `?!`), which you click to jump; both sides'
   accuracy, centipawn loss and marks; and for a marked move, Stockfish's move instead, its
   line, and the line after the move.
+- **From your Log:** when a position of the game is the one before a move in your Log (the
+  same pieces, side to move, castling and en passant; move numbers aside), the game lists
+  that entry, linked to `#log/<id>`, with "Show it here" to step to that position.
 
 Your thresholds are read from config.toml each time a page loads, so a changed threshold
-shows at once. The tab only reads: nothing on it changes a collection.
+shows at once. Adding games is the only thing on the tab that changes a collection, and
+nothing on it changes your Log.
 
 ## collection.db
 

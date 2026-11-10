@@ -3,20 +3,31 @@
 //   #collection/<id>  (or /all)      a collection's stats, with filters in the query:
 //                                    #collection/3?player=Paul%20Morphy&phase=opening
 //   #collection/<id>/players         who played, and how well
-//   #collection/game/<id>            one game: the board, the eval graph, every move judged
+//   #collection/game/<id>            one game: the board, the eval graph, every move judged,
+//                                    and your Log entries from its positions
+//   #collection/add  (?into=Classics) add games from a PGN, analysed on the server
 //
 // The API works everything out (the marks, accuracy, centipawn loss, winning chances and the
 // FEN after every move), so there's no chess logic or maths here (as in core).
 
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
-import { MARK } from "/js/format.js";
+import { MARK, fmtDate, markText } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
 
 const FILTERS = ["player", "color", "result", "opening", "phase"];
 const PHASE_NAME = { opening: "Opening", middlegame: "Middlegame", endgame: "Endgame" };
 const JUDGMENT_NAME = { blunder: "Blunder", mistake: "Mistake", inaccuracy: "Inaccuracy" };
 const HOW = "blunderbook collection import FILE --into NAME";
+const PGN_TYPE = "application/x-chess-pgn";
+const POLL_MS = 500;
+const SAVED_JOB = "collection-import"; // the running import's id, to find it again on reload
+const GAME_STATUS = {
+  waiting: "Waiting", analysing: "Analysing…", added: "Added", added_known: "Added (already analysed)",
+  member: "Skipped", duplicate: "Skipped", error: "Can't be read",
+  not_analysed: "Not analysed",
+};
+const HEADLINE = { done: "Done", stopped: "Stopped", failed: "Stopped" };
 const ICON = {
   first: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
   prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
@@ -30,6 +41,8 @@ let token = 0; // only the newest answer is drawn
 let back = "#collection"; // where "← Back" goes from a game
 let game = null; // the open game, as the API sent it
 let ply = 0; // the position shown: 0 is the start, n is after n moves
+let jobId = sessionStorage.getItem(SAVED_JOB); // the import shown on #collection/add
+let pollTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -40,8 +53,12 @@ export async function show(section, rest) {
   if (root !== section) build(section);
   const [path, query = ""] = (rest || "").split("?");
   const parts = path.split("/").filter(Boolean);
-  for (const part of ["colIndex", "colStats", "colPlayers", "colGame"]) $(part).hidden = true;
-  if (parts[0] === "game" && parts[1]) {
+  for (const part of ["colIndex", "colStats", "colPlayers", "colGame", "colAdd"]) $(part).hidden = true;
+  if (parts[0] !== "add") clearTimeout(pollTimer);
+  if (parts[0] === "add") {
+    $("colAdd").hidden = false;
+    await openAdd(new URLSearchParams(query).get("into") || "");
+  } else if (parts[0] === "game" && parts[1]) {
     $("colGame").hidden = false;
     await openGame(parts[1]);
   } else if (parts[0] && parts[1] === "players") {
@@ -63,7 +80,7 @@ export async function show(section, rest) {
 function build(section) {
   root = section;
   section.innerHTML = '<div class="collection"><div id="colIndex"></div><div id="colStats" hidden></div>'
-    + '<div id="colPlayers" hidden></div><div id="colGame" hidden></div></div>';
+    + '<div id="colPlayers" hidden></div><div id="colGame" hidden></div><div id="colAdd" hidden></div></div>';
   section.addEventListener("keydown", stepWithKeys);
 }
 
@@ -82,7 +99,8 @@ async function load(url, box, mine) {
 }
 
 const nothingYet = () => `<div class="panel empty"><p>No collections yet.</p>
-  <p>Add anyone's games with <code>${HOW}</code>. Each game is analysed once, by the same Stockfish and rules as your own.</p></div>`;
+  <p>Add anyone's games here, or with <code>${HOW}</code>. Each game is analysed once, by the same Stockfish and rules as your own.</p>
+  <p><a class="btn primary" href="#collection/add">Add games</a></p></div>`;
 
 // ---------------------------------------------------------------- the collections
 
@@ -101,7 +119,7 @@ async function openIndex() {
   }
   box.innerHTML = `<p class="collection-intro">Anyone's games, analysed by the same Stockfish and the same thresholds as your Log. Nothing here goes into your Log.</p>
     <section class="panel collection-group" aria-labelledby="colListTitle">
-      <div class="collection-head"><h3 id="colListTitle">Collections</h3><span class="small">Add more with <code>${HOW}</code></span></div>
+      <div class="collection-head"><h3 id="colListTitle">Collections</h3><a class="btn ghost" href="#collection/add">Add games</a></div>
       <ul class="collection-list">${rows.join("")}</ul>
     </section>`;
 }
@@ -130,7 +148,10 @@ async function openStats(id, params) {
     <div class="collection-top">
       <div><h2>${esc(who || data.title)}</h2>
         <p class="meta">${who ? `In ${esc(data.title)} · ` : ""}${plural(data.total, "game", "games")}. ${engines}.</p></div>
-      <a class="btn ghost" href="#collection/${id}/players">Players</a>
+      <div class="collection-buttons">
+        ${data.collection != null ? `<a class="btn ghost" href="#collection/add?into=${encodeURIComponent(data.title)}">Add games</a>` : ""}
+        <a class="btn ghost" href="#collection/${id}/players">Players</a>
+      </div>
     </div>
     ${filterBar(data, f)}
     ${data.games ? statsBody(data, f) : `<p class="panel empty">No games${who ? ` of ${esc(who)}` : ""} with these filters.</p>`}`;
@@ -330,6 +351,7 @@ function renderGame() {
         <thead><tr><th scope="col">Side</th><th scope="col" class="collection-r">Accuracy</th><th scope="col" class="collection-r">ACPL</th><th scope="col">Marks</th></tr></thead>
         <tbody>${sideRow(g.white, g.by_side[0], "white")}${sideRow(g.black, g.by_side[1], "black")}</tbody></table></div></div>
       <div class="sec" id="colMove" aria-live="polite"></div>
+      ${yoursHtml(g)}
       <div class="sec"><h3 id="colMovesTitle">Moves</h3>${movesHtml(g)}</div>
       <p class="small collection-source">${esc(g.site_label)} · Analysed with ${esc(g.engine)} · In ${inc}</p>
     </div>
@@ -341,7 +363,7 @@ function renderGame() {
   $("colNext").addEventListener("click", go(() => ply + 1));
   $("colLast").addEventListener("click", go(() => last));
   $("colNextMark").addEventListener("click", go(nextMark));
-  for (const b of $("colGame").querySelectorAll(".mbtn")) b.addEventListener("click", () => jump(Number(b.dataset.pos)));
+  for (const b of $("colGame").querySelectorAll(".mbtn, .collection-here")) b.addEventListener("click", () => jump(Number(b.dataset.pos)));
   $("colGraph").addEventListener("click", (ev) => {
     const box = ev.currentTarget.getBoundingClientRect();
     jump(Math.round(((ev.clientX - box.left) / box.width) * last));
@@ -359,6 +381,21 @@ function nextMark() {
   const marked = game.moves.filter((m) => m.judgment).map((m) => m.ply + 1);
   if (!marked.length) return ply;
   return marked.find((p) => p > ply) ?? marked[0];
+}
+
+/** Your Log entries whose position (before your move) comes up in this game. */
+function yoursHtml(g) {
+  if (!g.yours.length) return "";
+  const items = g.yours.map((y) => {
+    const when = [y.opponent ? `vs ${esc(y.opponent)}` : null, y.played_on ? esc(fmtDate(y.played_on)) : null].filter(Boolean).join(" · ");
+    return `<li class="collection-mine">
+      <a href="#log/${y.id}"><b>${esc(y.label)}${markText(y.judgment)}</b></a>
+      <span class="small">${when || "Your game"}</span>
+      <button class="btn ghost collection-here" type="button" data-pos="${y.ply}">Show it here</button></li>`;
+  }).join("");
+  return `<div class="sec"><h3>From your Log</h3>
+    <p class="small">You reached a position of this game in your own games, and went wrong there.</p>
+    <ul class="collection-yours">${items}</ul></div>`;
 }
 
 function movesHtml(g) {
@@ -441,4 +478,130 @@ function stepWithKeys(ev) {
   if (to === undefined) return;
   ev.preventDefault();
   jump(to);
+}
+
+// ---------------------------------------------------------------- adding games
+
+async function openAdd(into) {
+  const mine = ++token;
+  const box = $("colAdd");
+  let names = [];
+  try {
+    names = (await api("/api/ext/collection/collections")).collections.map((c) => c.name);
+  } catch (err) {
+    showError(err.message);
+  }
+  if (mine !== token) return;
+  box.innerHTML = `
+    <a class="gback" href="#collection">← All collections</a>
+    <div class="panel collection-add">
+      <h2>Add games</h2>
+      <p class="small">From any PGN file, anyone's games. Stockfish analyses every move of both players, at your engine depth, with the same rules as your Log. A game already analysed isn't analysed again, and games already in the collection are skipped. Nothing goes into your Log.</p>
+      <label class="collection-lbl" for="colInto">Collection</label>
+      <input class="collection-input" id="colInto" type="text" list="colNames" maxlength="60" autocomplete="off" placeholder="A new name, or one you have" value="${esc(into)}">
+      <datalist id="colNames">${names.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
+      <div class="collection-drop" id="colDrop">
+        <label class="collection-lbl" for="colPgn">PGN</label>
+        <textarea id="colPgn" spellcheck="false" placeholder="Paste PGN here, or drop a .pgn file on this box."></textarea>
+      </div>
+      <div class="collection-actions">
+        <span class="btn ghost collection-file">Choose .pgn file<input type="file" id="colFile" accept=".pgn,.txt,${PGN_TYPE}" aria-label="Choose a PGN file"></span>
+        <button class="btn primary" id="colGo" type="button">Add games</button>
+      </div>
+      <p class="collection-err" id="colErr" role="alert"></p>
+    </div>
+    <div id="colJob"></div>`;
+  $("colGo").addEventListener("click", () => {
+    const text = $("colPgn").value;
+    if (!text.trim()) {
+      $("colErr").textContent = "Paste a PGN first, or choose a file.";
+      return;
+    }
+    startImport(new Blob([text], { type: PGN_TYPE }));
+  });
+  $("colFile").addEventListener("change", (ev) => {
+    const file = ev.target.files[0];
+    ev.target.value = ""; // the same file can be chosen again
+    if (file) startImport(file);
+  });
+  const drop = $("colDrop");
+  drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.add("collection-over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("collection-over"));
+  drop.addEventListener("drop", (ev) => {
+    ev.preventDefault();
+    drop.classList.remove("collection-over");
+    const file = ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (file) startImport(file);
+  });
+  if (jobId) await poll();
+}
+
+async function startImport(data) {
+  const into = $("colInto").value.trim();
+  $("colErr").textContent = "";
+  if (!into) {
+    $("colErr").textContent = "Give the collection a name.";
+    $("colInto").focus();
+    return;
+  }
+  showError(null);
+  $("colGo").disabled = true;
+  try {
+    const started = await api(`/api/ext/collection/import?into=${encodeURIComponent(into)}`, { method: "POST", data, type: PGN_TYPE });
+    jobId = started.job_id;
+    sessionStorage.setItem(SAVED_JOB, jobId);
+    await poll();
+    $("colJob").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } catch (err) {
+    $("colErr").textContent = err.message;
+  } finally {
+    $("colGo").disabled = false;
+  }
+}
+
+async function poll() {
+  clearTimeout(pollTimer);
+  if (!$("colJob") || $("colAdd").hidden) return;
+  let job;
+  try {
+    job = await api(`/api/ext/collection/import/${encodeURIComponent(jobId)}`);
+  } catch (err) {
+    if (err.status === 404) { // from before the server restarted
+      jobId = null;
+      sessionStorage.removeItem(SAVED_JOB);
+      return;
+    }
+    showError(err.message);
+    pollTimer = setTimeout(poll, POLL_MS * 4);
+    return;
+  }
+  renderJob(job);
+  if (job.status === "running") pollTimer = setTimeout(poll, POLL_MS);
+}
+
+function renderJob(job) {
+  const running = job.status === "running";
+  const state = running
+    ? job.game_index
+      ? `Analysing game ${job.game_index} of ${job.games_to_analyse} · ${job.percent}%`
+      : "Starting…"
+    : HEADLINE[job.status];
+  const rows = job.games.map((g) => {
+    const name = g.game_id != null ? `<a href="#collection/game/${g.game_id}">${esc(g.players)}</a>` : esc(g.players);
+    const why = g.reason ? `<div class="small">${esc(g.reason)}</div>` : "";
+    const warn = g.warnings.map((w) => `<div class="small">Note: ${esc(w)}</div>`).join("");
+    return `<li class="collection-jrow"><span>Game ${g.number} · ${name}${why}${warn}</span>
+      <span class="collection-jstatus collection-js-${g.status}">${GAME_STATUS[g.status]}</span></li>`;
+  }).join("");
+  const notes = job.notes.map((n) => `<p class="small">Note: ${esc(n)}</p>`).join("");
+  const foot = running ? "" : `
+    ${job.error ? `<p class="collection-err">${esc(job.error)}</p>` : ""}
+    ${notes}
+    <p><b>${esc(job.summary)}</b>${job.created ? ` · New collection: ${esc(job.collection)}` : ""}</p>
+    ${job.collection_id != null ? `<div class="collection-actions"><a class="btn ghost" href="#collection/${job.collection_id}">Open ${esc(job.collection)}</a></div>` : ""}`;
+  $("colJob").innerHTML = `<section class="panel collection-job" aria-labelledby="colJobTitle">
+    <div class="collection-title"><h3 id="colJobTitle">Into ${esc(job.collection)}</h3>
+      <span class="small" aria-live="polite">${esc(state)}${job.engine_name ? ` · ${esc(job.engine_name)}` : ""}</span></div>
+    ${running ? `<div class="collection-prog" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${job.percent}"><span class="collection-bar" style="width:${job.percent}%"></span></div>` : ""}
+    <ul class="collection-jlist">${rows}</ul>${foot}</section>`;
 }

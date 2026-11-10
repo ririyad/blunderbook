@@ -147,7 +147,8 @@ blunderbook/
 │   └── collection/            # the Collection extension (§15): anyone's games, analysed
 │       ├── blunderbook_collection/  # __init__.py (the Extension, commands), games.py and
 │       │                            #   stats.py (pure), store.py (its SQL), collect.py
-│       │                            #   (adding games), routes.py, web/ (its tab)
+│       │                            #   (adding games), jobs.py (adding them on the
+│       │                            #   page), routes.py, web/ (its tab)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)

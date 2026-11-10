@@ -398,35 +398,20 @@ def _engine_line(depth: int) -> Callable[[engine.Engine], None]:
 
 
 def _report(result: collect.Result, name: str) -> None:
-    counts = {"added": 0, "skipped": 0, "errors": 0, "left": 0}
     for q in result.queue:
         where = f"Game {q.number}{DOT}{q.players}"
         if q.number in result.added:
-            counts["added"] += 1
             how = "added (already analysed)" if q.status == "known" else "added"
             typer.echo(f"{where}{DOT}{how}")
-        elif q.status in ("member", "duplicate"):
-            counts["skipped"] += 1
-            typer.echo(f"{where}{DOT}{q.reason}")
-        elif q.status == "error":
-            counts["errors"] += 1
+        elif q.status in ("member", "duplicate", "error"):
             typer.echo(f"{where}{DOT}{q.reason}")
         else:
-            counts["left"] += 1
             typer.echo(f"{where}{DOT}not analysed")
         for warning in q.warnings:
             typer.echo(f"  {warning}")
     if result.created:
         typer.echo(f"New collection: {name}.")
-    n = len(result.queue)
-    parts = [f"{n} {_s(n, 'game')} read", f"{counts['added']} added"]
-    if counts["skipped"]:
-        parts.append(f"{counts['skipped']} skipped")
-    if counts["errors"]:
-        parts.append(f"{counts['errors']} {_s(counts['errors'], 'error')}")
-    if counts["left"]:
-        parts.append(f"{counts['left']} not analysed")
-    typer.echo(DOT.join(parts))
+    typer.echo(collect.summary(result))
 
 
 def _game_line(g: store.GameRow) -> str:

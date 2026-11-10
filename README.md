@@ -423,7 +423,7 @@ start with:
 
 **Collection** keeps collections of anyone's games, analysed by the same Stockfish and the
 same rules as yours (`blunderbook ext install collection`). You add games on the command
-line; its tab shows them (adding games on the page comes later).
+line or in its tab.
 
 - `blunderbook collection import FILE.pgn --into NAME` scores every position of every game,
   both sides' moves, and adds the games to the collection, made if it's new. A game already
@@ -438,7 +438,10 @@ line; its tab shows them (adding games on the page comes later).
   openings and every game. A player's name (from **Players**, or the filter) shows their games,
   their moves next to their opponents'. A game opens on a board you can step through, with an
   eval graph (click it to jump), both sides' accuracy, and every marked move with Stockfish's
-  move instead.
+  move instead. When a position in the game is one where you went wrong in your own games,
+  the game links to that Log entry.
+- **Add games** on the tab: name the collection, paste a PGN or drop a file, and watch it
+  being analysed, as `collection import` does it.
 - Its games are kept in `collection.db` next to your database, backed up with it, and never
   in your Log. More in [extensions/collection/README.md](extensions/collection/README.md).
 

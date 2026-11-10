@@ -265,7 +265,12 @@ def test_the_page_passes_the_checks(tmp_path: Path) -> None:
     assert webcheck.problems(folder, app, prefix="collection") == []
 
 
-def test_nothing_changes_anything() -> None:
-    """12.3 only reads: every route is a GET."""
-    methods = {m for r in routes.router.routes for m in getattr(r, "methods", set())}
-    assert methods == {"GET"}
+def test_only_the_import_changes_anything() -> None:
+    """Every route is a GET but the import, which only the page may call (§10)."""
+    changes = [
+        (r.path, r.dependencies)  # type: ignore[attr-defined]
+        for r in routes.router.routes
+        if getattr(r, "methods", set()) - {"GET"}
+    ]
+    assert [path for path, _ in changes] == ["/import"]
+    assert [d.dependency for d in changes[0][1]] == [host.same_origin]

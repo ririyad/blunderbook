@@ -69,3 +69,33 @@
 .collection-move{border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius-sm);padding:8px 12px;display:flex;flex-direction:column;gap:4px}
 .collection-marked{border-left-color:var(--red)}
 .collection-source{margin-top:18px}
+.collection-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.collection-yours{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.collection-mine{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:var(--radius-sm)}
+.collection-mine a{text-decoration:none}
+.collection-here{margin-left:auto}
+
+/* adding games */
+.collection-add{padding:18px 20px;display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.collection-add h2{font-size:22px}
+.collection-add p{margin:0 0 6px;max-width:72ch}
+.collection-lbl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-top:6px}
+.collection-input{font:inherit;color:var(--ink);border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#fff;padding:8px 10px;max-width:420px;width:100%}
+.collection-input:focus-visible,.collection-drop textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.collection-drop textarea{width:100%;min-height:160px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.55}
+.collection-over textarea{border-color:var(--blue);background:var(--blue-bg)}
+.collection-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.collection-file{position:relative;overflow:hidden}
+.collection-file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.collection-file:focus-within{outline:2px solid var(--blue);outline-offset:1px}
+.collection-err{color:var(--red);font-size:13px;margin:0;min-height:16px}
+.collection-job{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.collection-prog{height:8px;background:#ebe7de;border-radius:999px;overflow:hidden}
+.collection-bar{display:block;height:100%;background:var(--blue);transition:width .3s}
+.collection-jlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.collection-jrow{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line)}
+.collection-jrow:last-child{border-bottom:0}
+.collection-jstatus{font-size:12.5px;font-weight:700;color:var(--muted)}
+.collection-js-added,.collection-js-added_known{color:var(--green)}
+.collection-js-analysing{color:var(--blue)}
+.collection-js-error,.collection-js-not_analysed{color:var(--red)}
