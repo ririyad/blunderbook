@@ -53,7 +53,8 @@ Everything stays on your computer: one SQLite file, no account, no cloud, no tra
 | **Sync from Lichess and Chess.com** | `blunderbook sync` downloads your new games and imports them. |
 | **One position, no PGN** | Log a single position from its FEN and the move you played. |
 | **Same judgement everywhere** | Every game gets its own Stockfish analysis, whatever the source, so a blunder means the same thing in every entry. |
-| **Suggested causes** | Time trouble, moving too fast, a missed threat or a hung piece are suggested from the clock and the engine's line. You confirm them. |
+| **Missed wins** | A mate or a big gain you didn't take is logged too, even when you stay winning, so it comes back in Re-test. |
+| **Suggested causes** | Time trouble, moving too fast, a missed threat, a hung piece or a missed tactic are suggested from the clock and the engine's line. You confirm them. |
 | **Re-test** | Each blunder comes back as a puzzle on a schedule: 1, 3, 7, 14, 30, then 60 days after each correct answer. |
 | **Patterns** | Your most common causes, blunders by time control, and your re-test history. |
 | **Print** | An A4 page per two entries, black and white, like the paper log. |
@@ -491,7 +492,17 @@ position.
    | ≥ 0.10 | `?` mistake | no (FEN entries only) |
    | ≥ 0.05 | `?!` inaccuracy | no (FEN entries only) |
 
-5. For each logged position, Stockfish looks at its top three moves. Any move within
+5. A **missed win** is logged too, even when you stay winning. Near a win, winning chances
+   hardly move, so missing a mate in 2 at +8 and staying at +5 is only an inaccuracy by the
+   swing. A move that wasn't Stockfish's choice is a missed win when:
+   - you had a forced mate before it and not after; or
+   - you were at least `missed_win_cp` (300 cp) ahead and your eval dropped by 300 cp or
+     more. Evals are capped at ±1000 cp here (a mate counts as 1000), so +15 → +11 isn't one.
+
+   A missed win that also reaches the blunder line stays a blunder (`??`). Otherwise it's
+   shown as "Missed win", with no mark. `missed_win_cp = 0` turns missed wins off. Games
+   imported before missed wins existed aren't analysed again, so they have none.
+6. For each logged position, Stockfish looks at its top three moves. Any move within
    `accept_margin_cp` (60 cp) of the best counts as a correct answer in the re-test.
 
 The engine's version and depth are saved with every game. Evals already in a PGN (`[%eval]`)
@@ -505,6 +516,7 @@ are ignored, so every game is judged the same way.
 | Moved too fast | 3 s or less on the move while you still had more than 30% of your time. |
 | Missed their threat | After your move, the opponent has a forced mate. |
 | Hung a piece | You're 3 or more points of material down (P 1, N/B 3, R 5, Q 9) after the engine's reply line. |
+| Missed my tactic | You had a forced mate and lost it, or Stockfish's best line (up to 6 moves from the position before yours) leaves you 3 or more points up. |
 
 The time-based ones need clock times and a time control in the PGN. The full cause list is:
 Hung a piece, Missed their threat, Missed my tactic, Miscalculated a line, Time trouble, Moved
@@ -540,13 +552,16 @@ engine_depth = 16
 engine_threads = 2
 engine_hash_mb = 128
 
-# Swing thresholds, 0 to 1. Imports only log moves at or above `blunder`.
+# Swing thresholds, 0 to 1. Imports only log moves at or above `blunder`, and
+# missed wins: a mate you missed, or a drop of missed_win_cp centipawns or more
+# while you stay ahead (0 turns missed wins off).
 # Re-tests accept moves within accept_margin_cp centipawns of the best move.
 [thresholds]
 inaccuracy = 0.05
 mistake = 0.1
 blunder = 0.15
 accept_margin_cp = 60
+missed_win_cp = 300
 
 [lichess]
 username = ''

@@ -10,6 +10,7 @@ from typing import Final
 
 import chess
 
+from blunderbook.core.detect import mover_mates
 from blunderbook.core.models import CAUSES, Color, Eval, Finding, ParsedGame, Ply, TimeControl
 
 TIME_TROUBLE_SHARE: Final = 0.10  # clock left < 10% of base ...
@@ -18,6 +19,8 @@ FAST_MOVE_S: Final = 3  # time spent <= 3 s ...
 FAST_MOVE_CLOCK_SHARE: Final = 0.30  # ... while clock left > 30% of base
 HUNG_PIECE_PLIES: Final = 6
 HUNG_PIECE_DROP: Final = 3
+MISSED_TACTIC_PLIES: Final = 6
+MISSED_TACTIC_GAIN: Final = 3
 
 PIECE_VALUES: Final = {
     chess.PAWN: 1,
@@ -45,6 +48,8 @@ def suggest(finding: Finding, game: ParsedGame, tc: TimeControl | None) -> Hints
     spent = time_spent(game, ply, tc)
 
     found: set[str] = set()
+    if missed_my_tactic(finding, me):
+        found.add("Missed my tactic")
     if time_trouble(clock_left, tc):
         found.add("Time trouble")
     if moved_too_fast(spent, clock_left, tc):
@@ -109,15 +114,23 @@ def missed_their_threat(eval_after: Eval, me: Color) -> bool:
     return eval_after.mate < 0 if me == "white" else eval_after.mate > 0
 
 
-def hung_a_piece(fen_before: str, fen_after: str, refutation: Sequence[str], me: Color) -> bool:
-    """My material balance drops by 3 or more once up to 6 plies of the refutation are played.
-
-    The balance is compared with the position before my move. The line stops early at a
-    move that isn't legal. Pieces count P=1, N=B=3, R=5, Q=9.
-    """
+def missed_my_tactic(finding: Finding, me: Color) -> bool:
+    """I had a forced mate before my move and not after it, or the engine's best line (up
+    to 6 plies from the position before my move) leaves me 3 or more material up compared
+    with that position. ``hung_a_piece`` the other way round."""
+    if mover_mates(finding.eval_before, me) and not mover_mates(finding.eval_after, me):
+        return True
     color = chess.WHITE if me == "white" else chess.BLACK
-    board = chess.Board(fen_after)
-    for uci in refutation[:HUNG_PIECE_PLIES]:
+    start = chess.Board(finding.ply.fen_before)
+    board = _played_out(start, finding.best_pv_uci, MISSED_TACTIC_PLIES)
+    gain = material_balance(board, color) - material_balance(start, color)
+    return gain >= MISSED_TACTIC_GAIN
+
+
+def _played_out(board: chess.Board, line: Sequence[str], plies: int) -> chess.Board:
+    """``board`` after up to ``plies`` moves of ``line``, stopping at one that isn't legal."""
+    board = board.copy(stack=False)
+    for uci in line[:plies]:
         try:
             move = chess.Move.from_uci(uci)
         except ValueError:
@@ -125,6 +138,17 @@ def hung_a_piece(fen_before: str, fen_after: str, refutation: Sequence[str], me:
         if not board.is_legal(move):
             break
         board.push(move)
+    return board
+
+
+def hung_a_piece(fen_before: str, fen_after: str, refutation: Sequence[str], me: Color) -> bool:
+    """My material balance drops by 3 or more once up to 6 plies of the refutation are played.
+
+    The balance is compared with the position before my move. The line stops early at a
+    move that isn't legal. Pieces count P=1, N=B=3, R=5, Q=9.
+    """
+    color = chess.WHITE if me == "white" else chess.BLACK
+    board = _played_out(chess.Board(fen_after), refutation, HUNG_PIECE_PLIES)
     drop = material_balance(chess.Board(fen_before), color) - material_balance(board, color)
     return drop >= HUNG_PIECE_DROP
 

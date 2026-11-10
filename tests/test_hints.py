@@ -4,6 +4,7 @@ Engine output is stubbed: each test builds the Finding the engine would have pro
 The ``engine`` tests at the end use real Stockfish.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import chess
@@ -15,6 +16,7 @@ from blunderbook.core.hints import (
     Hints,
     hung_a_piece,
     material_balance,
+    missed_my_tactic,
     missed_their_threat,
     moved_too_fast,
     suggest,
@@ -319,3 +321,48 @@ def test_stockfish_fixture_hints(
         result = analyse_game(game, me, engine, depth=10, thresholds=Thresholds())
     found = {f.ply.label: f for f in result.findings}[label]
     assert expected <= set(suggest(found, game, tc_of(game)).causes)
+
+
+# ---------------------------------------------------------------- Missed my tactic
+
+
+HANGING_QUEEN = """[FEN "4k3/8/8/3q4/8/8/8/3QK3 w - - 0 1"]
+[SetUp "1"]
+
+1. Ke2 *"""
+
+
+UP_A_QUEEN, DOWN_A_QUEEN = Eval(cp=900), Eval(cp=-900)
+
+
+def tactic(
+    best_pv: tuple[str, ...], before: Eval = UP_A_QUEEN, after: Eval = DOWN_A_QUEEN
+) -> Finding:
+    game = only_game(HANGING_QUEEN)
+    return replace(finding(game, 0, after), eval_before=before, best_pv_uci=best_pv)
+
+
+def test_missed_my_tactic_when_the_best_line_wins_material() -> None:
+    assert missed_my_tactic(tactic(("d1d5", "e8e7")), "white")  # 1. Qxd5 was there
+
+
+def test_no_tactic_when_the_best_line_wins_nothing() -> None:
+    assert not missed_my_tactic(tactic(("e1f1", "e8e7")), "white")
+    assert not missed_my_tactic(tactic(()), "white")
+
+
+def test_a_bad_line_stops_where_it_stops_being_legal() -> None:
+    assert not missed_my_tactic(tactic(("e1e3", "d1d5")), "white")  # Ke3 isn't legal
+
+
+def test_missed_my_tactic_when_a_mate_was_missed() -> None:
+    assert missed_my_tactic(tactic((), before=Eval(mate=2), after=Eval(cp=500)), "white")
+    assert not missed_my_tactic(tactic((), before=Eval(mate=2), after=Eval(mate=4)), "white")
+
+
+def test_suggest_lists_it_in_cause_order() -> None:
+    found = tactic(("d1d5",), after=Eval(mate=-3))  # and now they mate
+    assert suggest(found, only_game(HANGING_QUEEN), None).causes == (
+        "Missed their threat",
+        "Missed my tactic",
+    )

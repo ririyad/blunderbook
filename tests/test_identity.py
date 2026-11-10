@@ -183,7 +183,7 @@ def test_same_moves_from_different_positions_dont_collide() -> None:
 def test_every_fixture_game_has_its_own_fingerprint() -> None:
     names = sorted(p.name for p in FIXTURES.glob("*.pgn"))
     prints = [fp(g) for name in names for g in games_in(name)]
-    assert len(prints) == 11
+    assert len(prints) == 12
     assert len(set(prints)) == len(prints)
     assert all(len(p) == 40 for p in prints)
 

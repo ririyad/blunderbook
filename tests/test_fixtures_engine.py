@@ -1,4 +1,4 @@
-"""The nine §12 fixtures through the whole pipeline, with real Stockfish (CLAUDE.md §12).
+"""The §12 fixtures through the whole pipeline, with real Stockfish (CLAUDE.md §12).
 
 Fixed depth and one thread, so results don't depend on the machine. Each test asserts
 which move gets flagged, never centipawn values. Where §12 names the best move, it must be
@@ -89,3 +89,15 @@ def test_multi_game_imports_the_good_games(stockfish: Engine) -> None:
     ]
     assert len(results) == 3
     assert all(r.analysis.evals for r in results)
+
+
+def test_a_missed_mate_is_a_missed_win(stockfish: Engine) -> None:
+    """30. Rd8# was mate; 30. h3 lets Black out with h6, and White stays far ahead, so the
+    swing alone (well under an inaccuracy) wouldn't log it (§7.6)."""
+    result = analyse("missed_mate.pgn", stockfish)
+    (missed,) = result.blunders
+    assert missed.finding.ply.label == "30. h3"
+    assert missed.finding.judgment == "missed"
+    assert missed.finding.swing < Thresholds().inaccuracy
+    assert "d1d8" in missed.finding.accept_uci  # Rd8#
+    assert "Missed my tactic" in missed.hints.causes

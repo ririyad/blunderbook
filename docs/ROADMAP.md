@@ -22,9 +22,12 @@ _Last updated: 2026-11-09_
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | In progress (2/4) | Extension: a collection of anyone's games, analysed |
+| M13 Missed wins | In progress (1/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 
-**Next up:** 12.3, the Collection's tab: its routes, and a page for each collection, game
-(with an eval graph) and player, with 12.2's filters. Still
+**Next up:** 13.2, missed wins in storage, the API, the CLI reports and the print page
+(the games list counts them, "Logged 30. h3 as a missed win", the AI prompt's wording). Then
+13.3 on the page, then back to 12.3, the Collection's tab: its routes, and a page for each
+collection, game (with an eval graph) and player, with 12.2's filters. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -39,7 +42,7 @@ it and the backups. `blunderbook serve` opens the web page on this computer: bro
 entries, step through the game, confirm causes and write your notes. Re-test shows each due
 position facing your side: tap a piece and a square, take a hint or give up, and see the
 answer, your lesson and the next date. Patterns shows your causes, time controls and re-test
-history. All nine §12 fixtures flag their expected blunder under `uv run pytest -m engine`.
+history. All ten §12 fixtures flag their expected move under `uv run pytest -m engine`.
 The Import tab imports a pasted or dropped PGN, or one FEN position, on the page.
 The Games tab lists every game you imported, by import or by date, and steps through any of them.
 `blunderbook sync` downloads your new Lichess and Chess.com games and imports them (tested
@@ -943,6 +946,34 @@ that steps through the whole game with your blunders marked. No delete in this m
 - [ ] **12.3** API, collection / game / player views with filters and an eval graph.
 - [ ] **12.4** Import on the page, and links to your Log.
 
+### M13 Missed wins
+
+Asked for on 2026-11-10: track the attacks you missed, not only your blunders. Done before
+12.3. See Decided.
+
+- [x] **13.1** Core: the missed-win rule, its judgment, and the "Missed my tactic" hint.
+      _Done:_
+      - **The rule** (`detect.missed_win`): not Stockfish's move, and either a forced mate
+        lost, or at least `missed_win_cp` (300) ahead with the eval dropping by 300 or more,
+        evals capped at ±1000. `analyse_game` flags these as well as blunders; their judgment
+        is `blunder` at or over the blunder line, else `missed`. Pass 2 runs for them, and the
+        progress total counts them.
+      - **The hint** (`hints.missed_my_tactic`): a lost mate, or Stockfish's best line (pass
+        1's, now kept on the `Finding` as `best_pv_uci`) played out 6 plies leaves you 3 or
+        more material up.
+      - **The setting:** `[thresholds] missed_win_cp = 300`, a whole number, 0 turns it off.
+      - **Marks:** `missed` has none (`""`) everywhere a mark is looked up (importer, print,
+        the AI prompt, `format.js`), so nothing breaks before 13.2 and 13.3 give it its words.
+      - **Tests:** the rule (mates, the cap, losing positions aren't misses, off), the
+        engine's judgment and pass 2 with a scripted engine, the hint, the setting, and a new
+        fixture, `missed_mate.pgn`: 30. h3 misses Rd8# and stays winning (swing about 0.04),
+        flagged `missed` with Rd8 accepted, at depth 12 with one thread in every run tried.
+- [ ] **13.2** Storage, API, CLI and print: the games list counts missed wins, the FEN and
+      import reports name them, the print page labels them, and the AI prompt says "a missed
+      win" (`PROMPT_VERSION` bumped).
+- [ ] **13.3** The page: a "Missed win" pill (amber) in the Log, Games ("1 missed"), Re-test,
+      Patterns and Import.
+
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
 digest), Anki / Lichess-study export, mobile PWA.
@@ -1210,3 +1241,16 @@ None open.
     position, so a game from a FEN at move 40 has no opening.
   - **Players** are matched by name, ignoring case, so "Anderssen, A." and
     "Adolf Anderssen" are two players. Merging names waits until it's needed.
+- **2026-11-10: Missed wins (M13).**
+  - **What counts:** a win you didn't take: a forced mate you had and lost, or a drop of
+    `missed_win_cp` (300 cp) or more while you were at least that far ahead, with evals capped
+    at ±1000 so +15 → +11 isn't one. Stockfish's own move never is. Requiring you to be ahead
+    keeps a losing drop (+0.4 → −4) a blunder or mistake, not a "missed win".
+  - **Why a separate rule:** winning chances flatten out near a win, so missing a mate at +8
+    and staying at +5 is only an inaccuracy by the swing, and imports never logged it.
+  - **How it's shown:** a word, "Missed win", not a symbol. Over the blunder line it stays a
+    blunder (`??`).
+  - **Suggested cause:** "Missed my tactic" (a lost mate, or Stockfish's line wins 3 or more
+    material). Only a suggestion, like the others.
+  - **Not in it:** games imported before aren't re-analysed (no re-analyse command), the
+    Collection's stats, and their threats you missed beyond today's hints.

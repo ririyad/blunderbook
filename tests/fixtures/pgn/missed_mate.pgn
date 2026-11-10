@@ -1,0 +1,10 @@
+[Event "Club game"]
+[Site "Dhaka Chess Club"]
+[Date "2026.11.08"]
+[White "Rashed"]
+[Black "Opponent"]
+[Result "*"]
+[SetUp "1"]
+[FEN "6k1/5ppp/8/8/8/2N1B3/r4PPP/3R2K1 w - - 0 30"]
+
+30. h3 h6 *

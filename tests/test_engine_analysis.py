@@ -184,6 +184,74 @@ def test_score_positions_keeps_the_game_key_it_is_given() -> None:
     assert key not in keys[n:] and len(set(keys[n:])) == 1
 
 
+# ---------------------------------------------------------------- missed wins (§7.6)
+
+
+def missed_script(before: Eval, after: Eval, best: str = "e2e3") -> tuple[ParsedGame, Scripted]:
+    """The QGD game with 5. cxd5 (ply 8) scored as given, and 6. Nxd5?? as before."""
+    game, script = qgd_script()
+    cxd5 = game.plies[8]
+    script.pass1[cxd5.fen_before] = Line(before, mv(best, "e6d5"))
+    script.pass1[cxd5.fen_after] = Line(after, mv("e6d5"))
+    return game, script
+
+
+def test_a_missed_mate_is_flagged_while_you_stay_winning() -> None:
+    game, script = missed_script(Eval(mate=2), Eval(cp=500))
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    by_ply = {f.ply.index: f for f in result.findings}
+    assert sorted(by_ply) == [8, 10]
+    missed = by_ply[8]
+    assert missed.judgment == "missed"
+    assert missed.swing < TH.blunder  # under the blunder line: the swing alone misses it
+    assert (missed.best_uci, missed.best_pv_uci) == ("e2e3", ("e2e3", "e6d5"))
+    assert by_ply[10].judgment == "blunder"  # 6. Nxd5?? is unchanged
+
+
+def test_a_missed_queen_is_flagged() -> None:
+    game, script = missed_script(Eval(cp=900), Eval(cp=500))
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    assert [(f.ply.index, f.judgment) for f in result.findings] == [(8, "missed"), (10, "blunder")]
+
+
+def test_a_missed_win_that_costs_the_advantage_stays_a_blunder() -> None:
+    game, script = missed_script(Eval(cp=900), Eval(cp=100))
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    assert [(f.ply.index, f.judgment) for f in result.findings] == [(8, "blunder"), (10, "blunder")]
+
+
+def test_the_engines_own_move_is_never_a_missed_win() -> None:
+    game, script = missed_script(Eval(mate=2), Eval(cp=500), best="c4d5")  # 5. cxd5 itself
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    assert [f.ply.index for f in result.findings] == [10]
+
+
+def test_missed_wins_turned_off() -> None:
+    game, script = missed_script(Eval(mate=2), Eval(cp=500))
+    off = Thresholds(missed_win_cp=0)
+    assert [
+        f.ply.index for f in analyse_game(game, "white", script, depth=12, thresholds=off).findings
+    ] == [10]
+
+
+def test_still_winning_by_a_lot_is_no_miss() -> None:
+    game, script = missed_script(Eval(cp=1500), Eval(cp=1100))  # both over the +10 cap
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    assert [f.ply.index for f in result.findings] == [10]
+
+
+def test_progress_counts_missed_wins_in_pass_two() -> None:
+    game, script = missed_script(Eval(mate=2), Eval(cp=500))
+    seen: list[tuple[int, int]] = []
+    analyse_game(
+        game, "white", script, depth=12, thresholds=TH, progress=lambda d, t: seen.append((d, t))
+    )
+    positions = len(game.plies) + 1
+    assert seen[positions:] == [(positions + 1, positions + 2), (positions + 2, positions + 2)]
+    pass2 = [c[0] for c in script.calls if c[2] > 1]
+    assert pass2 == [game.plies[8].fen_before, game.plies[10].fen_before]
+
+
 # ---------------------------------------------------------------- finished positions
 
 

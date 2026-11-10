@@ -16,6 +16,7 @@ from blunderbook.core.models import Color, Eval, Judgment, Thresholds
 
 WIN_K: Final = 0.00368208  # Lichess winning-chances constant
 MATE_CP: Final = 10_000  # mates count as this many centipawns, for the maths only
+MISSED_WIN_CAP: Final = 1_000  # evals are capped at +-10 pawns when looking for missed wins
 BEST_LINE_PLIES: Final = 6
 REFUTATION_PLIES: Final = 5
 
@@ -78,6 +79,31 @@ def judgment(swing: float, thresholds: Thresholds) -> Judgment | None:
     if swing >= thresholds.inaccuracy:
         return "inaccuracy"
     return None
+
+
+def mover_mates(score: Eval, mover: Color) -> bool:
+    """``score`` (White POV) is a forced mate for ``mover``: mate in N, N > 0, their way."""
+    if score.mate is None or score.mate == 0:
+        return False
+    return score.mate > 0 if mover == "white" else score.mate < 0
+
+
+def missed_win(before: Eval, after: Eval, mover: Color, thresholds: Thresholds) -> bool:
+    """A missed win (CLAUDE.md §7.6): the mover had a forced mate before the move and not
+    after it, or they were ``missed_win_cp`` or more ahead and their eval dropped by that
+    much again, both capped at +-1000 cp (a mate counts as 1000). ``missed_win_cp = 0``
+    turns missed wins off. Whether the move was the engine's own is for the caller to
+    check."""
+    if thresholds.missed_win_cp <= 0:
+        return False
+    if mover_mates(before, mover) and not mover_mates(after, mover):
+        return True
+    sign = _sign(mover)
+    cap = MISSED_WIN_CAP
+    was = max(-cap, min(cap, sign * maths_cp(before, mover)))
+    now = max(-cap, min(cap, sign * maths_cp(after, _other(mover))))
+    line = thresholds.missed_win_cp
+    return was >= line and was - now >= line
 
 
 def is_flagged(

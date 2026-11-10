@@ -12,7 +12,7 @@ from typing import Final, Literal
 Color = Literal["white", "black"]
 Source = Literal["lichess", "chesscom", "pgn", "otb", "fen"]
 Speed = Literal["bullet", "blitz", "rapid", "classical"]
-Judgment = Literal["blunder", "mistake", "inaccuracy"]
+Judgment = Literal["blunder", "mistake", "inaccuracy", "missed"]  # "missed": a missed win
 Status = Literal["new", "solved", "missed"]
 AnalysisStatus = Literal["pending", "running", "done", "error"]
 ImportKind = Literal["file", "paste", "sync"]
@@ -88,12 +88,14 @@ def _as_int(value: object) -> int:
 
 @dataclass(frozen=True, slots=True)
 class Thresholds:
-    """Swing thresholds (0..1) and the re-test margin, from ``[thresholds]`` in config.toml."""
+    """Swing thresholds (0..1), the missed-win line and the re-test margin, from
+    ``[thresholds]`` in config.toml."""
 
     inaccuracy: float = 0.05
     mistake: float = 0.10
-    blunder: float = 0.15  # only >= blunder is logged from imports
+    blunder: float = 0.15  # only >= blunder (and missed wins) are logged from imports
     accept_margin_cp: int = 60  # re-tests accept moves within this of the best
+    missed_win_cp: int = 300  # an eval drop this big is a missed win; 0 turns them off
 
 
 # ---------------------------------------------------------------- parsed PGN (core/pgn.py)
@@ -195,6 +197,7 @@ class Finding:
     refutation_san: str | None  # "6... Nxd5 7. Bxd8 Bb4+"; None if the engine gave no line
     refutation_uci: tuple[str, ...]  # the engine line after my move, for suggested causes
     accept_uci: tuple[str, ...]  # moves a re-test accepts, best first
+    best_pv_uci: tuple[str, ...] = ()  # the engine line before my move, for suggested causes
 
 
 @dataclass(frozen=True, slots=True)

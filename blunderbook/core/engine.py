@@ -306,12 +306,13 @@ def analyse_game(
     progress: Progress | None = None,
     flag_at: Judgment = "blunder",
 ) -> GameAnalysis:
-    """Find my blunders in ``game``.
+    """Find my blunders and missed wins in ``game``.
 
     Pass 1 scores every position once (positions 0..N, finished positions without the
-    engine). My moves whose swing reaches the ``flag_at`` line (the blunder line for
-    imports), and that aren't the engine's best move, are flagged. Pass 2 asks for the top
-    3 moves in each flagged position, to know which re-test answers to accept.
+    engine). My moves that aren't the engine's best move are flagged when their swing
+    reaches the ``flag_at`` line (the blunder line for imports), or when they're a missed
+    win (``detect.missed_win``). Pass 2 asks for the top 3 moves in each flagged position,
+    to know which re-test answers to accept.
 
     ``progress(done, total)`` is called after each position. ``total`` starts as N + 1 and
     grows by the number of flagged moves once pass 1 is over.
@@ -321,23 +322,30 @@ def analyse_game(
     total = n + 1
     pass1 = score_positions(game, analyser, depth=depth, progress=progress, key=key)
 
-    flagged: list[tuple[Ply, float]] = []
+    flagged: list[tuple[Ply, float, Judgment]] = []
     for ply in game.plies:
         if ply.color != me:
             continue
         before, after = pass1[ply.index], pass1[ply.index + 1]
         swing = detect.swing(before.score, after.score, me)
         best = before.move
-        if detect.is_flagged(swing, ply.uci, best.uci() if best else None, thresholds, flag_at):
-            flagged.append((ply, swing))
+        best_uci = best.uci() if best else None
+        missed = (
+            best_uci is not None
+            and ply.uci != best_uci
+            and detect.missed_win(before.score, after.score, me, thresholds)
+        )
+        judgment = flagged_judgment(swing, missed, thresholds)
+        if missed or detect.is_flagged(swing, ply.uci, best_uci, thresholds, flag_at):
+            assert judgment is not None  # a flagged move is at least an inaccuracy
+            flagged.append((ply, swing, judgment))
 
     total += len(flagged)
     findings: list[Finding] = []
-    for k, (ply, swing) in enumerate(flagged, start=1):
+    for k, (ply, swing, judgment) in enumerate(flagged, start=1):
         multi = analyser.lines(_board_at(game, ply.index), depth, MULTIPV, game=key)
-        findings.append(
-            _finding(ply, swing, pass1[ply.index], pass1[ply.index + 1], multi, me, thresholds)
-        )
+        before, after = pass1[ply.index], pass1[ply.index + 1]
+        findings.append(_finding(ply, swing, judgment, before, after, multi, me, thresholds))
         if progress is not None:
             progress(n + 1 + k, total)
 
@@ -381,6 +389,16 @@ def score_positions(
     return tuple(lines)
 
 
+def flagged_judgment(swing: float, missed: bool, thresholds: Thresholds) -> Judgment | None:
+    """A flagged move's judgment: a blunder when the swing reaches the blunder line, else a
+    missed win when it is one, else the swing's own (None under the inaccuracy line)."""
+    if swing >= thresholds.blunder:
+        return "blunder"
+    if missed:
+        return "missed"
+    return detect.judgment(swing, thresholds)
+
+
 def _evaluate(
     analyser: Analyser, board: chess.Board, depth: int, key: object, game: ParsedGame, i: int
 ) -> Line:
@@ -405,6 +423,7 @@ def _board_at(game: ParsedGame, index: int) -> chess.Board:
 def _finding(
     ply: Ply,
     swing: float,
+    judgment: Judgment,
     before: Line,
     after: Line,
     multi: list[Line],
@@ -412,8 +431,7 @@ def _finding(
     thresholds: Thresholds,
 ) -> Finding:
     best = before.move
-    judgment = detect.judgment(swing, thresholds)
-    assert best is not None and judgment is not None  # both hold for a flagged move
+    assert best is not None  # a flagged move has an engine move to compare
     candidates = [(move.uci(), line.score) for line in multi if (move := line.move) is not None]
     return Finding(
         ply=ply,
@@ -429,4 +447,5 @@ def _finding(
         accept_uci=detect.accepted_moves(
             candidates, me, best.uci(), thresholds.accept_margin_cp, played_uci=ply.uci
         ),
+        best_pv_uci=tuple(move.uci() for move in before.pv),
     )

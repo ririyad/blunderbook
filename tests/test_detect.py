@@ -13,6 +13,8 @@ from blunderbook.core.detect import (
     judgment,
     line_san,
     maths_cp,
+    missed_win,
+    mover_mates,
     refutation_san,
     swing,
     winning_chances,
@@ -303,3 +305,51 @@ def test_empty_lines() -> None:
 def test_line_accepts_any_iterable() -> None:
     pv = iter(moves("e2e4", "e7e5", "g1f3"))
     assert line_san(chess.STARTING_FEN, pv, 2) == "1. e4 e5"
+
+
+# ---------------------------------------------------------------- missed wins (§7.6)
+
+TH = Thresholds()
+
+
+@pytest.mark.parametrize(
+    ("score", "mover", "mates"),
+    [
+        (Eval(mate=2), "white", True),
+        (Eval(mate=-2), "black", True),
+        (Eval(mate=2), "black", False),
+        (Eval(mate=0), "white", False),  # already over
+        (Eval(cp=900), "white", False),
+    ],
+)
+def test_mover_mates(score: Eval, mover: Color, mates: bool) -> None:
+    assert mover_mates(score, mover) is mates
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "mover", "missed"),
+    [
+        (Eval(mate=2), Eval(cp=500), "white", True),  # a mate in 2 gone, still +5
+        (Eval(mate=-3), Eval(cp=-800), "black", True),  # the same for Black
+        (Eval(mate=3), Eval(mate=5), "white", False),  # a longer mate is still a mate
+        (Eval(cp=900), Eval(cp=500), "white", True),  # +9 to +5: a queen not taken
+        (Eval(cp=-900), Eval(cp=-500), "black", True),
+        (Eval(cp=900), Eval(cp=650), "white", False),  # under 300
+        (Eval(cp=1500), Eval(cp=1100), "white", False),  # both over the +10 cap
+        (Eval(cp=250), Eval(cp=-100), "white", False),  # wasn't 300 ahead: a blunder, not a miss
+        (Eval(cp=500), Eval(cp=900), "white", False),  # it got better
+    ],
+)
+def test_missed_win(before: Eval, after: Eval, mover: Color, missed: bool) -> None:
+    assert missed_win(before, after, mover, TH) is missed
+
+
+def test_missed_wins_can_be_turned_off() -> None:
+    off = Thresholds(missed_win_cp=0)
+    assert not missed_win(Eval(mate=2), Eval(cp=500), "white", off)
+    assert not missed_win(Eval(cp=900), Eval(cp=100), "white", off)
+
+
+def test_the_missed_win_line_is_yours() -> None:
+    assert missed_win(Eval(cp=600), Eval(cp=400), "white", Thresholds(missed_win_cp=200))
+    assert not missed_win(Eval(cp=600), Eval(cp=400), "white", TH)

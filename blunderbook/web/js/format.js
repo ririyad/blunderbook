@@ -5,7 +5,7 @@ export const SOURCE_TAG = { lichess: "Lichess", chesscom: "Chess.com", pgn: "PGN
 export const SOURCE_NAME = { lichess: "Lichess", chesscom: "Chess.com", pgn: "PGN file", otb: "Over the board", fen: "FEN entry" };
 
 /** The chess marks for a judgment. */
-export const MARK = { blunder: "??", mistake: "?", inaccuracy: "?!" };
+export const MARK = { blunder: "??", mistake: "?", inaccuracy: "?!", missed: "" };
 
 /** "6. " for White, "5... " for Black. */
 export const moveLabel = (moveNo, color) => moveNo + (color === "white" ? ". " : "... ");

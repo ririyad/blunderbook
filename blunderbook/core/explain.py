@@ -20,7 +20,12 @@ from blunderbook.core.models import Color, Entry, Eval, Judgment, TimeControl
 
 PROMPT_VERSION: Final = 1  # stored with each explanation; bump when the prompt changes
 
-MARK: Final[dict[Judgment, str]] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
+MARK: Final[dict[Judgment, str]] = {
+    "blunder": "??",
+    "mistake": "?",
+    "inaccuracy": "?!",
+    "missed": "",
+}
 PIECE_NAMES: Final = {
     chess.PAWN: "pawn",
     chess.KNIGHT: "knight",

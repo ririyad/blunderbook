@@ -214,7 +214,7 @@ CREATE TABLE blunders (
   eval_before     TEXT NOT NULL,              -- JSON {"cp":36} | {"mate":-2}, White POV
   eval_after      TEXT NOT NULL,
   swing           REAL NOT NULL,
-  judgment        TEXT NOT NULL,              -- blunder|mistake|inaccuracy (FEN entries may log any)
+  judgment        TEXT NOT NULL,              -- blunder|missed|mistake|inaccuracy (FEN entries may log any)
   clock_left_s    REAL, time_spent_s REAL,
   auto_causes     TEXT NOT NULL DEFAULT '[]', -- JSON array, suggestions only
   causes          TEXT NOT NULL DEFAULT '[]', -- JSON array, confirmed by the user
@@ -310,6 +310,7 @@ inaccuracy = 0.05
 mistake = 0.10
 blunder = 0.15                        # only >= blunder is logged from imports
 accept_margin_cp = 60                 # re-test accepts moves within this of best
+missed_win_cp = 300                   # a missed win's eval drop (§7.6); 0 = off
 
 [lichess]
 username = ""
@@ -469,6 +470,15 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   `swing = (w(sign*cp(before_i)) - w(sign*cp(after_i))) / 2`, with `sign = +1` for White,
   `−1` for Black, and never below 0. Flag when `swing >= thresholds.blunder` **and** the
   played move ≠ the engine's best move.
+- **Missed wins** are flagged too, even under the blunder line: the played move ≠ the engine's
+  best move, and either
+  - I had a forced mate before the move and not after it; or
+  - I was `>= missed_win_cp` ahead and my eval dropped by `>= missed_win_cp`, both from my
+    side with evals capped at ±1000 cp (a mate counts as 1000).
+
+  Its judgment is `blunder` when the swing reaches the blunder line, otherwise `missed`
+  (shown as "Missed win", no mark). `missed_win_cp = 0` turns them off. Games imported before
+  this rule aren't re-analysed.
 - "Best was" (`best_uci`, `best_line_san`) comes from pass 1: the move that triggered the flag.
 - **Pass 2** (flagged positions only): MultiPV 3 at the same depth. It only decides
   `accept_uci`: moves whose mover-POV cp is within `accept_margin_cp` of the top line
@@ -478,8 +488,9 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   (`"6. e3 Be7 7. Bd3"`, Black start `"5... Nxe5 6. Be2"`).
   `refutation_san`: first 5 plies of the PV from the position after my move. Both stop at an
   illegal PV move.
-- Judgment labels: `>= 0.15` blunder, `>= 0.10` mistake, `>= 0.05` inaccuracy.
-  config.toml must have `inaccuracy <= mistake <= blunder`.
+- Judgment labels: `>= 0.15` blunder, `>= 0.10` mistake, `>= 0.05` inaccuracy, and `missed`
+  for a missed win under the blunder line. config.toml must have
+  `inaccuracy <= mistake <= blunder`, and `missed_win_cp` a whole number, 0 or more.
 - Analysis runs during the import. Report progress as positions done / total: the total starts
   at N + 1 and grows by the number of flagged moves when pass 1 ends. The CLI shows it as a
   percentage.
@@ -498,6 +509,9 @@ Suggestions only (dashed "auto" chips in the UI). The user confirms them.
 - **Hung a piece:** not the mate case, and my material balance drops by `>= 3` after playing
   out up to 6 plies of the refutation PV (P=1, N=B=3, R=5, Q=9), compared with the position
   before my move.
+- **Missed my tactic:** I had a forced mate before my move and not after it, or the best PV
+  from the position before my move, played out up to 6 plies, leaves my material balance
+  `>= 3` higher than in that position. It can appear with any other suggestion.
 - No clock data or no `TimeControl` → skip the time rules silently. Clocks without a time
   control still give the clock left. The report says "No clock times in this PGN".
 
@@ -844,6 +858,7 @@ Design language (from the demo and the paper template):
 | `petroff_trap.pgn` | Black | `4... Nf6??` (best `Qe7`) | 1.e4 e5 2.Nf3 Nf6 3.Nxe5 Nxe4 4.Qe2 Nf6 |
 | `otb_club_no_clocks.pgn` | White ("Rashed") | `13. Nc3??` (best `h3`) | Site "Dhaka Chess Club", no clocks → OTB, no time hints |
 | `chesscom_unmatched_name.pgn` | Black ("rashed_blitz", not in names) | `5... Ngf6??` | Caro-Kann, 6.Nd6#; must come back as `needs_side` |
+| `missed_mate.pgn` | White ("Rashed") | `30. h3` missed win (best `Rd8#`) | `[FEN "6k1/5ppp/8/8/8/2N1B3/r4PPP/3R2K1 w - - 0 30"]`; stays winning, swing under the inaccuracy line; hint "Missed my tactic" |
 | `multi_game.pgn` | — | — | Several games, one deliberately broken; report shows it, others import |
 
 - Unit tests (no engine): time-control parsing and speed, clock parsing, time-spent maths
@@ -891,6 +906,8 @@ Design language (from the demo and the paper template):
 10. **Your games:** remember each import, the games API, and a Games tab with a game page.
 11. **Library (extension):** openings, traps and tactics to study and practise.
 12. **Collection (extension):** a collection of anyone's games, analysed.
+13. **Missed wins:** log a mate or a big gain you didn't take, even when you stay winning,
+    and suggest "Missed my tactic" (§7.6, §7.7).
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.

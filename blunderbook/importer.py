@@ -470,7 +470,7 @@ def _progress(
 # ---------------------------------------------------------------- FEN quick entry
 
 FenResult = Literal["logged", "already_logged", "best_move", "not_a_mistake"]
-MARKS: dict[Judgment, str] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
+MARKS: dict[Judgment, str] = {"blunder": "??", "mistake": "?", "inaccuracy": "?!", "missed": ""}
 
 
 @dataclass(frozen=True, slots=True)

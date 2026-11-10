@@ -21,8 +21,13 @@ from blunderbook.core.models import CAUSES, Color, Entry, Eval, Game, TimeContro
 
 WEB: Final = Path(__file__).parent / "web"
 PER_PAGE: Final = 2
-MARKS: Final = {"blunder": "??", "mistake": "?", "inaccuracy": "?!"}
-JUDGMENT: Final = {"blunder": "Blunder", "mistake": "Mistake", "inaccuracy": "Inaccuracy"}
+MARKS: Final = {"blunder": "??", "mistake": "?", "inaccuracy": "?!", "missed": ""}
+JUDGMENT: Final = {
+    "blunder": "Blunder",
+    "mistake": "Mistake",
+    "inaccuracy": "Inaccuracy",
+    "missed": "Missed win",
+}
 SOURCE: Final = {
     "lichess": "Lichess",
     "chesscom": "Chess.com",
