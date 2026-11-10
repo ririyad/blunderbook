@@ -16,9 +16,9 @@ from typing import Final
 import chess
 
 from blunderbook.core import detect, hints, timecontrol
-from blunderbook.core.models import Color, Entry, Eval, Judgment, TimeControl
+from blunderbook.core.models import JUDGMENT_NOUN, Color, Entry, Eval, Judgment, TimeControl
 
-PROMPT_VERSION: Final = 1  # stored with each explanation; bump when the prompt changes
+PROMPT_VERSION: Final = 2  # stored with each explanation; bump when the prompt changes
 
 MARK: Final[dict[Judgment, str]] = {
     "blunder": "??",
@@ -44,6 +44,8 @@ python-chess library, and they are correct.
 - Don't add moves, variations or tactics that aren't listed. Don't work out new lines.
 - Say what the move allowed, using Stockfish's line after it, and what the best move does \
 instead. If the facts don't show why the best move is better, say what they show and stop.
+- If the move is a missed win, the player is still ahead after it: say what the best move \
+would have won, and don't call their move a losing one.
 - Write 3 or 4 plain sentences in the second person ("You played..."). Use the moves in \
 standard notation as given.
 - No markdown, no headings, no lists, no exclamation marks. Don't scold, and don't tell \
@@ -324,7 +326,8 @@ def build_prompt(m: Mistake) -> Prompt:
     """The two messages sent to the model. The user message is the facts, in plain text."""
     f = facts(m)
     lines = [
-        f"You played {f.side}. Your move was {f.move}{MARK[m.judgment]}, a {m.judgment}.",
+        f"You played {f.side}. Your move was {f.move}{MARK[m.judgment]}, "
+        f"{JUDGMENT_NOUN[m.judgment]}.",
         f"Position before your move (FEN): {m.fen_before}",
     ]
     if m.opening:

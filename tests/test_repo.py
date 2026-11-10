@@ -405,7 +405,7 @@ def games_with_imports(conn: sqlite3.Connection) -> dict[str, int]:
         assert saved is not None
         ids[name] = saved.game_id
 
-    add("loss", new_game(), ("blunder", "blunder", "mistake"), week)
+    add("loss", new_game(), ("blunder", "blunder", "mistake", "missed"), week)
     add(
         "win",
         new_game(fingerprint="fp-win", result="1-0", black="Ünal", played_on=date(2026, 10, 7)),
@@ -440,7 +440,7 @@ def test_games_list_newest_first_with_imports_and_counts(conn: sqlite3.Connectio
     # The draw has no date: it sorts by the day it was imported (2026-11-05).
     assert [r.game.id for r in rows] == [ids["draw"], ids["win"], ids["loss"], ids["old"]]
     loss = next(r for r in rows if r.game.id == ids["loss"])
-    assert (loss.blunders, loss.mistakes, loss.inaccuracies) == (2, 1, 0)
+    assert (loss.blunders, loss.mistakes, loss.inaccuracies, loss.missed) == (2, 1, 0, 1)
     assert loss.batch is not None
     assert (loss.batch.label, loss.batch.kind, loss.batch.started_at) == (
         "blitz-week.pgn",
@@ -490,5 +490,5 @@ def test_one_game_row(conn: sqlite3.Connection) -> None:
 def test_entries_of_one_game(conn: sqlite3.Connection) -> None:
     ids = games_with_imports(conn)
     entries = repo.list_entries(conn, game_id=ids["loss"])
-    assert [e.blunder.ply for e in entries] == [10, 12, 14]  # in move order
+    assert [e.blunder.ply for e in entries] == [10, 12, 14, 16]  # in move order
     assert {e.game.id for e in entries} == {ids["loss"]}

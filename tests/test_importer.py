@@ -488,6 +488,19 @@ def test_log_fen_logs_a_mistake(conn: sqlite3.Connection) -> None:
     )
 
 
+def test_log_fen_names_a_missed_win(conn: sqlite3.Connection) -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", played_on=date(2026, 11, 1))
+    engine = Scripted(
+        {
+            BACK_RANK: Line(Eval(mate=2), mv("b3c4")),
+            after(BACK_RANK, "c1c7"): Line(Eval(cp=800), mv("e7c7")),
+        }
+    )
+    outcome = importer.log_fen(conn, queued, engine, depth=8, thresholds=Thresholds())
+    assert outcome.result == "logged"
+    assert outcome.message == f"Logged 32. Rc7 as a missed win: entry #{outcome.entry_id}."
+
+
 def test_log_fen_skips_stockfishs_own_choice(conn: sqlite3.Connection) -> None:
     queued = importer.prepare_fen(BACK_RANK, "c1c7", played_on=date(2026, 11, 1))
     outcome = importer.log_fen(
@@ -538,6 +551,37 @@ def test_summary_line_counts_blunders_and_plurals() -> None:
     assert importer.summary([queued], [saved]) == "1 game read \N{MIDDLE DOT} 1 blunder added"
     two = importer.prepare('[White "A"]\n\n1. e4 *\n\n[White "B"]\n\n1. d4 *', NAMES)
     assert "2 need side" in importer.summary(two, [])
+
+
+def test_summary_line_counts_missed_wins() -> None:
+    (queued,) = importer.prepare(read("qgd_elephant.pgn"), NAMES)
+    assert queued.game is not None
+    nxd5 = queued.game.plies[10]
+
+    def summary(before: Eval, after: Eval, *more: importer.SavedGame) -> str:
+        table = {
+            nxd5.fen_before: Line(before, mv("e2e3")),
+            nxd5.fen_after: Line(after, mv("f6d5")),
+        }
+        result = importer.analyse(queued, Scripted(table), depth=8, thresholds=Thresholds())
+        saved = importer.SavedGame(result, game_id=1, blunder_ids=(7,))
+        return importer.summary([queued], [saved, *more]).split(" \N{MIDDLE DOT} ")[-1]
+
+    assert summary(Eval(cp=1000), Eval(cp=600)) == "1 missed win added"
+    (blunder,) = importer.prepare(read("qgd_elephant.pgn"), NAMES)
+    lost = importer.analyse(
+        blunder,
+        Scripted(
+            {
+                nxd5.fen_before: Line(Eval(cp=36), mv("e2e3")),
+                nxd5.fen_after: Line(Eval(cp=-409), mv("f6d5")),
+            }
+        ),
+        depth=8,
+        thresholds=Thresholds(),
+    )
+    other = importer.SavedGame(lost, game_id=2, blunder_ids=(8,))
+    assert summary(Eval(mate=3), Eval(cp=700), other) == "1 blunder and 1 missed win added"
 
 
 # ---------------------------------------------------------------- imports (Games tab)

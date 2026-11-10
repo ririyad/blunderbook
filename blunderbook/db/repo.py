@@ -210,6 +210,7 @@ _SELECT_GAME_ROW = (
     + ", count(CASE WHEN b.judgment = 'blunder' THEN 1 END) AS n_blunders"
     + ", count(CASE WHEN b.judgment = 'mistake' THEN 1 END) AS n_mistakes"
     + ", count(CASE WHEN b.judgment = 'inaccuracy' THEN 1 END) AS n_inaccuracies"
+    + ", count(CASE WHEN b.judgment = 'missed' THEN 1 END) AS n_missed"
     + " FROM games AS g LEFT JOIN imports AS i ON i.id = g.import_id"
     + " LEFT JOIN blunders AS b ON b.game_id = g.id"
 )
@@ -278,6 +279,7 @@ def _game_row(row: sqlite3.Row) -> GameRow:
         blunders=row["n_blunders"],
         mistakes=row["n_mistakes"],
         inaccuracies=row["n_inaccuracies"],
+        missed=row["n_missed"],
     )
 
 

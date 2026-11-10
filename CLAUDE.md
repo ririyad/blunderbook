@@ -596,7 +596,7 @@ They return **PGN text only**. The importer does everything else.
 | `engine set PATH` | Resolve a program or folder, check it's Stockfish, save it as `stockfish_path`. Saves nothing if the check fails. |
 | `engine clear` | Set `stockfish_path = ""` (look on PATH again). |
 | `import PATH [--side white\|black] [--depth N] [--stockfish PATH]` | Import a PGN file and save each game as soon as it's analysed (creates the DB if it's missing). `--side` applies to games with no name match; otherwise they're listed as needing a side. The report shows each new entry's id (`entry #12`). |
-| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
+| `fen "FEN" --move e2e4 [--opponent X] [--date YYYY-MM-DD] [--stockfish PATH]` | Quick entry for one position; you're the side to move. The move is UCI (`e7e8` promotes to a queen) or SAN. Logs it even below the blunder line, with its judgment (`??` / `?` / `?!`, or "as a missed win"). A move under the inaccuracy line, or Stockfish's own choice, isn't logged: there'd be nothing to re-test. The FEN must include the side to move. Logging the same entry again says "already logged (entry #N)" without running Stockfish. |
 | `sync [lichess\|chesscom\|all]` | Run adapters, then import. |
 | `serve [--port 8732] [--open]` | Start the web app on `127.0.0.1` only. It takes the port first: a busy port is a plain message and nothing is touched (on Windows the port is held exclusively, so two servers can't share it). Then the daily backup check, then the database is opened, created if missing or upgraded after a `-pre-migrate` backup, before the first request. Then each extension that's on is loaded and its database opened the same way; one that can't be used is a warning and is left out. Quiet: no access log. Ctrl+C stops it with exit 0. `--open` opens the page in the browser once the port listens; no browser is a message, not a failure. Imports started on the page run inside it. |
 | `print [--ids 1,2] [--due] --out FILE.html` | Write the A4 print page (2 entries per page). |
@@ -614,7 +614,8 @@ They return **PGN text only**. The importer does everything else.
 | `restore FILE [--yes]` | Replace the DB (or an extension's, by the file's name) with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
 
 Every command prints a short, readable summary, e.g.
-`2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added`.
+`2 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added` (with missed wins:
+`… · 2 blunders and 1 missed win added`; the entry line says `entry #12, missed win`).
 
 Exit codes: `import` exits 1 only when it can't run (the file can't be read, it holds no
 games, the database can't be used, there's no Stockfish while some game is ready, or the

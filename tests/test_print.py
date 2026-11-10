@@ -98,6 +98,14 @@ def test_an_entry_has_the_paper_logs_parts(ids: dict[str, int], db_file: Path) -
     assert "<svg" in entry
 
 
+def test_a_missed_win_has_its_word_and_no_mark(ids: dict[str, int], db_file: Path) -> None:
+    with closing(connection.connect(db_file)) as conn:
+        conn.execute("UPDATE blunders SET judgment = 'missed' WHERE id = ?", (ids["elephant"],))
+    (entry,) = articles(printing.render(entries(db_file, ids["elephant"]), today=TODAY))
+    assert '<h2>6. Nxd5 <span class="serif">Missed win</span></h2>' in entry
+    assert "Nxd5?" not in entry
+
+
 def test_causes_in_the_fixed_order_ticked_and_suggested(ids: dict[str, int], db_file: Path) -> None:
     (unconfirmed,) = articles(printing.render(entries(db_file, ids["scholars"]), today=TODAY))
     shown = re.findall(r'<span class="tick">(.)</span>([^<]+)', unconfirmed)

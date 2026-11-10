@@ -229,6 +229,13 @@ def test_prompt_text() -> None:
     assert user.endswith("The app suggests, unconfirmed: Hung a piece.")
 
 
+def test_prompt_names_a_missed_win() -> None:
+    user = build_prompt(replace(ELEPHANT, judgment="missed")).user
+    assert user.startswith("You played White. Your move was 6. Nxd5, a missed win.\n")
+    assert "If the move is a missed win" in explain.SYSTEM
+    assert explain.PROMPT_VERSION == 2
+
+
 def test_prompt_without_clock_opening_or_lines() -> None:
     m = replace(SCHOLARS, refutation_san=None, best_line_san="")
     user = build_prompt(m).user

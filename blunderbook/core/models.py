@@ -13,6 +13,12 @@ Color = Literal["white", "black"]
 Source = Literal["lichess", "chesscom", "pgn", "otb", "fen"]
 Speed = Literal["bullet", "blitz", "rapid", "classical"]
 Judgment = Literal["blunder", "mistake", "inaccuracy", "missed"]  # "missed": a missed win
+JUDGMENT_NOUN: Final[Mapping[Judgment, str]] = {  # "Logged 30. h3 as a missed win"
+    "blunder": "a blunder",
+    "mistake": "a mistake",
+    "inaccuracy": "an inaccuracy",
+    "missed": "a missed win",
+}
 Status = Literal["new", "solved", "missed"]
 AnalysisStatus = Literal["pending", "running", "done", "error"]
 ImportKind = Literal["file", "paste", "sync"]
@@ -293,6 +299,7 @@ class GameRow:
     blunders: int
     mistakes: int
     inaccuracies: int
+    missed: int  # missed wins
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

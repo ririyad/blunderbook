@@ -115,6 +115,7 @@ class GameSummary(BaseModel):
     blunders: int
     mistakes: int
     inaccuracies: int
+    missed: int  # missed wins
 
 
 class GameEntryOut(BaseModel):

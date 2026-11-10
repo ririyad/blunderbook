@@ -22,11 +22,10 @@ _Last updated: 2026-11-09_
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | In progress (2/4) | Extension: a collection of anyone's games, analysed |
-| M13 Missed wins | In progress (1/3) | Log a mate or a big gain you didn't take, even when you stay winning |
+| M13 Missed wins | In progress (2/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 
-**Next up:** 13.2, missed wins in storage, the API, the CLI reports and the print page
-(the games list counts them, "Logged 30. h3 as a missed win", the AI prompt's wording). Then
-13.3 on the page, then back to 12.3, the Collection's tab: its routes, and a page for each
+**Next up:** 13.3, missed wins on the page: a "Missed win" pill in the Log, Games
+("1 missed"), Re-test, Patterns and Import. Then back to 12.3, the Collection's tab: its routes, and a page for each
 collection, game (with an eval graph) and player, with 12.2's filters. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3). Before relying
@@ -968,9 +967,25 @@ Asked for on 2026-11-10: track the attacks you missed, not only your blunders. D
         engine's judgment and pass 2 with a scripted engine, the hint, the setting, and a new
         fixture, `missed_mate.pgn`: 30. h3 misses Rd8# and stays winning (swing about 0.04),
         flagged `missed` with Rd8 accepted, at depth 12 with one thread in every run tried.
-- [ ] **13.2** Storage, API, CLI and print: the games list counts missed wins, the FEN and
+- [x] **13.2** Storage, API, CLI and print: the games list counts missed wins, the FEN and
       import reports name them, the print page labels them, and the AI prompt says "a missed
       win" (`PROMPT_VERSION` bumped).
+      _Done:_
+      - **No migration:** `judgment` has no CHECK, so `missed` is stored as it is.
+      - **Games list:** `repo.list_games` counts `missed` next to the other judgments, and
+        `/api/games` gives it on each game (`GameSummary.missed`).
+      - **Words:** `models.JUDGMENT_NOUN` ("a blunder" … "a missed win") for the FEN message
+        ("Logged 30. h3 as a missed win: entry #2."), and the AI prompt ("6. Nxd5, a missed
+        win."). The CLI report says `entry #1, missed win`, and the summary counts them apart
+        ("1 blunder and 1 missed win added", or "1 missed win added"). The print page shows
+        "Missed win" with no mark.
+      - **AI prompt:** a new rule tells the model a missed win leaves you ahead, so it says
+        what the best move would have won. `PROMPT_VERSION` is 2.
+      - **Tests:** the repo and API counts, the summary, `log_fen` and `blunderbook fen`, the
+        print page and the prompt.
+      - **Checked by hand** on a scratch home with Stockfish 19 at depth 12, one thread:
+        `import missed_mate.pgn` (entry #1, missed win; "1 missed win added"), `fen` on the
+        same position ("as a missed win"), and `print` ("30. h3 Missed win").
 - [ ] **13.3** The page: a "Missed win" pill (amber) in the Log, Games ("1 missed"), Re-test,
       Patterns and Import.
 

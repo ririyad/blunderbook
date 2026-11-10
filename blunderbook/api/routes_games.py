@@ -92,4 +92,5 @@ def _summary(row: GameRow) -> GameSummary:
         blunders=row.blunders,
         mistakes=row.mistakes,
         inaccuracies=row.inaccuracies,
+        missed=row.missed,
     )

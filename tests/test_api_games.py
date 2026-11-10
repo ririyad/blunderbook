@@ -68,8 +68,8 @@ def test_the_list(client: TestClient, ids: dict[str, int]) -> None:
         "outcome": "lost",
         "my_color": "white",
     }
-    counts = (elephant_row["blunders"], elephant_row["mistakes"], elephant_row["inaccuracies"])
-    assert counts == (1, 0, 0)
+    counts = [elephant_row[k] for k in ("blunders", "mistakes", "inaccuracies", "missed")]
+    assert counts == [1, 0, 0, 0]
     assert elephant_row["batch"] == {
         "id": 1,
         "label": "blitz-week.pgn",
@@ -162,3 +162,14 @@ def test_the_log_detail_still_has_its_game(client: TestClient, ids: dict[str, in
     entry = client.get(f"/api/blunders/{item['id']}").json()
     page = client.get(f"/api/games/{ids['elephant']}").json()
     assert entry["game"] == page["game"]
+
+
+def test_the_list_counts_missed_wins(
+    client: TestClient, ids: dict[str, int], db_file: Path
+) -> None:
+    with closing(connection.connect(db_file)) as conn:
+        conn.execute(
+            "UPDATE blunders SET judgment = 'missed' WHERE game_id = ?", (ids["scholars"],)
+        )
+    (row,) = [g for g in client.get("/api/games").json() if g["id"] == ids["scholars"]]
+    assert (row["blunders"], row["missed"]) == (0, 1)

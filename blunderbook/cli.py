@@ -860,7 +860,9 @@ def _print_entry(found: importer.FoundBlunder, entry_id: int) -> None:
         details.append(f"{_seconds(h.clock_left_s)} left")
     if h.time_spent_s is not None:
         details.append(f"{_seconds(h.time_spent_s)} on the move")
-    details.append(f"entry #{entry_id}")
+    details.append(
+        f"entry #{entry_id}, missed win" if f.judgment == "missed" else f"entry #{entry_id}"
+    )
     typer.echo("      " + " \N{MIDDLE DOT} ".join(details))
     if h.causes:
         typer.echo(f"      Suggested: {', '.join(h.causes)}")
@@ -923,7 +925,8 @@ def fen(
 ) -> None:
     """Log one position and the move you played, for games you have no PGN of.
 
-    You're the side to move. It's logged as a blunder, mistake or inaccuracy, by its cost.
+    You're the side to move. It's logged as a blunder, mistake, inaccuracy or missed win,
+    by its cost.
     """
     cfg = _load_config()
     played_on = _date_option(on)

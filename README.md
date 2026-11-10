@@ -239,6 +239,19 @@ Game 3 · guest_4417 vs rashed_blitz · 2026-11-03 · Chess.com
   shows as "—", and features that need it (such as the time-trouble hint) are skipped.
 - **Standard chess only.** Chess960 and other variants are reported and skipped. One bad game
   never stops the rest of the file.
+- **Missed wins** (a mate or a big gain you didn't take, see
+  [How blunders are judged](#how-blunders-are-judged)) have no mark. The report names them,
+  and the summary counts them apart:
+
+  ```text
+    30. h3  Best was Rd8#: 30. Rd8#
+        Refutation: 30... Ra8 31. Bd2 Ra7 32. Re1 Rd7
+        Swing 0.04 · entry #3, missed win
+        Suggested: Missed my tactic
+
+  1 game read · 1 missed win added
+  ```
+
 - **Depth:** `--depth 20` analyses deeper than `engine_depth` for this import. It's slower.
 
 ### Log a single position
@@ -260,7 +273,8 @@ Logged 32. Rc7?? as a blunder: entry #4.
 ```
 
 You're the side to move. The move can be SAN (`Rc7`) or UCI (`c1c7`), and the date defaults to
-today. A FEN entry is logged even if it's only a mistake (`?`) or an inaccuracy (`?!`). If
+today. A FEN entry is logged even if it's only a mistake (`?`) or an inaccuracy (`?!`), and
+a missed win says so ("Logged 30. h3 as a missed win: entry #5."). If
 your move was the engine's own choice, or lost almost nothing, there's nothing to re-test, so
 it isn't logged.
 

@@ -23,6 +23,7 @@ import chess.pgn
 
 from blunderbook.core import detect, engine, hints, identity, pgn, timecontrol
 from blunderbook.core.models import (
+    JUDGMENT_NOUN,
     Batch,
     Color,
     Finding,
@@ -525,8 +526,7 @@ def log_fen(
     (blunder,) = analysed.blunders
     (entry_id,) = saved.blunder_ids
     judgment = blunder.finding.judgment
-    article = "an" if judgment == "inaccuracy" else "a"
-    message = f"Logged {label}{MARKS[judgment]} as {article} {judgment}: entry #{entry_id}."
+    message = f"Logged {label}{MARKS[judgment]} as {JUDGMENT_NOUN[judgment]}: entry #{entry_id}."
     return FenOutcome("logged", message, entry_id, saved)
 
 
@@ -543,9 +543,12 @@ def _already_logged(queued: QueuedGame, earlier: SavedIds) -> FenOutcome:
 
 
 def summary(queue: Iterable[QueuedGame], saved: Iterable[SavedGame]) -> str:
-    """``"4 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added"``."""
+    """``"4 games read · 1 skipped (duplicate) · 1 needs side · 3 blunders added"``, or
+    ``"... · 2 blunders and 1 missed win added"`` (or ``"1 missed win added"``)."""
     queue = tuple(queue)
-    blunders = sum(len(s.blunder_ids) for s in saved)
+    judgments = [b.finding.judgment for s in saved for b in s.analysed.blunders]
+    missed = judgments.count("missed")
+    blunders = len(judgments) - missed
     statuses = [q.status for q in queue]
     parts = [_count(len(queue), "game") + " read"]
     if n := statuses.count("duplicate"):
@@ -554,7 +557,11 @@ def summary(queue: Iterable[QueuedGame], saved: Iterable[SavedGame]) -> str:
         parts.append(f"{n} {'needs' if n == 1 else 'need'} side")
     if n := statuses.count("error"):
         parts.append(_count(n, "error"))
-    parts.append(f"{_count(blunders, 'blunder')} added")
+    added = _count(blunders, "blunder")
+    if missed:
+        won = _count(missed, "missed win")
+        added = f"{added} and {won}" if blunders else won
+    parts.append(f"{added} added")
     return " \N{MIDDLE DOT} ".join(parts)
 
 

@@ -592,6 +592,21 @@ def test_fen_logs_a_mistake_too(ready: Path, stub: StubEngine) -> None:
     assert "Logged 32. Rc7? as a mistake: entry #1." in result.output
 
 
+def test_fen_names_a_missed_win(ready: Path, stub: StubEngine, db_file: Path) -> None:
+    # Mate in 2 before, still +8 after: under the blunder line, but a missed win.
+    score(stub, BACK_RANK, Eval(mate=2), "b3c4", "g7g6")
+    score(stub, after(BACK_RANK, "c1c7"), Eval(cp=800), "e7c7")
+    result = fen("--move", "c1c7")
+    assert result.exit_code == 0, result.output
+    assert "  32. Rc7  Best was Qc4: 32. Qc4 g6" in result.output
+    assert f"{DOT} entry #1, missed win" in result.output
+    assert "      Suggested: Hung a piece, Missed my tactic" in result.output
+    assert result.output.rstrip().endswith("Logged 32. Rc7 as a missed win: entry #1.")
+    with closing(connection.open_db(db_file)) as conn:
+        (entry,) = repo.list_entries(conn)
+    assert entry.blunder.judgment == "missed"
+
+
 def test_fen_twice_adds_nothing(ready: Path, stub: StubEngine, db_file: Path) -> None:
     back_rank(stub, Eval(mate=-1), "e7e1")
     assert fen("--move", "Rc7", "--date", "2026-11-01").exit_code == 0
