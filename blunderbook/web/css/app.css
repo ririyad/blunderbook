@@ -71,6 +71,7 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .p-due{background:var(--amber-bg);color:var(--amber)}
 .p-solved{background:var(--green-bg);color:var(--green)}
 .p-missed{background:var(--red-bg);color:var(--red)}
+.p-missed-win{background:var(--amber-bg);color:var(--amber)}  /* a missed win: no mark, a word */
 .src{font-size:10.5px;font-weight:700;letter-spacing:.02em;border:1px solid var(--line-strong);border-radius:4px;padding:0 5px;color:var(--muted);line-height:16px;flex:none}
 .src.s-pgn,.src.s-otb{border-color:#c9c2b3;color:#4a4436}
 .src.s-fen{border-color:#b9c7de;color:var(--blue)}
@@ -331,6 +332,8 @@ a.hist:hover{text-decoration:underline}
 .mbtn.bad{color:var(--red)}
 .mbtn[aria-current="true"]{background:var(--ink);color:#fff}
 .mbtn.bad[aria-current="true"]{background:var(--red);color:#fff}
+.mbtn.miss{color:var(--amber)}
+.mbtn.miss[aria-current="true"]{background:var(--amber);color:#fff}
 .mbtn:focus-visible{outline-offset:0}
 .mempty{color:var(--muted);padding:3px 7px}
 

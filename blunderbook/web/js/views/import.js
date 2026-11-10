@@ -34,6 +34,16 @@ let lastStatus = null;
 const $ = (id) => document.getElementById(id);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+/** "2 blunders", "1 missed win", or "1 blunder and 1 missed win". */
+function entriesFound(entries) {
+  const missed = entries.filter((en) => en.judgment === "missed").length;
+  const blunders = entries.length - missed;
+  const parts = [];
+  if (blunders || !missed) parts.push(plural(blunders, "blunder", "blunders"));
+  if (missed) parts.push(plural(missed, "missed win", "missed wins"));
+  return parts.join(" and ");
+}
+
 export async function show(section) {
   if (root !== section) build(section);
   if (jobId) await poll();
@@ -219,7 +229,7 @@ function row(job, g) {
   let found = "";
   if (g.status === "imported") {
     found = g.entries.length
-      ? `${plural(g.entries.length, "blunder", "blunders")} found: `
+      ? `${entriesFound(g.entries)} found: `
         + g.entries.map((en) => `<a href="#log/${en.id}">${esc(en.label)}${MARK[en.judgment]}</a>`).join(", ")
       : "No blunders by you in this game.";
     const open = g.game_id != null ? ` <a href="#games/${g.game_id}">Open the game</a>` : "";

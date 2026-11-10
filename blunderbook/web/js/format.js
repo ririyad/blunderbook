@@ -7,6 +7,17 @@ export const SOURCE_NAME = { lichess: "Lichess", chesscom: "Chess.com", pgn: "PG
 /** The chess marks for a judgment. */
 export const MARK = { blunder: "??", mistake: "?", inaccuracy: "?!", missed: "" };
 
+/** What each judgment is called in a sentence: "your missed win comes next". */
+export const JUDGMENT_WORD = { blunder: "blunder", mistake: "mistake", inaccuracy: "inaccuracy", missed: "missed win" };
+
+/** After a move in text: its mark, or " (missed win)" for a missed win, which has none. */
+export const markText = (judgment) => judgment === "missed" ? " (missed win)" : MARK[judgment];
+
+/** The pill in a list: the mark in red, or "Missed win" in amber. */
+export const markPill = (judgment) => judgment === "missed"
+  ? '<span class="pill p-missed-win">Missed win</span>'
+  : `<span class="pill p-blunder">${MARK[judgment]}</span>`;
+
 /** "6. " for White, "5... " for Black. */
 export const moveLabel = (moveNo, color) => moveNo + (color === "white" ? ". " : "... ");
 

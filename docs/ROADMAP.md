@@ -22,13 +22,12 @@ _Last updated: 2026-11-09_
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | In progress (2/4) | Extension: a collection of anyone's games, analysed |
-| M13 Missed wins | In progress (2/3) | Log a mate or a big gain you didn't take, even when you stay winning |
+| M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 
-**Next up:** 13.3, missed wins on the page: a "Missed win" pill in the Log, Games
-("1 missed"), Re-test, Patterns and Import. Then back to 12.3, the Collection's tab: its routes, and a page for each
+**Next up:** back to 12.3, the Collection's tab: its routes, and a page for each
 collection, game (with an eval graph) and player, with 12.2's filters. Still
 to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
-measured at 390 px in 10.3). Before relying
+measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
 
@@ -57,6 +56,8 @@ The second, Collection (M12), adds anyone's games to collections on the CLI
 (`blunderbook collection import FILE --into NAME`), every position scored once, in
 `collection.db`, and shows their stats (`collection stats`, `collection players`); its tab
 is next.
+Missed wins (M13): a mate or a big gain you didn't take is logged too, even when you stay
+winning, shown as "Missed win" (no mark), with "Missed my tactic" suggested.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -986,8 +987,27 @@ Asked for on 2026-11-10: track the attacks you missed, not only your blunders. D
       - **Checked by hand** on a scratch home with Stockfish 19 at depth 12, one thread:
         `import missed_mate.pgn` (entry #1, missed win; "1 missed win added"), `fen` on the
         same position ("as a missed win"), and `print` ("30. h3 Missed win").
-- [ ] **13.3** The page: a "Missed win" pill (amber) in the Log, Games ("1 missed"), Re-test,
+- [x] **13.3** The page: a "Missed win" pill (amber) in the Log, Games ("1 missed"), Re-test,
       Patterns and Import.
+      _Done:_
+      - **`format.js`:** `JUDGMENT_WORD` ("missed win"), `markText()` (the mark, or
+        " (missed win)") and `markPill()` (the red mark pill, or an amber "Missed win").
+      - **Log:** the list's pill, a "Missed win" pill next to the move in the detail, and
+        "Position before your missed win" on the board.
+      - **Games:** the row's marks plus an amber "1 missed" pill (its label "1 missed win"),
+        the import header ("1 game · 1 missed win"), the entry list's pill, the move in amber
+        in the move list (`mbtn miss`), and "your missed win comes next".
+      - **Re-test and Patterns:** "30. h3 (missed win)" in the result and the history.
+        **Import:** "1 missed win found" (or "1 blunder and 1 missed win found").
+        **AI:** "Explain this missed win".
+      - **CSS:** `p-missed-win` and `mbtn.miss` in amber.
+      - **Tests:** every judgment has a mark and a word in `format.js`, the new classes are
+        styled, and `test_web`'s field check covers the games list's `missed`.
+      - **Checked in Chrome** on a scratch home (Stockfish 19, depth 12): the Log list and
+        detail, the Games list and game page, solving the missed mate in Re-test (Rd8#
+        accepted), the Patterns history, and a pasted import. No console or CSP errors.
+        Not checked at 390 px wide: the browser window couldn't be resized, as in 8.4
+        (`TODO(verify)`).
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly

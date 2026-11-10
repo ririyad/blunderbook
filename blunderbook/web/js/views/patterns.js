@@ -3,7 +3,7 @@
 // history and a one-line "biggest leak". The server does the counting.
 
 import { api } from "../api.js";
-import { MARK, SOURCE_TAG, isDue, moveLabel } from "../format.js";
+import { SOURCE_TAG, isDue, markText, moveLabel } from "../format.js";
 import { esc, showError } from "../ui.js";
 
 // The demo's advice for the most common leaks; anything else gets the general line.
@@ -127,7 +127,7 @@ function history(p) {
   if (!p.history.length) return '<p class="small">No re-tests yet.</p>';
   return p.history.map((r) => `
     <div class="hbar" style="grid-template-columns:1fr auto">
-      <span><a class="hist" href="#log/${r.id}">${moveLabel(r.move_no, r.my_color)}${esc(r.played_san)}${MARK[r.judgment]}</a>
+      <span><a class="hist" href="#log/${r.id}">${moveLabel(r.move_no, r.my_color)}${esc(r.played_san)}${markText(r.judgment)}</a>
         <span class="small">vs ${esc(r.opponent || "Unknown")} · ${plural(r.attempts, "try", "tries")}</span></span>
       ${pill(r)}
     </div>`).join("");

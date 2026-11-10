@@ -6,7 +6,9 @@
 
 import { api } from "../api.js";
 import { renderBoard, uciSquares } from "../board.js";
-import { MARK, SOURCE_NAME, SOURCE_TAG, fmtDate, isDue, localDay, moveLabel, timeControl } from "../format.js";
+import {
+  JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtDate, isDue, localDay, markPill, moveLabel, timeControl,
+} from "../format.js";
 import { esc, showError } from "../ui.js";
 
 const SEARCH_DELAY_MS = 250;
@@ -161,10 +163,12 @@ function renderList() {
 
 function groupHead(grp) {
   const counts = grp.games.reduce((n, g) => n + g.blunders, 0);
+  const missed = grp.games.reduce((n, g) => n + g.missed, 0);
   const parts = [];
   if (grp.kind) parts.push(`imported ${esc(fmtDate(localDay(grp.at)) || "")}`);
   parts.push(plural(grp.games.length, "game", "games"));
-  parts.push(counts ? plural(counts, "blunder", "blunders") : "no blunders");
+  if (counts || !missed) parts.push(counts ? plural(counts, "blunder", "blunders") : "no blunders");
+  if (missed) parts.push(plural(missed, "missed win", "missed wins"));
   return `<div class="ghead"><h3>${esc(grp.label)}</h3><span class="small">${parts.join(" · ")}</span></div>`;
 }
 
@@ -172,13 +176,16 @@ function marks(g) {
   const parts = [["blunders", "blunder"], ["mistakes", "mistake"], ["inaccuracies", "inaccuracy"]]
     .filter(([field]) => g[field])
     .map(([field, judgment]) => `${g[field]}${MARK[judgment]}`);
-  return parts.length
-    ? `<span class="pill p-blunder" aria-label="${esc(entriesLabel(g))}">${parts.join(" ")}</span>`
-    : '<span class="pill p-solved">Clean</span>';
+  if (!parts.length && !g.missed) return '<span class="pill p-solved">Clean</span>';
+  const label = `aria-label="${esc(entriesLabel(g))}"`;
+  const pills = [];
+  if (parts.length) pills.push(`<span class="pill p-blunder">${parts.join(" ")}</span>`);
+  if (g.missed) pills.push(`<span class="pill p-missed-win">${g.missed} missed</span>`);
+  return `<span ${label}>${pills.join(" ")}</span>`;
 }
 
 function entriesLabel(g) {
-  return [["blunders", "blunder", "blunders"], ["mistakes", "mistake", "mistakes"], ["inaccuracies", "inaccuracy", "inaccuracies"]]
+  return [["blunders", "blunder", "blunders"], ["mistakes", "mistake", "mistakes"], ["inaccuracies", "inaccuracy", "inaccuracies"], ["missed", "missed win", "missed wins"]]
     .filter(([field]) => g[field])
     .map(([field, one, many]) => plural(g[field], one, many))
     .join(", ");
@@ -292,7 +299,7 @@ function entriesHtml(entries, g) {
     return `<p class="small">No blunders found${g.engine_depth ? ` at depth ${g.engine_depth}` : ""}.</p>`;
   }
   return '<ul class="gentries">' + entries.map((e) => `<li><a class="gentry" href="#log/${e.id}">
-      <span class="pill p-blunder">${MARK[e.judgment]}</span>
+      ${markPill(e.judgment)}
       <span class="mv">${esc(moveLabel(e.move_no, g.my_color) + e.played_san)}</span>
       ${statusPill(e.status, e.due_on)}
       <span class="small">Open in the Log</span>
@@ -319,7 +326,8 @@ function movesHtml(g) {
     if (!m) return '<span class="mempty">…</span>';
     const e = marked.get(m.ply);
     const text = esc(m.san) + (e ? MARK[e.judgment] : "");
-    return `<button type="button" class="mbtn${e ? " bad" : ""}" data-pos="${m.ply + 1}" aria-label="${esc(moveLabel(m.move_no, m.color) + m.san)}${e ? ", your " + e.judgment : ""}">${text}</button>`;
+    const kind = e ? (e.judgment === "missed" ? " miss" : " bad") : "";
+    return `<button type="button" class="mbtn${kind}" data-pos="${m.ply + 1}" aria-label="${esc(moveLabel(m.move_no, m.color) + m.san)}${e ? ", your " + JUDGMENT_WORD[e.judgment] : ""}">${text}</button>`;
   };
   return `<ol class="mlist" aria-labelledby="gMovesTitle">${rows.map((r) => `<li><span class="no">${r.no}.</span>${cell(r.white)}${cell(r.black)}</li>`).join("")}</ol>`;
 }
@@ -343,7 +351,7 @@ function drawGame() {
     label = `After ${moveLabel(m.move_no, m.color)}${m.san}${e ? MARK[e.judgment] : ""}`;
   }
   const upcoming = marked.get(ply);
-  if (upcoming) label += ` · your ${upcoming.judgment} comes next`;
+  if (upcoming) label += ` · your ${JUDGMENT_WORD[upcoming.judgment]} comes next`;
   const fen = ply === 0 ? g.start_fen : g.moves[ply - 1].fen;
   renderBoard($("gBoard"), fen, g.my_color, { hl, arrows, label });
   $("gLabel").textContent = label;

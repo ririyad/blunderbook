@@ -9,8 +9,8 @@ import { renderBoard, uciSquares } from "../board.js";
 import { CAUSES } from "../causes.js";
 import { showExplanation } from "../explain.js";
 import {
-  MARK, SOURCE_NAME, SOURCE_TAG, fmtClock, fmtDate, fmtEval, fmtSpent, isDue, moveLabel,
-  outcome, percent, timeControl,
+  JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtClock, fmtDate, fmtEval, fmtSpent, isDue, moveLabel,
+  markPill, outcome, percent, timeControl,
 } from "../format.js";
 import { entriesChanged, esc, showError, toast } from "../ui.js";
 
@@ -143,7 +143,7 @@ function renderList() {
     if (item.played_on) when.push(esc(fmtDate(item.played_on)));
     const li = document.createElement("li");
     li.innerHTML = `<button class="item" type="button" aria-current="${item.id === currentId}">`
-      + `<span class="pill p-blunder">${MARK[item.judgment]}</span>`
+      + markPill(item.judgment)
       + `<span class="mv">${esc(moveLabel(item.move_no, item.my_color) + item.played_san)}</span>`
       + statusPill(item.status, item.due_on)
       + `<span class="sub">${sourceTag(item.source)} <span class="opp">vs ${esc(item.opponent || "Unknown")}</span></span>`
@@ -235,7 +235,7 @@ function renderDetail() {
     </div>
     <div>
       <div class="head"><div>
-        <h2>${esc(moveLabel(e.move_no, g.my_color))}<span class="bad">${esc(e.played_san + mark)}</span></h2>
+        <h2>${esc(moveLabel(e.move_no, g.my_color))}<span class="bad">${esc(e.played_san + mark)}</span>${e.judgment === "missed" ? " " + markPill("missed") : ""}</h2>
         <div class="meta">${meta.join(" · ")}</div>
       </div>${g.source !== "fen" ? `<a class="btn ghost" href="#games/${g.id}">See the whole game</a>` : ""}</div>
       <div class="moves">
@@ -307,7 +307,7 @@ function drawBoard() {
 }
 
 function positionLabel(e, pos) {
-  if (ply === pos.blunder) return `Position before your ${e.judgment}`;
+  if (ply === pos.blunder) return `Position before your ${JUDGMENT_WORD[e.judgment]}`;
   if (ply === 0) return "Start position";
   const m = e.game.moves[ply - 1];
   const text = moveLabel(m.move_no, m.color) + m.san;

@@ -331,7 +331,7 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   import they came from (the file's name, "Pasted PGN", "Lichess sync"), newest first; **By
   date** shows one list instead. Filter by source, result (from your side), time control, with
   or without blunders, or search the opponent and opening. Each row shows the result, your
-  side, the opponent, your marks (`2?? 1?`) or "Clean", the time control, opening and date.
+  side, the opponent, your marks (`2?? 1?`, and "1 missed" for missed wins) or "Clean", the time control, opening and date.
   Games imported before this tab existed are grouped by the day they were imported.
   Opening a game shows:
   - the board from your side, with step controls (and ← → Home End) through the whole game,

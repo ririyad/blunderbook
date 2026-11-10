@@ -39,7 +39,7 @@ from blunderbook.api.schemas import (
     SourceCountOut,
     SpeedCountOut,
 )
-from blunderbook.core.models import CAUSES
+from blunderbook.core.models import CAUSES, Judgment
 
 URL = "http://127.0.0.1"
 VIEWS = {
@@ -259,6 +259,19 @@ def test_cause_list_matches_the_core() -> None:
     text = (WEB / "js" / "causes.js").read_text("utf-8")
     body = text[text.index("[") : text.index("]")]
     assert tuple(re.findall(r'"([^"]+)"', body)) == CAUSES
+
+
+@pytest.mark.parametrize("name", ["MARK", "JUDGMENT_WORD"])
+def test_every_judgment_has_its_mark_and_word(name: str) -> None:
+    """A judgment the page has no mark or word for would show as "undefined"."""
+    text = (WEB / "js" / "format.js").read_text("utf-8")
+    line = next(x for x in text.splitlines() if x.startswith(f"export const {name} = {{"))
+    assert set(re.findall(r"(\w+):", line)) == set(get_args(Judgment))
+
+
+def test_the_missed_win_classes_are_styled() -> None:
+    css = (WEB / "css" / "app.css").read_text("utf-8")
+    assert ".p-missed-win{" in css and ".mbtn.miss{" in css
 
 
 def fields_read(pattern: str, path: Path = LOG_JS) -> set[str]:

@@ -6,7 +6,7 @@
 // nothing at all.
 
 import { api } from "./api.js";
-import { fmtDate, localDay } from "./format.js";
+import { JUDGMENT_WORD, fmtDate, localDay } from "./format.js";
 import { esc } from "./ui.js";
 
 /** Fill `box` for entry `id`. `saved` is the entry's explanation or null; `judgment` names
@@ -27,7 +27,7 @@ function draw(box, state) {
     box.replaceChildren();
     return;
   }
-  const label = saved ? "Explain again" : `Explain this ${state.judgment || "move"}`;
+  const label = saved ? "Explain again" : `Explain this ${JUDGMENT_WORD[state.judgment] || "move"}`;
   const actions = ai.enabled
     ? `<div class="ai-row">
          <button class="btn ghost ai-ask" type="button">${esc(label)}</button>

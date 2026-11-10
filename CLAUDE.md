@@ -775,7 +775,9 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   Import tab, or with `blunderbook import FILE.pgn`".
   - The step controls go through the whole game. The panel opens on the position before your
     move.
-  - Each entry shows its own mark: `??`, `?` or `?!`.
+  - Each entry shows its own mark: `??`, `?` or `?!`. A missed win has none: it gets an amber
+    "Missed win" pill (`p-missed-win`, not the re-test's `p-missed`), and "(missed win)" after
+    the move in a sentence (Re-test result, Patterns history).
   - Confirming "Other" shows a text box for `other_cause`.
   - "Delete this entry" asks first. The game stays, so the entry won't come back on import.
   - Saving: text saves after a 400 ms pause in typing, causes at once, one save at a time in
@@ -788,7 +790,7 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   opening) and **By import** (the default: a header per import, "imported 7 Nov · N games ·
   N blunders", newest first; older games with no import under "Imported {day}") or **By
   date** (one list). Each row: W / L / D, your side, "vs Opponent (rating)", the marks
-  (`2?? 1?`) or "Clean", source, time control, opening and date. The empty state is the Log's.
+  (`2?? 1?`, and an amber "1 missed" for missed wins) or "Clean", source, time control, opening and date. The empty state is the Log's.
   - `#games/<id>` is the game page: "← All games" (the filters and scroll position are kept),
     the board facing your side with start / back / forward / end and "next mistake" (and the
     ← → Home End keys), the details grid with the engine and the import, your entries in
@@ -823,7 +825,7 @@ Design language (from the demo and the paper template):
 - Neutral paper background `#f7f5f0`, white panels, ink `#1b1b1b`, muted text `#5c5c5c`
   (keep contrast ≥ 4.5:1), hairlines `#e3dfd6`.
 - Accents only with meaning: red `#b83227` = my move / blunder, green `#1d7a52` = best /
-  solved, amber `#9a6412` = due / suggested, blue `#2a5d9f` = new / info.
+  solved, amber `#9a6412` = due / suggested / a missed win, blue `#2a5d9f` = new / info.
 - Title in Georgia/serif, everything else system sans. No gradients, no emoji, no drop
   shadows beyond 1px.
 - Board: light `#ebe9d8`, dark blue `#4c688d` (each square's coordinate in the other square's

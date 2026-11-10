@@ -7,7 +7,7 @@
 import { api } from "../api.js";
 import { renderBoard, sqIdx, sqName, uciSquares } from "../board.js";
 import { showExplanation } from "../explain.js";
-import { MARK, SOURCE_TAG, fmtDate, moveLabel } from "../format.js";
+import { SOURCE_TAG, fmtDate, markText, moveLabel } from "../format.js";
 import { entriesChanged, esc, showError, toast } from "../ui.js";
 
 let root = null;
@@ -216,7 +216,7 @@ function showResult(item, r) {
   }
   draw(item);
 
-  const played = `<b>${moveLabel(item.move_no, item.my_color)}${esc(r.played_san)}${MARK[r.judgment]}</b>`;
+  const played = `<b>${moveLabel(item.move_no, item.my_color)}${esc(r.played_san)}${markText(r.judgment)}</b>`;
   const days = r.next_in_days === 1 ? "1 day" : `${r.next_in_days} days`;
   const topChoice = r.move_uci && r.move_uci.slice(0, 4) !== r.best_uci.slice(0, 4)
     ? ` (engine's top choice: ${esc(r.best_san)})`
