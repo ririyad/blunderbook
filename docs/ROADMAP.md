@@ -25,7 +25,7 @@ _Last updated: 2026-11-11_
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 
-**Next up:** M14 is done, and with it every milestone so far. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** v1 is done. v2 starts with M15, the desktop app (planned below, not started). Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1172,6 +1172,46 @@ the shell, the styles and every view. See Decided.
         the end screen listed the nine. No console errors. Not checked: `resume()` after a
         reload in the middle of an import, and both at 390 px (`TODO(verify)`).
 
+### v2: M15 Desktop app (planned, not started)
+
+Planned on 2026-11-11; v1 is done. Blunderbook as a download anyone can double-click, in
+place of Python, uv, a git clone and a separate Stockfish.
+
+- **Decided:** desktop only (Windows, macOS, Linux); public, built by GitHub on every commit
+  and published as release assets; not signed or notarised (the code is there to read);
+  its own window (pywebview); Stockfish and both extensions inside (all GPL-3).
+- [ ] **15.1** One way to start the server (`blunderbook/server.py`, out of `cli.serve`); a
+      "bundled" step in the Stockfish lookup, between `stockfish_path` and PATH, when the app
+      is frozen; `update` and `ext install` say plainly what a downloaded app can't do;
+      `build_info.py` (version and commit), shown by `doctor`.
+- [ ] **15.2** Setup on the page: with no config.toml the app creates it and the database;
+      `GET` / `PUT /api/setup` and a Setup tab for your names and for turning extensions on.
+      This changes "no settings page in v1" (CLAUDE.md §6, §10); engine depth, thresholds,
+      sync, backups and AI stay in config.toml and the CLI.
+- [ ] **15.3** The window: `blunderbook/desktop.py` and `blunderbook app` (the server on a
+      thread, a pywebview window, a free port if 8732 is taken, closing the window stops the
+      server and any import). pywebview is an optional extra. On Linux with no WebKitGTK it
+      opens the browser.
+- [ ] **15.4** The build: a PyInstaller one-folder bundle (`packaging/`), with two programs
+      (`Blunderbook`, the window, and `blunderbook-cli`), the page, the migrations, both
+      extensions with their data and entry-point metadata, and Stockfish fetched at a pinned
+      version and SHA-256 (baseline x86-64 builds). A smoke test runs the built app: `doctor`,
+      an import of a fixture, `ext list`, the server.
+- [ ] **15.5** Built by GitHub on every push to `main`: the tests (their first CI run), then
+      Windows, macOS (Apple silicon) and Linux builds with the smoke test, published as a
+      rolling "Latest build" pre-release with `SHA256SUMS.txt` and build attestations; a
+      `v*` tag makes a release. README gets a "Download" section: which file, the one-time
+      Gatekeeper and SmartScreen steps, how to check a download, where your data lives.
+- [ ] **15.6** "Check for updates": in Setup and `update --check`, asks GitHub for the latest
+      build's commit, only when pressed; it links to the release and never installs. A new
+      network call, to list in CLAUDE.md §1.3.
+- **Not in it:** signing, app stores, automatic updates, phones, a full settings page,
+  installers (`.msi`, `.deb`).
+- **Risks:** Windows and Linux are checked only by CI's smoke test until someone opens each
+  once; unsigned PyInstaller apps are sometimes flagged by antivirus; the download is about
+  80 to 120 MB; a frozen Python 3.15 app is unproven until 15.4 (PyInstaller 6.22 and
+  pywebview 6.2 do resolve on 3.15).
+
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
 digest), Anki / Lichess-study export, mobile PWA.
@@ -1481,3 +1521,14 @@ None open.
     required: for an old game you may not remember, and the entry shouldn't nag for ever.
   - **The phone header** scrolls its tabs sideways rather than wrapping or hiding them in a
     menu: every tab stays one tap away, and extensions add more.
+- **2026-11-11: Branches and releases (before M15).**
+  - **One branch:** work goes on `main`, the desktop app included. It packages the same code
+    (15.1 and 15.2 change what the CLI uses too), and `blunderbook update` follows `main`, so a
+    CLI install and a download of the same version are the same code.
+  - **Releases are tags:** `v1.0.0` marks v1, and a `v*` tag makes a release (15.5). A
+    `release/N.x` branch is made from a tag only when an old version needs a fix.
+  - **Every commit on `main` can be released:** the CLI keeps working after each slice
+    (pywebview is an optional extra), and once CI exists a build that fails its tests or smoke
+    test publishes nothing.
+  - **CI is tried out on a throwaway branch** (for example `ci/desktop`), then lands on `main`
+    as one commit, so `main` stays linear.
