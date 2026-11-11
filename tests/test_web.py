@@ -288,6 +288,28 @@ def test_the_log_review_flow_is_wired() -> None:
     assert 'href="#log?notes=missing"' in patterns and '"#retest"' in patterns
 
 
+def test_an_import_shows_on_its_tab_and_says_when_it_ends() -> None:
+    """The Import tab carries the job's percentage on every tab (the shell resumes it after
+    a reload), a toast says how it ended, and the button is busy while it runs."""
+    page = (WEB / "index.html").read_text("utf-8")
+    assert '<span class="badge b-info" id="importBadge" hidden></span>' in page
+    assert "importView.resume();" in (WEB / "js" / "app.js").read_text("utf-8")
+    view = (WEB / "js" / "views" / "import.js").read_text("utf-8")
+    assert "export function resume()" in view and '"Importing…"' in view
+    assert "!onImportTab()) toast(" in view
+    assert '$("report").scrollIntoView(' in view
+
+
+def test_a_retest_session_ends_with_its_score() -> None:
+    """The end of a session says how many you solved and links the missed ones to the Log;
+    nothing about an entry is kept before its attempt."""
+    retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")
+    assert "Session done: ${solved} of ${results.length} solved" in retest
+    assert '<a href="#log/${got.id}">' in retest
+    push = retest.index("results.push(")
+    assert retest.index("function showResult(") < push  # only after the server answered
+
+
 def test_retest_shows_where_the_piece_can_go() -> None:
     """Picking a piece in Re-test puts a dot on each square its legal moves reach."""
     retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")

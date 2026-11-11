@@ -347,13 +347,15 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   can go; tap it again to put it down), then a square.
   "Show a hint" lights up the square the best move starts from; "I don't know — show me" gives
   the answer. You then see the best line, what you played in the game, your lesson and when
-  the position comes back.
+  the position comes back. A session ends with how many you solved, and the ones you missed,
+  linked to the Log.
 - **Patterns** shows your totals, the causes behind your blunders (solid for confirmed,
   striped for suggested), blunders by time control, and your re-test history. Click a cause
   to see its entries in the Log.
 - **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
   position, and shows each game's result with links to the new entries and to the game.
-  "See these games in Games" opens the list. Games that need a side must be imported on the
+  "See these games in Games" opens the list. While an import runs you can use the other
+  tabs: the Import tab shows its percentage, and a message says when it's done. Games that need a side must be imported on the
   command line with `--side`.
 - **Extensions** that are on and have a page get a tab of their own after these. If one can't
   be used, `serve` says why when it starts, and runs without it.

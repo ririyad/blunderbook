@@ -1,5 +1,5 @@
 // The page shell: hash router (#log, #games, #retest, #patterns, #import, and a tab per
-// extension) and the Re-test badge. A route can carry more after a slash (#log/12) and a
+// extension), the Re-test badge and the Import tab's (views/import.js keeps that one). A route can carry more after a slash (#log/12) and a
 // query (#log/12?cause=…, #log?cause=…); the view gets both, as "12?cause=…" or "?cause=…".
 // Opening another tab starts at the top of the page; a route inside a tab doesn't scroll.
 //
@@ -121,3 +121,4 @@ document.addEventListener("entries-changed", refreshBadge);
 await addExtensions(); // first: #library/... must find its tab
 route();
 refreshBadge();
+importView.resume(); // an import that's still running shows on its tab

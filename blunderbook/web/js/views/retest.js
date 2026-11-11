@@ -14,6 +14,7 @@ let root = null;
 let queue = []; // the items of this session
 let index = 0; // the one on the board
 let practising = false; // "Practise all anyway"
+let results = []; // this session's answers: {id, solved, played, best}
 let loadToken = 0;
 
 // The puzzle on the board.
@@ -47,6 +48,7 @@ async function load(all) {
   if (token !== loadToken) return;
   queue = data.items;
   index = 0;
+  results = [];
   if (queue.length) renderPuzzle();
   else renderEmpty(data, false);
 }
@@ -55,13 +57,21 @@ async function load(all) {
 
 function renderEmpty(data, finished) {
   const next = fmtDate(data.next_due_on);
+  const done = finished && results.length > 0;
   const lead = data.total
-    ? `${finished ? "Session done. " : ""}Next re-test: ${next ? esc(next) : "—"}.`
+    ? `${finished && !done ? "Session done. " : ""}Next re-test: ${next ? esc(next) : "—"}.`
     : `Import a PGN on the <a href="#import">Import</a> tab, or with <code>blunderbook import FILE.pgn</code>.`;
+  const solved = results.filter((got) => got.solved).length;
+  const missed = results.filter((got) => !got.solved);
+  const list = done && missed.length
+    ? `<ul class="rt-missed" aria-label="Missed in this session">${missed.map((got) => `<li><a href="#log/${got.id}">
+        <b>${esc(got.played)}</b><span>best was ${esc(got.best)}</span><span class="small">Open in the Log</span></a></li>`).join("")}</ul>`
+    : "";
   root.innerHTML = `
   <div class="panel rt-empty">
-    <h2>Nothing due right now</h2>
-    <p class="small">${lead}</p>
+    <h2>${done ? `Session done: ${solved} of ${results.length} solved` : "Nothing due right now"}</h2>
+    <p class="small">${done && missed.length ? "The ones you missed come back tomorrow. " : ""}${lead}</p>
+    ${list}
     ${data.total ? `<button class="btn primary" id="rtAll" type="button">Practise all ${data.total} anyway</button>` : ""}
   </div>`;
   if (data.total) {
@@ -215,6 +225,14 @@ function showResult(item, r) {
     if (!r.move_uci) hl = { [bf]: "best", [bt]: "best" };
   }
   draw(item);
+  results.push({
+    id: r.id,
+    solved: r.solved,
+    played: moveLabel(item.move_no, item.my_color) + r.played_san + markText(r.judgment),
+    best: r.best_san,
+  });
+  // The bar counts answers, so it's full when the last one is in.
+  root.querySelector(".rtprog i").style.width = Math.round((100 * (index + 1)) / queue.length) + "%";
 
   const played = `<b>${moveLabel(item.move_no, item.my_color)}${esc(r.played_san)}${markText(r.judgment)}</b>`;
   const days = r.next_in_days === 1 ? "1 day" : `${r.next_in_days} days`;
@@ -230,7 +248,8 @@ function showResult(item, r) {
        <p style="margin:0">${esc(r.best_line_san)}. In the game you played ${played}${r.refutation_san ? " (" + esc(r.refutation_san) + ")" : ""}.
        ${r.move_san ? `This time you played ${esc(r.move_san)}. ` : ""}It comes back tomorrow.</p>`;
   fb.innerHTML += r.lesson
-    ? `<div class="lesson"><b>Your rule:</b> ${esc(r.lesson)}</div>`
+    ? `<div class="lesson"><b>Your rule:</b> ${esc(r.lesson)}</div>
+       <p class="small" style="margin:8px 0 0"><a href="#log/${r.id}">Open this entry in the Log</a></p>`
     : `<div class="lesson small">No lesson written for this one yet. <a href="#log/${r.id}">Add it in the Log.</a></div>`;
   fb.innerHTML += '<div class="ai"></div>';
   const last = index + 1 >= queue.length;

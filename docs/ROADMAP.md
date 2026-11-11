@@ -23,10 +23,9 @@ _Last updated: 2026-11-11_
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
-| M14 Page polish | In progress (3/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
+| M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 
-**Next up:** 14.4, import and re-test feedback: the percentage on the Import tab, a toast
-when an import ends, and a Re-test session summary. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** M14 is done, and with it every milestone so far. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1149,8 +1148,29 @@ the shell, the styles and every view. See Decided.
         notes" on the row; a Patterns cause opens the Log filtered by it (other filters
         cleared), and a reload keeps it; `#log?notes=missing`; `#log/2` keeps the filters;
         `#log?` clears them. No console errors.
-- [ ] **14.4** Import and Re-test feedback: the percentage on the Import tab, a toast when
-      an import ends, a Re-test session summary.
+- [x] **14.4** Import and Re-test feedback.
+      _Done:_
+      - **An import shows on its tab:** a blue badge with the percentage, on every tab. The
+        shell calls the Import view's `resume()` at start, so a job that was running before
+        a reload is followed again without opening Import.
+      - **When it ends on another tab**, a toast gives the summary line ("Import done: 5
+        games read · 6 blunders added"). The Re-test badge already updated.
+      - **The Import button** reads "Importing…" and stays disabled while a job runs (a
+        second press was a 409), and starting an import scrolls the report into view (on a
+        narrow screen it's under both cards).
+      - **A Re-test session ends with its score:** "Session done: 1 of 10 solved", and the
+        ones you missed (your move, the best move), each linked to the Log. The results are
+        kept on the page only, and only after the server answered an attempt.
+      - **Every result** has "Open this entry in the Log", and the progress bar counts
+        answers, so it's full when the last one is in.
+      - **Tests** (2 more): the badge, `resume()`, the toast and the busy button; the
+        session summary, filled only after an attempt.
+      - **Checked in headless Chrome:** five fixture games pasted at depth 16: the button
+        went to "Importing…", the badge counted up on the Log tab (2% … ), then hid, the
+        toast gave the summary and the Re-test badge went to 10. A ten-puzzle session, nine
+        given up and one solved: the bar reached 100%, every result linked to the Log, and
+        the end screen listed the nine. No console errors. Not checked: `resume()` after a
+        reload in the middle of an import, and both at 390 px (`TODO(verify)`).
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly

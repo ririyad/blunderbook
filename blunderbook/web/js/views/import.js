@@ -4,10 +4,13 @@
 // one position and the move you played.
 //
 // A file is sent as its raw bytes, so the server reads its encoding (UTF-8 or Windows-1252).
+//
+// While an import runs, the Import tab carries its percentage, whichever tab is open, and
+// when it ends on another tab a toast says what it added.
 
 import { api } from "../api.js";
 import { MARK, plural } from "../format.js";
-import { entriesChanged, esc, showError } from "../ui.js";
+import { entriesChanged, esc, showError, toast } from "../ui.js";
 
 const PGN_TYPE = "application/x-chess-pgn";
 const POLL_MS = 500;
@@ -47,6 +50,23 @@ export async function show(section) {
   if (root !== section) build(section);
   if (jobId) await poll();
 }
+
+/** Called once by the shell: follow an import that was running before a reload. */
+export function resume() {
+  if (jobId && !root) poll();
+}
+
+/** The Import tab's badge: the percentage while a job runs. */
+function badge(job) {
+  const el = document.getElementById("importBadge");
+  if (!el) return;
+  const running = job !== null && job.status === "running";
+  el.hidden = !running;
+  el.textContent = running ? job.percent + "%" : "";
+  if (running) el.setAttribute("aria-label", `importing, ${job.percent}% done`);
+}
+
+const onImportTab = () => root !== null && root.classList.contains("on");
 
 // ---------------------------------------------------------------- the page
 
@@ -155,11 +175,11 @@ async function start(data, from, fileName) {
     jobId = started.job_id;
     sessionStorage.setItem(SAVED_JOB, jobId);
     source = from;
-    lastStatus = null;
+    lastStatus = "running";
     await poll();
+    $("report").scrollIntoView({ block: "nearest", behavior: "smooth" });
   } catch (err) {
     $("pgnErr").textContent = err.message;
-  } finally {
     $("importBtn").disabled = false;
   }
 }
@@ -173,23 +193,35 @@ async function poll() {
     if (err.status === 404) { // from before the server restarted
       jobId = null;
       sessionStorage.removeItem(SAVED_JOB);
+      badge(null);
+      if (root) busy(false);
       return;
     }
     showError(err.message);
     pollTimer = setTimeout(poll, POLL_MS * 4);
     return;
   }
-  renderJob(job);
+  badge(job);
+  if (root) renderJob(job);
   if (job.status === "running") {
     pollTimer = setTimeout(poll, POLL_MS);
   } else if (lastStatus === "running" || lastStatus === null) {
     if (job.games.some((g) => g.entries.length)) entriesChanged();
+    // It ended while you were elsewhere: say so there.
+    if (lastStatus === "running" && !onImportTab()) toast(`Import ${HEADLINE[job.status].toLowerCase()}: ${job.summary}`);
   }
   lastStatus = job.status;
 }
 
+/** One import at a time: the button says so while one runs. */
+function busy(running) {
+  $("importBtn").disabled = running;
+  $("importBtn").textContent = running ? "Importing…" : "Import";
+}
+
 function renderJob(job) {
   const running = job.status === "running";
+  busy(running);
   const state = running
     ? job.game_index
       ? `Analysing game ${job.game_index} of ${job.games_to_analyse} · ${job.percent}%`

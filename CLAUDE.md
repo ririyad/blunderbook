@@ -829,13 +829,20 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
 - **Re-test:** board facing my side, "White/Black to move — find the best move", tap a piece
   then tap a square (only the legal moves from the API), "Show a hint" (from-square), "I don't
   know — show me". The result panel shows solved or missed, the best line, what I played in
-  the game, my lesson, and the next due date. An empty state offers "Practise all anyway".
+  the game, my lesson, the next due date and "Open this entry in the Log". An empty state
+  offers "Practise all anyway".
+  - The progress bar counts answers. A session ends with "Session done: 4 of 5 solved" and
+    the ones you missed, each linked to `#log/<id>`.
 - **Import:** a paste box ("Paste PGN here, or drop a .pgn file on this box."), "Choose .pgn
   file", drop onto the box, and "Import". While it runs: a progress bar with the percentage
   (`aria-live`). Then the report: each game's status and reason, links to new entries
   (`#log/<id>`) and to the game (`#games/<id>`), the summary line, and "See these games in
   Games". A chosen or dropped file's name goes in `X-Pgn-Name`. A "Quick entry from a FEN" card: FEN, your move (UCI or
   SAN), opponent, date, and the outcome. After either, the view dispatches `entries-changed`.
+  - While an import runs, the Import tab carries its percentage in a blue badge on every
+    tab (after a reload too: the shell calls the view's `resume()`), and the button reads
+    "Importing…" and is disabled. When it ends while another tab is open, a toast gives the
+    summary line. Starting an import scrolls the report into view.
 - **Patterns:** four tiles, cause bars (solid = confirmed, striped = suggested), by time
   control, re-test history, a one-line "biggest leak" insight. The numbers link to what's
   behind them: a cause (and the biggest leak) to `#log?cause=…`, "Blunders logged" to the
