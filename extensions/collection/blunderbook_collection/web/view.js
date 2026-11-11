@@ -13,6 +13,7 @@
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
 import { MARK, fmtDate, markText, plural } from "/js/format.js";
+import { bindSteps, stepsHtml } from "/js/steps.js";
 import { esc, showError } from "/js/ui.js";
 
 const FILTERS = ["player", "color", "result", "opening", "phase"];
@@ -28,19 +29,13 @@ const GAME_STATUS = {
   not_analysed: "Not analysed",
 };
 const HEADLINE = { done: "Done", stopped: "Stopped", failed: "Stopped" };
-const ICON = {
-  first: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
-  prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
-  next: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
-  last: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10M4 3l5 5-5 5"/></svg>',
-  mark: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>',
-};
 
 let root = null;
 let token = 0; // only the newest answer is drawn
 let back = "#collection"; // where "← Back" goes from a game
 let game = null; // the open game, as the API sent it
 let ply = 0; // the position shown: 0 is the start, n is after n moves
+let steps = null; // the step controls under the board
 let jobId = sessionStorage.getItem(SAVED_JOB); // the import shown on #collection/add
 let pollTimer = null;
 
@@ -80,7 +75,6 @@ function build(section) {
   root = section;
   section.innerHTML = '<div class="collection"><div id="colIndex"></div><div id="colStats" hidden></div>'
     + '<div id="colPlayers" hidden></div><div id="colGame" hidden></div><div id="colAdd" hidden></div></div>';
-  section.addEventListener("keydown", stepWithKeys);
 }
 
 /** Ask the API; on a problem, say so in the error line and in `box`. */
@@ -326,16 +320,7 @@ function renderGame() {
   <div class="panel detail">
     <div class="boardwrap">
       <div class="board" id="colBoard"></div>
-      <div class="nav">
-        <div class="grp">
-          <button class="icon" type="button" id="colFirst" aria-label="Start of game">${ICON.first}</button>
-          <button class="icon" type="button" id="colPrev" aria-label="Previous move">${ICON.prev}</button>
-          <button class="icon" type="button" id="colNext" aria-label="Next move">${ICON.next}</button>
-          <button class="icon" type="button" id="colLast" aria-label="End of game">${ICON.last}</button>
-          <button class="icon" type="button" id="colNextMark" aria-label="Next marked move">${ICON.mark}</button>
-        </div>
-        <span class="navlabel" id="colLabel" aria-live="polite"></span>
-      </div>
+      ${stepsHtml("col", { mark: "Next marked move" })}
       <div class="collection-graphwrap">
         <div class="collection-graph" id="colGraph"></div>
         <p class="small">White's winning chances after each move: up is better for White. Click to jump there.</p>
@@ -356,12 +341,7 @@ function renderGame() {
     </div>
   </div>`;
   const last = g.moves.length;
-  const go = (to) => () => jump(to());
-  $("colFirst").addEventListener("click", go(() => 0));
-  $("colPrev").addEventListener("click", go(() => ply - 1));
-  $("colNext").addEventListener("click", go(() => ply + 1));
-  $("colLast").addEventListener("click", go(() => last));
-  $("colNextMark").addEventListener("click", go(nextMark));
+  steps = bindSteps("col", { last: () => last, get: () => ply, set: jump, mark: nextMark });
   for (const b of $("colGame").querySelectorAll(".mbtn, .collection-here")) b.addEventListener("click", () => jump(Number(b.dataset.pos)));
   $("colGraph").addEventListener("click", (ev) => {
     const box = ev.currentTarget.getBoundingClientRect();
@@ -375,10 +355,10 @@ function jump(to) {
   drawGame();
 }
 
-/** The position after the next marked move, or the first again. */
+/** The position after the next marked move, or the first again; null with none. */
 function nextMark() {
   const marked = game.moves.filter((m) => m.judgment).map((m) => m.ply + 1);
-  if (!marked.length) return ply;
+  if (!marked.length) return null;
   return marked.find((p) => p > ply) ?? marked[0];
 }
 
@@ -424,8 +404,7 @@ function drawGame() {
   }
   renderBoard($("colBoard"), g.positions[ply].fen, "white", { hl, arrows, label });
   $("colLabel").textContent = label;
-  $("colFirst").disabled = $("colPrev").disabled = ply === 0;
-  $("colNext").disabled = $("colLast").disabled = ply === g.moves.length;
+  steps.sync();
   for (const b of $("colGame").querySelectorAll(".mbtn")) b.setAttribute("aria-current", String(Number(b.dataset.pos) === ply));
   $("colMove").innerHTML = moveBox(m);
   $("colGraph").innerHTML = graph(g);
@@ -468,15 +447,6 @@ function graph(g) {
     <line class="collection-mid" x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}"/>
     <line class="collection-now" x1="${x(ply)}" y1="0" x2="${x(ply)}" y2="${H}"/>
     ${dots}</svg>`;
-}
-
-function stepWithKeys(ev) {
-  if (!game || $("colGame").hidden || ev.altKey || ev.ctrlKey || ev.metaKey) return;
-  if (["INPUT", "TEXTAREA", "SELECT"].includes(ev.target.tagName)) return;
-  const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: game.moves.length }[ev.key];
-  if (to === undefined) return;
-  ev.preventDefault();
-  jump(to);
 }
 
 // ---------------------------------------------------------------- adding games

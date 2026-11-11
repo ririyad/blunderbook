@@ -173,8 +173,11 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .chip.sugg{border-style:dashed;border-color:var(--amber);color:var(--amber);background:#fffaf1}
 .chip.sugg[aria-pressed="true"]{color:#fff;background:var(--ink);border-color:var(--ink)}
 .chip .auto{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
-.saved{font-size:12px;color:var(--green);min-height:18px;margin-top:4px}
+.saved{font-size:12px;color:var(--muted);min-height:18px;margin-top:4px}
 .saved.fail{color:var(--red)}
+.saved .btn{min-height:26px;padding:2px 10px;font-size:12px;color:var(--ink)}
+.delask,.delask>span{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.delask .small{flex:1 1 100%;text-align:right}
 /* The optional AI explanation (js/explain.js): amber and dashed, like a suggested cause */
 .ai{margin-top:14px}
 .ai:empty{display:none}

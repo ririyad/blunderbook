@@ -222,6 +222,7 @@ HOST_PAGE_EXPORTS = {
         "percent",
         "plural",
     ),
+    "steps.js": ("ICON", "stepsHtml", "bindSteps"),
     "board.js": ("renderBoard", "fenToBoard", "squareLabel", "sqIdx", "sqName", "uciSquares"),
 }
 

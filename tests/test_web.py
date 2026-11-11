@@ -258,6 +258,23 @@ def test_shared_helpers_have_one_copy() -> None:
             assert "function statusPill" not in text and "const plural" not in text, path
 
 
+def test_no_browser_dialogs() -> None:
+    """The page asks in the page: confirm(), alert() and prompt() stop everything else."""
+    for path in JS_FILES:
+        assert not re.search(r"\b(confirm|alert|prompt)\(", path.read_text("utf-8")), path
+
+
+def test_every_board_uses_the_shared_step_controls() -> None:
+    """One copy of the step buttons and the ← → Home End keys (js/steps.js), listening on
+    the document, so the keys work wherever the focus is."""
+    steps = (WEB / "js" / "steps.js").read_text("utf-8")
+    assert 'document.addEventListener("keydown"' in steps
+    for name in ("log.js", "games.js"):
+        view = (WEB / "js" / "views" / name).read_text("utf-8")
+        assert "bindSteps(" in view and "stepsHtml(" in view
+        assert "const ICON" not in view and 'addEventListener("keydown"' not in view
+
+
 def test_retest_shows_where_the_piece_can_go() -> None:
     """Picking a piece in Re-test puts a dot on each square its legal moves reach."""
     retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")

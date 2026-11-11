@@ -9,22 +9,18 @@
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
 import { MARK, fmtDate, plural } from "/js/format.js";
+import { bindSteps, stepsHtml } from "/js/steps.js";
 import { esc, showError } from "/js/ui.js";
 import * as practise from "./practise.js";
 
 const API = "/api/ext/library/entries";
 const KINDS = [["opening", "Openings", "Opening"], ["trap", "Traps", "Trap"], ["tactic", "Tactics", "Tactic"]];
-const ICON = {
-  first: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
-  prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
-  next: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
-  last: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10M4 3l5 5-5 5"/></svg>',
-};
 
 let root = null;
 let entry = null; // the open entry, as the API sent it
 let reply = null; // the index of the reply being played out, or null
 let ply = 0; // the position shown: 0 is the start, n is after n moves of the path
+let steps = null; // the step controls under the board
 let listScroll = 0; // where the index was, for "← Library"
 let token = 0; // only the newest answer is drawn
 
@@ -56,7 +52,6 @@ export async function show(section, rest) {
 function build(section) {
   root = section;
   section.innerHTML = '<div class="library"><div id="libIndex"></div><div id="libEntry" hidden></div><div id="libPractise" hidden></div></div>';
-  section.addEventListener("keydown", stepWithKeys);
 }
 
 // ---------------------------------------------------------------- the index
@@ -171,15 +166,7 @@ function renderEntry() {
   <div class="panel detail">
     <div class="boardwrap">
       <div class="board" id="libBoard"></div>
-      <div class="nav">
-        <div class="grp">
-          <button class="icon" type="button" id="libFirst" aria-label="Start position">${ICON.first}</button>
-          <button class="icon" type="button" id="libPrev" aria-label="Previous move">${ICON.prev}</button>
-          <button class="icon" type="button" id="libNext" aria-label="Next move">${ICON.next}</button>
-          <button class="icon" type="button" id="libLast" aria-label="Last move">${ICON.last}</button>
-        </div>
-        <span class="navlabel" id="libLabel" aria-live="polite"></span>
-      </div>
+      ${stepsHtml("lib", { first: "Start position", last: "Last move" })}
       ${legend}
     </div>
     <div>
@@ -198,11 +185,7 @@ function renderEntry() {
     </div>
   </div>`;
   $("libPractiseIt").addEventListener("click", () => { location.hash = `#library/practise/${encodeURIComponent(e.id)}`; });
-  const go = (to) => () => { ply = Math.max(0, Math.min(path().length, to())); drawEntry(); };
-  $("libFirst").addEventListener("click", go(() => 0));
-  $("libPrev").addEventListener("click", go(() => ply - 1));
-  $("libNext").addEventListener("click", go(() => ply + 1));
-  $("libLast").addEventListener("click", go(() => path().length));
+  steps = bindSteps("lib", { last: () => path().length, get: () => ply, set: (to) => { ply = to; drawEntry(); } });
   for (const b of $("libEntry").querySelectorAll(".mbtn")) {
     b.addEventListener("click", () => {
       if (b.dataset.reply !== undefined) reply = Number(b.dataset.reply);
@@ -302,22 +285,9 @@ function drawEntry() {
   const fen = ply === 0 ? entry.start_fen : moves[ply - 1].fen;
   renderBoard($("libBoard"), fen, entry.side, { hl, arrows, label });
   $("libLabel").textContent = label;
-  $("libFirst").disabled = $("libPrev").disabled = ply === 0;
-  $("libNext").disabled = $("libLast").disabled = ply === moves.length;
+  steps.sync();
   for (const b of $("libEntry").querySelectorAll(".mbtn")) {
     const mine = b.dataset.reply === undefined || Number(b.dataset.reply) === reply;
     b.setAttribute("aria-current", String(mine && Number(b.dataset.pos) === ply));
   }
-}
-
-/** ← → Home End step through the moves while an entry is open, unless you're typing. */
-function stepWithKeys(ev) {
-  if (!entry || $("libEntry").hidden || ev.altKey || ev.ctrlKey || ev.metaKey) return;
-  if (["INPUT", "TEXTAREA", "SELECT"].includes(ev.target.tagName)) return;
-  const last = path().length;
-  const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[ev.key];
-  if (to === undefined) return;
-  ev.preventDefault();
-  ply = Math.max(0, Math.min(last, to));
-  drawEntry();
 }

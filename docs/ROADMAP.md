@@ -23,10 +23,10 @@ _Last updated: 2026-11-11_
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
-| M14 Page polish | In progress (1/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
+| M14 Page polish | In progress (2/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 
-**Next up:** 14.2, one board with step controls for every tab (arrow keys that work at
-once, the Log's too), and the Log's rough edges. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 14.3, the review flow: "Needs your notes", the Log's filters in the address,
+Previous / Next entry, and Patterns linking into the Log. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1094,10 +1094,38 @@ the shell, the styles and every view. See Decided.
         the header is sticky; Patterns → Log lands at the top; `#log?cause=…` opens the Log;
         with the network off the error line shows, and "Try again" loads the tab. No
         console errors. Screenshots at 500 px and 1200 px looked right.
-- [ ] **14.2** One board with step controls (`js/steps.js`) for the Log, Games, the Library
-      and the Collection: keys that work without clicking first, the Log's End button and
-      keys. The Log: delete asks in the page, the open entry scrolled into view in the list,
-      a save line that stays, "Try again" on a failed save.
+- [x] **14.2** One board with step controls, and the Log's rough edges.
+      _Done:_
+      - **`js/steps.js`:** the one copy of the step buttons (`stepsHtml`), their wiring and
+        disabled states (`bindSteps`), the icons, and ← → Home End. The keys are heard on
+        the document and go to the board on screen, unless you're typing. Before, Games, the
+        Library and the Collection each listened on their own section, so the keys did
+        nothing until you clicked in the view (the focus is on the page body right after a
+        game opens: confirmed in the browser).
+      - **The four boards use it:** the Log (which gains "End of game" and the keys), Games,
+        the Library and the Collection. Each keeps its own drawing. The "next mistake" /
+        "next marked move" button is disabled when there's none. Every button has a tooltip.
+        `/js/steps.js` joins the page modules an extension may import (`HOST_API` stays 1).
+      - **Delete asks in the page:** "Delete 5... Bxd1?? from your Log?" with Delete and Keep
+        in the button's place, focus on Keep, Escape keeps. The page has no browser dialogs
+        left (a test checks).
+      - **The list** scrolls the open entry into view (`#log/40` from the Import report),
+        moving only the list, not the page.
+      - **The save line** says "Saving…", then "Saved" until the next change (it used to
+        vanish after 1.2 s). A failed save shows "Try again".
+      - **Tests** (2 more; the exports test covers `steps.js`): no `confirm(` / `alert(` /
+        `prompt(` in page files; the Log and Games use the shared controls and keep no key
+        handler or icons of their own.
+      - **Checked in headless Chrome** (DevTools protocol, keys sent as real key events):
+        - Games: open a game from the list and press → twice with no click, then End;
+        - the Log: →, Home, the End button; → while typing in Lesson leaves the board alone;
+        - the Collection and the Library (turned on for this): → steps;
+        - the save line: "Saving…" → "Saved", still there 2.5 s later; with the network off,
+          "Not saved … Try again", which then saves;
+        - delete: the question with focus on Keep, Escape restores the button, Delete removes
+          the entry and opens the next;
+        - `#log/5` at 390 px, the delete question open: no sideways scroll.
+        No console errors.
 - [ ] **14.3** Review flow: "Needs your notes" (`?notes=missing`, `needs_notes`), the Log's
       filters in the address, Previous / Next entry, and Patterns linking into the Log.
 - [ ] **14.4** Import and Re-test feedback: the percentage on the Import tab, a toast when

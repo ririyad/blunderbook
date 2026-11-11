@@ -137,6 +137,7 @@ blunderbook/
 │       ├── js/causes.js       # the fixed cause list (a test checks it against CAUSES)
 │       ├── js/explain.js      # the optional AI explanation block (Log and Re-test)
 │       ├── js/board.js        # board renderer (ported from the demo)
+│       ├── js/steps.js        # a board's step controls and ← → Home End, shared by every view
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
 ├── extensions/
@@ -756,6 +757,8 @@ The shell:
   header stays at the top. On a touch screen controls are at least 44 px high.
 - A tab that hasn't drawn anything yet says "Loading…" after 300 ms.
 - The badge counts entries due today or earlier, new ones included, and is hidden at 0.
+- Every board with step controls uses `js/steps.js`: the same buttons, and ← → Home End,
+  which work wherever the focus is unless you're typing.
 - Each view is a module in `js/views/` with `show(root, rest)`. After a change, a view
   dispatches `entries-changed`, and the badge updates.
 - Extensions: before the first route, the shell asks `/api/extensions` and adds a tab and a
@@ -773,11 +776,11 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
 
 - **Log:** filter bar (source, status, cause) and list. Detail panel has the board with
   red arrow and highlight for my move, an optional green arrow for the best move, step
-  controls (start / back / forward / jump to the blunder), "I played" and "Best was" boxes
+  controls (start / back / forward / end / jump to the blunder), "I played" and "Best was" boxes
   with the refutation and best line, an eval bar with winning chances before → after, a
   metadata grid (source, time control, result, ratings, clock left, time on move), cause
   chips (auto suggestions dashed with an "AUTO" tag), "What I was thinking" and "Lesson"
-  textareas with autosave (debounced PATCH, "Saved" message), and the re-test status.
+  textareas with autosave (debounced PATCH, a save line), and the re-test status.
   Step controls use the per-ply FENs from the API. The empty state says "Import a PGN on the
   Import tab, or with `blunderbook import FILE.pgn`".
   - The step controls go through the whole game. The panel opens on the position before your
@@ -786,10 +789,14 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
     "Missed win" pill (`p-missed-win`, not the re-test's `p-missed`), and "(missed win)" after
     the move in a sentence (Re-test result, Patterns history).
   - Confirming "Other" shows a text box for `other_cause`.
-  - "Delete this entry" asks first. The game stays, so the entry won't come back on import.
+  - "Delete this entry" asks first, in the page: the button becomes the question with
+    "Delete" and "Keep" (focus on Keep; Escape keeps). No browser dialogs anywhere on the
+    page. The game stays, so the entry won't come back on import.
+  - The open entry is scrolled into view in the list (a link such as `#log/40`).
   - Saving: text saves after a 400 ms pause in typing, causes at once, one save at a time in
     order. Unsaved text is sent before you switch entries, and when the page closes
-    (`keepalive`). A failed save says so in red and keeps the text for the next try.
+    (`keepalive`). The save line says "Saving…", then "Saved" until the next change. A
+    failed save says so in red, with "Try again", and keeps the text for the next try.
   - Picking an entry sets `#log/<id>` with `replaceState`, so it doesn't add to the history.
   - "See the whole game" opens `#games/<game id>` (not for FEN entries).
 - **Games:** the games you imported (not FEN entries), clean ones too. A filter bar (source,
@@ -1007,7 +1014,8 @@ extension = ext.Extension(
   (`score_positions` is pass 1 on its own), `models`.
 - Nothing else: not `db`, `config`, `api`, `cli`, `importer`, `ai` or `sources`.
 - On the page, Blunderbook's modules by absolute path: `/js/api.js` (`api`, `ApiError`),
-  `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` (dates, evals, marks, `plural`) and `/js/board.js`
+  `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` (dates, evals, marks, `plural`),
+  `/js/steps.js` (`stepsHtml`, `bindSteps`, `ICON`: a board's step controls and keys) and `/js/board.js`
   (`renderBoard`, `fenToBoard`, `squareLabel`, square helpers). A test checks these exports
   stay. Its own modules by relative path.
 - On the page, the page's shared CSS classes (`webcheck.SHARED_CLASSES`), so its tab looks

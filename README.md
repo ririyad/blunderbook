@@ -318,7 +318,7 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
 - **Log** lists your entries, newest first, with filters for source, status and cause.
   Opening an entry shows:
   - the position before your move, with your move and (if you like) the best move as arrows,
-    and step controls to go through the whole game;
+    and step controls (and ← → Home End) to go through the whole game;
   - what you played and the refutation, the best move and its line, and your winning chances
     before and after;
   - the game's details: source, time control, result, ratings, clock left and time on the

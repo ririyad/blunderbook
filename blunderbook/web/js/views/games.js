@@ -9,23 +9,18 @@ import { renderBoard, uciSquares } from "../board.js";
 import {
   JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtDate, localDay, markPill, moveLabel, plural, statusPill, timeControl,
 } from "../format.js";
+import { bindSteps, stepsHtml } from "../steps.js";
 import { esc, showError } from "../ui.js";
 
 const SEARCH_DELAY_MS = 250;
 const RESULT = { won: ["W", "Won"], lost: ["L", "Lost"], drawn: ["D", "Drawn"] };
-const ICON = {
-  first: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
-  prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
-  next: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
-  last: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10M4 3l5 5-5 5"/></svg>',
-  blunder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>',
-};
 
 let root = null;
 let group = "import"; // "import" | "date"
 let games = []; // the list, as last fetched
 let detail = null; // the open game: {game, outcome, imported_at, batch, entries}
 let ply = 0; // the position shown: 0 is the start, n is after n moves
+let steps = null; // the step controls under the board
 let listScroll = 0; // where the list was, for "All games"
 let listToken = 0, gameToken = 0; // only the newest answer is drawn
 let searchTimer = null;
@@ -84,7 +79,6 @@ function build(section) {
   });
   $("gByImport").addEventListener("click", () => setGroup("import"));
   $("gByDate").addEventListener("click", () => setGroup("date"));
-  section.addEventListener("keydown", stepWithKeys);
 }
 
 function setGroup(to) {
@@ -251,16 +245,7 @@ function renderGame() {
   <div class="panel detail">
     <div class="boardwrap">
       <div class="board" id="gBoard"></div>
-      <div class="nav">
-        <div class="grp">
-          <button class="icon" type="button" id="gFirst" aria-label="Start of game">${ICON.first}</button>
-          <button class="icon" type="button" id="gPrev" aria-label="Previous move">${ICON.prev}</button>
-          <button class="icon" type="button" id="gNext" aria-label="Next move">${ICON.next}</button>
-          <button class="icon" type="button" id="gLast" aria-label="End of game">${ICON.last}</button>
-          <button class="icon" type="button" id="gNextBl" aria-label="Next of your mistakes">${ICON.blunder}</button>
-        </div>
-        <span class="navlabel" id="gLabel" aria-live="polite"></span>
-      </div>
+      ${stepsHtml("g", { mark: "Next of your mistakes" })}
       <div class="legend"><span><i class="l-played"></i>Your mistake</span><span><i class="l-sel"></i>Last move</span></div>
     </div>
     <div>
@@ -280,13 +265,12 @@ function renderGame() {
       <div class="sec"><h3 id="gMovesTitle">Moves</h3>${movesHtml(g)}</div>
     </div>
   </div>`;
-  const last = g.moves.length;
-  const go = (to) => () => { ply = Math.max(0, Math.min(last, to())); drawGame(); };
-  $("gFirst").onclick = go(() => 0);
-  $("gPrev").onclick = go(() => ply - 1);
-  $("gNext").onclick = go(() => ply + 1);
-  $("gLast").onclick = go(() => last);
-  $("gNextBl").onclick = go(nextMistake);
+  steps = bindSteps("g", {
+    last: () => g.moves.length,
+    get: () => ply,
+    set: (to) => { ply = to; drawGame(); },
+    mark: nextMistake,
+  });
   for (const b of $("gGameView").querySelectorAll(".mbtn")) {
     b.addEventListener("click", () => { ply = Number(b.dataset.pos); drawGame(); });
   }
@@ -325,10 +309,10 @@ function movesHtml(g) {
   return `<ol class="mlist" aria-labelledby="gMovesTitle">${rows.map((r) => `<li><span class="no">${r.no}.</span>${cell(r.white)}${cell(r.black)}</li>`).join("")}</ol>`;
 }
 
-/** The position before your next mistake after this one, or the first again. */
+/** The position before your next mistake after this one, or the first again; null with none. */
 function nextMistake() {
   const plies = detail.entries.map((e) => e.ply).sort((a, b) => a - b);
-  if (!plies.length) return ply;
+  if (!plies.length) return null;
   return plies.find((p) => p > ply) ?? plies[0];
 }
 
@@ -348,22 +332,8 @@ function drawGame() {
   const fen = ply === 0 ? g.start_fen : g.moves[ply - 1].fen;
   renderBoard($("gBoard"), fen, g.my_color, { hl, arrows, label });
   $("gLabel").textContent = label;
-  $("gFirst").disabled = $("gPrev").disabled = ply === 0;
-  $("gNext").disabled = $("gLast").disabled = ply === g.moves.length;
-  $("gNextBl").disabled = !detail.entries.length;
+  steps.sync();
   for (const b of $("gGameView").querySelectorAll(".mbtn")) {
     b.setAttribute("aria-current", String(Number(b.dataset.pos) === ply));
   }
-}
-
-/** ← and → step through the game while it's open, unless you're typing. */
-function stepWithKeys(ev) {
-  if (!detail || $("gGameView").hidden || ev.altKey || ev.ctrlKey || ev.metaKey) return;
-  if (["INPUT", "TEXTAREA", "SELECT"].includes(ev.target.tagName)) return;
-  const last = detail.game.moves.length;
-  const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[ev.key];
-  if (to === undefined) return;
-  ev.preventDefault();
-  ply = Math.max(0, Math.min(last, to));
-  drawGame();
 }

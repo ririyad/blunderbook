@@ -12,16 +12,11 @@ import {
   JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtClock, fmtDate, fmtEval, fmtSpent, isDue, moveLabel,
   markPill, outcome, percent, statusPill, timeControl,
 } from "../format.js";
+import { bindSteps, stepsHtml } from "../steps.js";
 import { entriesChanged, esc, showError, toast } from "../ui.js";
 
 const SAVE_DELAY_MS = 400;
 const NARROW = "(max-width: 900px)"; // one column: the detail is under the list
-const ICON = {
-  first: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v10M12 3 7 8l5 5"/></svg>',
-  prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
-  next: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
-  blunder: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>',
-};
 
 let root = null; // the view's section, once built
 let items = []; // the list, as last fetched
@@ -29,6 +24,7 @@ let currentId = null; // the entry in the detail panel
 let entry = null; // its full data, with your unsaved edits applied
 let ply = 0; // the position shown: 0 is the start, n is after n moves
 let showBest = false;
+let steps = null; // the step controls under the board
 let listToken = 0, detailToken = 0; // only the newest answer is drawn
 
 // Notes waiting to be saved: field -> value. Saves go one at a time, in order.
@@ -147,9 +143,16 @@ function renderList() {
   }
 }
 
+/** Mark the open entry in the list, and bring it into view there (the list scrolls on its
+ *  own, so the page doesn't move). */
 function markCurrent() {
-  const buttons = $("list").querySelectorAll(".item");
+  const ul = $("list"), buttons = ul.querySelectorAll(".item");
   items.forEach((item, i) => buttons[i]?.setAttribute("aria-current", String(item.id === currentId)));
+  const at = items.findIndex((item) => item.id === currentId);
+  if (at < 0 || !buttons[at] || ul.scrollHeight <= ul.clientHeight) return;
+  const row = buttons[at].getBoundingClientRect(), box = ul.getBoundingClientRect();
+  if (row.top < box.top) ul.scrollTop -= box.top - row.top + 6;
+  else if (row.bottom > box.bottom) ul.scrollTop += row.bottom - box.bottom + 6;
 }
 
 async function pick(id) {
@@ -215,15 +218,7 @@ function renderDetail() {
   <div class="detail">
     <div class="boardwrap">
       <div class="board" id="dBoard"></div>
-      <div class="nav">
-        <div class="grp">
-          <button class="icon" type="button" id="nFirst" aria-label="Start of game">${ICON.first}</button>
-          <button class="icon" type="button" id="nPrev" aria-label="Previous move">${ICON.prev}</button>
-          <button class="icon" type="button" id="nNext" aria-label="Next move">${ICON.next}</button>
-          <button class="icon" type="button" id="nBl" aria-label="Jump to the position before your move">${ICON.blunder}</button>
-        </div>
-        <span class="navlabel" id="navLabel" aria-live="polite"></span>
-      </div>
+      ${stepsHtml("n", { mark: "Jump to the position before your move" })}
       <label class="toggle"><input type="checkbox" id="tBest" ${showBest ? "checked" : ""}> Show best move on the board</label>
       <div class="legend"><span><i class="l-played"></i>Your move</span><span><i class="l-best"></i>Best move</span></div>
     </div>
@@ -259,23 +254,24 @@ function renderDetail() {
         <div class="saved" id="savedMsg" aria-live="polite"></div></div>
       <div class="dfoot">
         <div class="rtrow">${statusPill(e.status, e.due_on)}<span class="small">Next re-test ${due}</span></div>
-        <button class="btn ghost danger" type="button" id="delBtn">Delete this entry</button>
+        <div class="delask" id="delBox"><button class="btn ghost danger" type="button" id="delBtn">Delete this entry</button></div>
       </div>
     </div>
   </div>`;
+  const pos = positions(e);
+  steps = bindSteps("n", {
+    last: () => pos.fens.length - 1,
+    get: () => ply,
+    set: (to) => { ply = to; drawBoard(); },
+    mark: () => pos.blunder,
+  });
   drawBoard();
   renderCauses();
   showExplanation($("explain"), e.id, e.explanation, e.judgment);
-  const pos = positions(e);
-  const step = (to) => () => { ply = Math.max(0, Math.min(pos.fens.length - 1, to())); drawBoard(); };
-  $("nFirst").onclick = step(() => 0);
-  $("nPrev").onclick = step(() => ply - 1);
-  $("nNext").onclick = step(() => ply + 1);
-  $("nBl").onclick = step(() => pos.blunder);
   $("tBest").onchange = (ev) => { showBest = ev.target.checked; drawBoard(); };
   $("tThink").addEventListener("input", (ev) => edit("thinking", ev.target.value));
   $("tLesson").addEventListener("input", (ev) => edit("lesson", ev.target.value));
-  $("delBtn").onclick = remove;
+  $("delBtn").addEventListener("click", askDelete);
 }
 
 function drawBoard() {
@@ -295,9 +291,8 @@ function drawBoard() {
   }
   const label = positionLabel(e, pos);
   renderBoard($("dBoard"), pos.fens[ply], e.game.my_color, { hl, arrows, label });
-  $("navLabel").textContent = label;
-  $("nFirst").disabled = $("nPrev").disabled = ply === 0;
-  $("nNext").disabled = ply === pos.fens.length - 1;
+  $("nLabel").textContent = label;
+  steps.sync();
 }
 
 function positionLabel(e, pos) {
@@ -349,6 +344,7 @@ function toggleCause(cause) {
 function edit(field, value, { now = false } = {}) {
   entry[field] = value;
   unsaved.set(field, value);
+  savedMessage("Saving…");
   clearTimeout(saveTimer);
   if (now) flush();
   else saveTimer = setTimeout(flush, SAVE_DELAY_MS);
@@ -363,11 +359,11 @@ function flush() {
   saving = saving.then(async () => {
     try {
       await api(`/api/blunders/${id}`, { method: "PATCH", body });
-      if (id === currentId) savedMessage("Saved");
+      if (id === currentId && !unsaved.size) savedMessage("Saved");
     } catch (err) {
       if (id !== currentId) { toast("A note wasn't saved: " + err.message); return; }
       for (const [field, value] of Object.entries(body)) if (!unsaved.has(field)) unsaved.set(field, value);
-      savedMessage("Not saved: " + err.message + " It will try again when you type.", true);
+      savedMessage("Not saved: " + err.message, true);
     }
   });
   return saving;
@@ -381,27 +377,55 @@ function sendNow() {
   unsaved.clear();
 }
 
-let savedTimer = null;
+/** The save line under your notes: "Saving…", then "Saved" until the next change. A save
+ *  that failed stays in red, with "Try again". */
 function savedMessage(text, failed = false) {
   const msg = $("savedMsg");
   if (!msg) return;
   msg.textContent = text;
   msg.classList.toggle("fail", failed);
-  clearTimeout(savedTimer);
-  if (!failed) savedTimer = setTimeout(() => { msg.textContent = ""; }, 1200);
+  if (!failed) return;
+  const again = document.createElement("button");
+  again.type = "button";
+  again.className = "btn ghost";
+  again.textContent = "Try again";
+  again.addEventListener("click", () => { savedMessage("Saving…"); flush(); });
+  msg.append(" ", again);
 }
 
 // ---------------------------------------------------------------- delete
 
+const entryName = (e) => moveLabel(e.move_no, e.game.my_color) + e.played_san + MARK[e.judgment];
+
+/** "Delete this entry" asks in its own place: Delete or Keep (Escape keeps). */
+function askDelete() {
+  const box = $("delBox");
+  box.innerHTML = `<span role="group" aria-label="Delete this entry?">
+      <span class="small">Delete ${esc(entryName(entry))} from your Log? Its game stays, so importing it again won't bring it back.</span>
+      <button class="btn danger" type="button" id="delYes">Delete</button>
+      <button class="btn ghost" type="button" id="delNo">Keep</button>
+    </span>`;
+  const keep = () => {
+    box.innerHTML = '<button class="btn ghost danger" type="button" id="delBtn">Delete this entry</button>';
+    $("delBtn").addEventListener("click", askDelete);
+    $("delBtn").focus();
+  };
+  $("delNo").addEventListener("click", keep);
+  $("delYes").addEventListener("click", remove);
+  box.onkeydown = (ev) => { if (ev.key === "Escape" && $("delNo")) keep(); };
+  $("delNo").focus();
+}
+
 async function remove() {
   const e = entry;
-  const name = moveLabel(e.move_no, e.game.my_color) + e.played_san + MARK[e.judgment];
-  if (!confirm(`Delete ${name} from your Log? Its game stays in the database, so importing it again won't bring it back.`)) return;
+  const name = entryName(e);
+  $("delYes").disabled = true;
   await flush();
   try {
     await api(`/api/blunders/${e.id}`, { method: "DELETE" });
   } catch (err) {
     toast("Not deleted: " + err.message);
+    if ($("delYes")) $("delYes").disabled = false;
     return;
   }
   const at = items.findIndex((item) => item.id === e.id);
