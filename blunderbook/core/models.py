@@ -342,6 +342,13 @@ class Blunder(NewBlunder):
     updated_at: datetime
 
 
+def needs_notes(blunder: Blunder) -> bool:
+    """Your part is still to write: no confirmed cause, or no lesson. "What I was
+    thinking" doesn't count: you may not remember. (repo.list_entries filters by the same
+    rule in SQL.)"""
+    return not blunder.causes or not blunder.lesson.strip()
+
+
 @dataclass(frozen=True, slots=True)
 class Entry:
     """A blunder with the game it came from, as the Log shows it."""

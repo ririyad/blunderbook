@@ -187,6 +187,7 @@ def test_list_newest_first(client: TestClient, ids: dict[str, int]) -> None:
         "played_on": "2026-10-12",
         "speed": "blitz",
         "tc_label": "3+2",
+        "needs_notes": True,
     }
     assert items[1]["opponent"] == "quickmate77"  # I'm Black there
     assert items[0]["opponent"] is None  # "?" in the FEN entry
@@ -218,8 +219,20 @@ def test_list_filters(client: TestClient, ids: dict[str, int], db_file: Path) ->
     assert listed(client, "?source=lichess&cause=Hung a piece") == [ids["elephant"]]
 
 
+def test_list_by_needs_notes(client: TestClient, ids: dict[str, int], db_file: Path) -> None:
+    everything = listed(client)
+    assert listed(client, "?notes=missing") == everything
+    assert all(item["needs_notes"] for item in client.get("/api/blunders").json())
+    done = {"causes": ["Time trouble"], "lesson": "Check the clock."}
+    assert client.patch(f"/api/blunders/{ids['scholars']}", json=done).status_code == 200
+    assert listed(client, "?notes=missing") == [i for i in everything if i != ids["scholars"]]
+    flags = {item["id"]: item["needs_notes"] for item in client.get("/api/blunders").json()}
+    assert flags == {i: i != ids["scholars"] for i in everything}
+
+
 @pytest.mark.parametrize(
-    "query", ["?source=chess.com", "?status=due", "?cause=Bad luck", "?due=maybe"]
+    "query",
+    ["?source=chess.com", "?status=due", "?cause=Bad luck", "?due=maybe", "?notes=done"],
 )
 def test_list_rejects_unknown_filters(client: TestClient, ids: dict[str, int], query: str) -> None:
     assert client.get("/api/blunders" + query).status_code == 422

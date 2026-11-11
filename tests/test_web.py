@@ -275,6 +275,19 @@ def test_every_board_uses_the_shared_step_controls() -> None:
         assert "const ICON" not in view and 'addEventListener("keydown"' not in view
 
 
+def test_the_log_review_flow_is_wired() -> None:
+    """The Log keeps its filters in the address, asks the API for the entries that need
+    notes, and walks the list; Patterns links into it."""
+    log = (WEB / "js" / "views" / "log.js").read_text("utf-8")
+    assert 'params.set("notes", "missing")' in log
+    assert 'history.replaceState(null, "", address(' in log
+    assert '"#log/" + ' not in log  # every address goes through address()
+    assert "renderPager()" in log and "item.needs_notes" in log
+    patterns = (WEB / "js" / "views" / "patterns.js").read_text("utf-8")
+    assert '"#log?cause=" + encodeURIComponent(cause)' in patterns
+    assert 'href="#log?notes=missing"' in patterns and '"#retest"' in patterns
+
+
 def test_retest_shows_where_the_piece_can_go() -> None:
     """Picking a piece in Re-test puts a dot on each square its legal moves reach."""
     retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")

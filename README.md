@@ -316,6 +316,10 @@ It runs on this computer only, at `127.0.0.1`. Nothing else on your network can 
 the page loads nothing from the internet. Stop it with Ctrl+C.
 
 - **Log** lists your entries, newest first, with filters for source, status and cause.
+  **Needs your notes** keeps the ones with no confirmed cause or no lesson yet (their rows
+  say "needs notes"), and **Previous** / **Next** walk through the list, so you can go
+  through a fresh import one entry after another. The filters are in the address, so a
+  reload or a bookmark keeps them.
   Opening an entry shows:
   - the position before your move, with your move and (if you like) the best move as arrows,
     and step controls (and ← → Home End) to go through the whole game;
@@ -345,7 +349,8 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   the answer. You then see the best line, what you played in the game, your lesson and when
   the position comes back.
 - **Patterns** shows your totals, the causes behind your blunders (solid for confirmed,
-  striped for suggested), blunders by time control, and your re-test history.
+  striped for suggested), blunders by time control, and your re-test history. Click a cause
+  to see its entries in the Log.
 - **Import** takes a pasted PGN, a dropped or chosen `.pgn` file (up to 10 MB), or a FEN
   position, and shows each game's result with links to the new entries and to the game.
   "See these games in Games" opens the list. Games that need a side must be imported on the

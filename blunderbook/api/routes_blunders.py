@@ -2,12 +2,12 @@
 
 import sqlite3
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Response
 
 from blunderbook.core import detect
-from blunderbook.core.models import Color, Entry, Source, Status
+from blunderbook.core.models import Color, Entry, Source, Status, needs_notes
 from blunderbook.db import repo
 
 from .common import Db, explanation_out, found, game_out, not_found, opponent, tc_label
@@ -23,15 +23,18 @@ def list_blunders(
     status: Annotated[list[Status] | None, Query()] = None,
     cause: Cause | None = None,
     due: bool = False,
+    notes: Literal["missing"] | None = None,
 ) -> list[EntrySummary]:
     """The Log, newest first. ``status`` can be given more than once; ``due=1`` keeps
-    entries due today or earlier."""
+    entries due today or earlier; ``notes=missing`` those with no confirmed cause or no
+    lesson."""
     entries = repo.list_entries(
         conn,
         source=source,
         statuses=status or (),
         cause=cause,
         due_by=date.today() if due else None,
+        needs_notes=notes == "missing",
     )
     return [_summary(entry) for entry in entries]
 
@@ -80,6 +83,7 @@ def _summary(entry: Entry) -> EntrySummary:
         played_on=g.played_on,
         speed=g.speed,
         tc_label=tc_label(g),
+        needs_notes=needs_notes(b),
     )
 
 

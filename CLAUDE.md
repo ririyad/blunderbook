@@ -639,7 +639,7 @@ fails; on Windows they exit 0 once the window is started.
 Bind to `127.0.0.1` only. No auth (single local user).
 
 ```
-GET    /api/blunders?source=&status=&cause=&due=1     list (summary fields)
+GET    /api/blunders?source=&status=&cause=&due=1&notes=missing   list (summary fields)
 GET    /api/blunders/{id}                             full entry + game metadata + move list
                                                       + the FEN for each ply (step controls)
 PATCH  /api/blunders/{id}                             {causes?, other_cause?, thinking?, lesson?}
@@ -708,7 +708,9 @@ the entry detail's (`api/common.py`). A FEN entry's game is a 404 here.
 The list is newest first (one game's entries in move order). `cause=` matches entries where
 the cause is confirmed, or where nothing is confirmed yet and it's suggested, as in the demo.
 `status=` can be repeated (`status=solved&status=missed`), and `due=1` means due today or
-earlier.
+earlier. `notes=missing` keeps entries that still need your notes: no confirmed cause, or no
+lesson ("What I was thinking" doesn't count: you may not remember). Each item carries
+`needs_notes` by the same rule (`models.needs_notes`).
 
 The detail's `game.moves` is the whole mainline, read again from the stored PGN, each move with
 the FEN after it. The entry carries your winning chances before and after your move
@@ -774,7 +776,7 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
 `Cache-Control: no-cache`, and `.js` as `text/javascript` (some Windows registries say
 `text/plain`, and browsers then refuse the module).
 
-- **Log:** filter bar (source, status, cause) and list. Detail panel has the board with
+- **Log:** filter bar (source, status, cause, "Needs your notes") and list. Detail panel has the board with
   red arrow and highlight for my move, an optional green arrow for the best move, step
   controls (start / back / forward / end / jump to the blunder), "I played" and "Best was" boxes
   with the refutation and best line, an eval bar with winning chances before → after, a
@@ -798,6 +800,12 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
     (`keepalive`). The save line says "Saving…", then "Saved" until the next change. A
     failed save says so in red, with "Try again", and keeps the text for the next try.
   - Picking an entry sets `#log/<id>` with `replaceState`, so it doesn't add to the history.
+  - The filters are in the address too (`#log/12?status=due&cause=…&notes=missing`), so a
+    link or a reload keeps them. A link with no query (`#log/12`) keeps the filters that are
+    set; `#log?` clears them. A link with filters and no entry opens the first match.
+  - Over the entry: "← Previous", "3 of 12" and "Next →", through the list as it's filtered.
+  - A list row says "needs notes" in amber until the entry has a confirmed cause and a
+    lesson; it clears as soon as you've written them.
   - "See the whole game" opens `#games/<game id>` (not for FEN entries).
 - **Games:** the games you imported (not FEN entries), clean ones too. A filter bar (source,
   result from your side, time control, with or without blunders, a search of opponent and
@@ -829,7 +837,9 @@ or the user goes through `esc()` before it goes into HTML. Files are sent with
   Games". A chosen or dropped file's name goes in `X-Pgn-Name`. A "Quick entry from a FEN" card: FEN, your move (UCI or
   SAN), opponent, date, and the outcome. After either, the view dispatches `entries-changed`.
 - **Patterns:** four tiles, cause bars (solid = confirmed, striped = suggested), by time
-  control, re-test history, a one-line "biggest leak" insight.
+  control, re-test history, a one-line "biggest leak" insight. The numbers link to what's
+  behind them: a cause (and the biggest leak) to `#log?cause=…`, "Blunders logged" to the
+  Log, "Due for re-test" to Re-test, and "Review them" to `#log?notes=missing`.
 - **Print page** (`print.html`): A4, black and white, two entries per page, laid out like
   the original paper Blunder Log (board diagram, game info, I played / Best was, causes
   ticked, thinking, lesson, "Re-tested on ___ ☐ Solved ☐ Missed again"). Printed through the

@@ -363,12 +363,14 @@ def list_entries(
     cause: str | None = None,
     due_by: date | None = None,
     game_id: int | None = None,
+    needs_notes: bool = False,
 ) -> list[Entry]:
     """The Log, newest first. Filters combine; each one left out matches everything.
 
     ``cause`` matches entries where you confirmed it, or where you haven't confirmed any
     cause yet and it's suggested (as the demo's Log does). ``due_by`` keeps entries due on
-    or before that day.
+    or before that day. ``needs_notes`` keeps entries with no confirmed cause or no lesson
+    (``models.needs_notes``).
     """
     where: list[str] = []
     params: dict[str, Any] = {}
@@ -393,6 +395,12 @@ def list_entries(
     if game_id is not None:
         where.append("b.game_id = :game_id")
         params["game_id"] = game_id
+    if needs_notes:
+        # Python's str.strip() drops more kinds of space than SQL's trim(): name the usual ones.
+        where.append(
+            "(json_array_length(b.causes) = 0"
+            " OR trim(b.lesson, ' ' || char(9) || char(10) || char(13)) = '')"
+        )
     sql = _SELECT_ENTRY + (" WHERE " + " AND ".join(where) if where else "") + _ENTRY_ORDER
     return [_entry(row) for row in conn.execute(sql, params)]
 

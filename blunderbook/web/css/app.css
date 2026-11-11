@@ -105,6 +105,12 @@ textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px soli
 .filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:12px 12px 8px}
 .filters select:last-of-type{grid-column:1/-1}
 .filters select{font-size:12.5px;width:100%;min-width:0}
+.filters .fnotes{grid-column:1/-1;justify-content:center}
+.item .todo{color:var(--amber);font-weight:600}
+/* Previous / Next entry, over the entry */
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 22px;border-bottom:1px solid var(--line)}
+.pager .btn{min-height:30px;padding:3px 12px;font-size:12.5px}
+@media (max-width:480px){.pager{padding:10px 14px}}
 .count{margin:0;padding:0 14px 8px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);min-height:26px}
 .list{list-style:none;margin:0;padding:6px;overflow:auto;flex:1;min-height:0}
 @media (max-width:900px){.list{max-height:420px}}
@@ -251,6 +257,8 @@ button.sq:focus-visible{outline:3px solid var(--blue);outline-offset:-3px}
 .tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 @media (max-width:760px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tile{padding:16px 18px}
+a.tile{display:block;color:inherit;text-decoration:none;transition:border-color .12s,background .12s}
+a.tile:hover{border-color:#a8a193;background:var(--soft)}
 .tile .k{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .tile .v{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px;letter-spacing:-.01em}
 .tile .s{font-size:12px;color:var(--muted);margin-top:2px}

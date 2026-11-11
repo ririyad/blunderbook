@@ -1,6 +1,9 @@
 // The Patterns view, ported from the demo (CLAUDE.md §7.9, §11): four tiles, what causes
 // your blunders (solid = confirmed, striped = suggested), by time control, the re-test
 // history and a one-line "biggest leak". The server does the counting.
+//
+// The numbers link to what's behind them: a cause to the Log filtered by it, the tiles to
+// the Log and Re-test, the striped bars to the entries that still need your notes.
 
 import { api } from "../api.js";
 import { SOURCE_TAG, markText, moveLabel, plural, statusPill } from "../format.js";
@@ -46,7 +49,7 @@ function render(p) {
   <div class="two">
     <div class="panel card">
       <h3>What causes your blunders</h3>
-      <p class="small">Solid = causes you confirmed. Striped = auto-suggested on entries you haven't reviewed yet.</p>
+      <p class="small">Solid = causes you confirmed. Striped = auto-suggested on entries you haven't reviewed yet. <a href="#log?notes=missing">Review them</a></p>
       ${causes(p)}
     </div>
     <div class="panel card">
@@ -59,15 +62,19 @@ function render(p) {
   </div>`;
 }
 
-function tile(key, value, sub) {
-  return `<div class="panel tile"><div class="k">${key}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+/** A tile; with `href` the whole tile is a link to what it counts. */
+function tile(key, value, sub, href = null) {
+  const inner = `<div class="k">${key}</div><div class="v">${value}</div><div class="s">${sub}</div>`;
+  return href ? `<a class="panel tile" href="${href}">${inner}</a>` : `<div class="panel tile">${inner}</div>`;
 }
+
+const byCause = (cause) => "#log?cause=" + encodeURIComponent(cause);
 
 function tiles(p) {
   const sources = p.by_source.map((s) => `${s.count} ${esc(SOURCE_TAG[s.source])}`).join(" · ");
   return [
-    tile("Blunders logged", p.total, sources),
-    tile("Due for re-test", p.due, `${plural(p.retests_done, "re-test", "re-tests")} done so far`),
+    tile("Blunders logged", p.total, sources, "#log?"),
+    tile("Due for re-test", p.due, `${plural(p.retests_done, "re-test", "re-tests")} done so far`, "#retest"),
     tile(
       "Currently solved",
       p.solved_pct == null ? '<span class="na">—</span>' : `${p.solved_pct}%`,
@@ -90,7 +97,7 @@ function causes(p) {
   const max = Math.max(1, ...p.causes.map((c) => c.confirmed + c.suggested));
   const rows = p.causes.map((c) => `
     <div class="hbar">
-      <span>${esc(c.cause)}</span>
+      <a class="hist" href="${esc(byCause(c.cause))}" title="See these entries in the Log">${esc(c.cause)}</a>
       <div class="track" role="img" aria-label="${c.confirmed} confirmed, ${c.suggested} suggested">
         <div class="c" style="width:${pct(c.confirmed, max)}%"></div><div class="s" style="width:${pct(c.suggested, max)}%"></div>
       </div>
@@ -98,7 +105,7 @@ function causes(p) {
     </div>`).join("");
   const leak = p.biggest_leak;
   const insight = leak
-    ? `<div class="insight"><b>Biggest leak: ${esc(leak)}.</b> ${esc(ADVICE[leak] || GENERAL_ADVICE)}</div>`
+    ? `<div class="insight"><b>Biggest leak: ${esc(leak)}.</b> ${esc(ADVICE[leak] || GENERAL_ADVICE)} <a href="${esc(byCause(leak))}">See these entries</a></div>`
     : "";
   return rows + insight;
 }

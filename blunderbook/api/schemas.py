@@ -45,6 +45,7 @@ class EntrySummary(BaseModel):
     played_on: date | None
     speed: Speed | None
     tc_label: str | None  # "3+2"; None when the time control is unknown
+    needs_notes: bool  # no confirmed cause, or no lesson yet
 
 
 class MoveOut(BaseModel):

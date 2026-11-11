@@ -11,7 +11,7 @@ from pathlib import Path
 import chess
 import pytest
 
-from blunderbook.core.models import Batch, Eval, NewBlunder, NewGame
+from blunderbook.core.models import Batch, Eval, NewBlunder, NewGame, needs_notes
 from blunderbook.db import connection, repo
 
 NOW = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
@@ -231,6 +231,21 @@ def log(conn: sqlite3.Connection) -> dict[str, int]:
 
 def test_log_order_newest_first_then_move_order(conn: sqlite3.Connection, log: dict) -> None:
     assert ids(repo.list_entries(conn)) == [log["b1"], log["a1"], log["a2"]]
+
+
+def test_filter_by_needs_notes(conn: sqlite3.Connection, log: dict) -> None:
+    """No confirmed cause, or no lesson; what you were thinking doesn't count."""
+    everything = ids(repo.list_entries(conn))
+    assert ids(repo.list_entries(conn, needs_notes=True)) == everything
+    repo.update_notes(conn, log["a1"], causes=["Time trouble"])  # a cause, no lesson
+    repo.update_notes(conn, log["a2"], lesson="Count the attackers.")  # a lesson, no cause
+    repo.update_notes(conn, log["b1"], causes=["Wrong plan"], lesson=" \n\t")  # a blank lesson
+    assert ids(repo.list_entries(conn, needs_notes=True)) == everything
+    repo.update_notes(conn, log["a1"], lesson="Check the clock.", thinking="")
+    left = [i for i in everything if i != log["a1"]]
+    assert ids(repo.list_entries(conn, needs_notes=True)) == left
+    for entry in repo.list_entries(conn):
+        assert needs_notes(entry.blunder) == (entry.blunder.id in left)
 
 
 def test_same_import_orders_by_game_date(conn: sqlite3.Connection) -> None:

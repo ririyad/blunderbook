@@ -23,10 +23,10 @@ _Last updated: 2026-11-11_
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
-| M14 Page polish | In progress (2/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
+| M14 Page polish | In progress (3/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 
-**Next up:** 14.3, the review flow: "Needs your notes", the Log's filters in the address,
-Previous / Next entry, and Patterns linking into the Log. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 14.4, import and re-test feedback: the percentage on the Import tab, a toast
+when an import ends, and a Re-test session summary. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1126,8 +1126,29 @@ the shell, the styles and every view. See Decided.
           the entry and opens the next;
         - `#log/5` at 390 px, the delete question open: no sideways scroll.
         No console errors.
-- [ ] **14.3** Review flow: "Needs your notes" (`?notes=missing`, `needs_notes`), the Log's
-      filters in the address, Previous / Next entry, and Patterns linking into the Log.
+- [x] **14.3** Review flow.
+      _Done:_
+      - **"Needs your notes":** an entry with no confirmed cause or no lesson
+        (`models.needs_notes`; the same rule in SQL in `repo.list_entries`).
+        `GET /api/blunders?notes=missing` keeps those, and each list item carries
+        `needs_notes`. In the Log: a "Needs your notes" toggle in the filter bar, and "needs
+        notes" in amber on a row, which clears as soon as you've written both.
+      - **The Log's filters are in the address** (`#log/12?status=due&cause=…&notes=missing`),
+        written with `replaceState`. A link with no query keeps the filters that are set,
+        `#log?` clears them, and a link with filters and no entry opens the first match.
+      - **Previous / Next** over the entry, with "3 of 12", through the filtered list. An
+        entry the filters leave out says so.
+      - **Patterns links to what's behind its numbers:** each cause and the biggest leak to
+        `#log?cause=…`, "Blunders logged" to the Log, "Due for re-test" to Re-test, and
+        "Review them" to `#log?notes=missing`.
+      - **Tests** (4 more): the repo's filter (a cause but no lesson, a lesson but no cause,
+        a blank lesson, both), the API's `notes=missing` and `needs_notes`, `notes=done`
+        refused, and the page's wiring.
+      - **Checked in headless Chrome:** Next moves through the list and the address follows;
+        the toggle narrows the list; confirming a cause and writing a lesson clears "needs
+        notes" on the row; a Patterns cause opens the Log filtered by it (other filters
+        cleared), and a reload keeps it; `#log?notes=missing`; `#log/2` keeps the filters;
+        `#log?` clears them. No console errors.
 - [ ] **14.4** Import and Re-test feedback: the percentage on the Import tab, a toast when
       an import ends, a Re-test session summary.
 
@@ -1436,5 +1457,7 @@ None open.
     review flow for going through new entries, and feedback for imports and re-test sessions.
   - **Left out, by choice:** dragging pieces in Re-test, and a dark theme. Also a side picker
     for web imports (still out of v1), Games filters in the address, a promotion picker.
+  - **"Needs your notes"** means no confirmed cause or no lesson. "What I was thinking" isn't
+    required: for an old game you may not remember, and the entry shouldn't nag for ever.
   - **The phone header** scrolls its tabs sideways rather than wrapping or hiding them in a
     menu: every tab stays one tap away, and extensions add more.

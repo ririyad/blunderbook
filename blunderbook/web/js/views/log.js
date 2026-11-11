@@ -2,7 +2,9 @@
 // right the board with step controls, I played / Best was, the eval bar, the game's details,
 // cause chips and your notes, which save as you type.
 //
-// `#log/12` opens entry 12. Picking an entry updates the address without adding to history.
+// `#log/12` opens entry 12, and the filters are in the address too
+// (`#log/12?status=due&cause=…&notes=missing`), so a link or a reload keeps them. Picking an
+// entry or a filter updates the address without adding to history.
 
 import { api } from "../api.js";
 import { renderBoard, uciSquares } from "../board.js";
@@ -37,15 +39,44 @@ const na = (v) => (v == null || v === "" ? '<span class="na">—</span>' : esc(v
 
 export async function show(section, rest) {
   if (root !== section) build(section);
-  const wanted = Number.parseInt(rest, 10);
+  const [path, asked] = (rest || "").split("?");
+  if (asked !== undefined) setFilters(new URLSearchParams(asked)); // none given: they stay
+  const wanted = Number.parseInt(path, 10);
   if (!(await refreshList())) {
     $("detail").replaceChildren();
     return;
   }
-  const id = Number.isInteger(wanted) ? wanted : (currentId ?? items[0]?.id ?? null);
+  let id = Number.isInteger(wanted) ? wanted : currentId;
+  // A link with filters and no entry (from Patterns) opens the first one that matches.
+  if (id === null || (!Number.isInteger(wanted) && asked !== undefined && !items.some((item) => item.id === id))) {
+    id = items[0]?.id ?? null;
+  }
+  history.replaceState(null, "", address(id));
   if (id === null) renderNoEntry();
   else await select(id);
 }
+
+/** The address of entry `id` (or of the list) with the filters that are set. */
+function address(id) {
+  const params = new URLSearchParams();
+  for (const [name, el] of [["source", "fSource"], ["status", "fStatus"], ["cause", "fCause"]]) {
+    if ($(el).value) params.set(name, $(el).value);
+  }
+  if (notesOnly()) params.set("notes", "missing");
+  const text = params.toString();
+  return "#log" + (id === null ? "" : "/" + id) + (text ? "?" + text : "");
+}
+
+/** Set the filters from an address. One that isn't given, or isn't a choice, is cleared. */
+function setFilters(params) {
+  for (const [name, el] of [["source", "fSource"], ["status", "fStatus"], ["cause", "fCause"]]) {
+    const value = params.get(name) || "";
+    $(el).value = [...$(el).options].some((o) => o.value === value) ? value : "";
+  }
+  $("fNotes").setAttribute("aria-pressed", String(params.get("notes") === "missing"));
+}
+
+const notesOnly = () => $("fNotes").getAttribute("aria-pressed") === "true";
 
 // ---------------------------------------------------------------- list
 
@@ -61,25 +92,31 @@ function build(section) {
         <select id="fStatus"><option value="">Any status</option><option value="due">Due for re-test</option><option value="new">New</option><option value="missed">Missed again</option><option value="solved">Solved</option></select>
         <label class="sr" for="fCause">Cause</label>
         <select id="fCause"><option value="">Any cause</option>${CAUSES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
+        <button class="chip fnotes" type="button" id="fNotes" aria-pressed="false" title="Entries with no confirmed cause or no lesson yet">Needs your notes</button>
       </div>
       <p class="count" id="count" aria-live="polite"></p>
       <ul class="list" id="list" aria-label="Entries"></ul>
     </aside>
     <article class="panel" id="detail" aria-label="Entry"></article>
   </div>`;
-  for (const id of ["fSource", "fStatus", "fCause"]) {
-    $(id).addEventListener("change", async () => {
-      await refreshList();
-      if (currentId === null && items.length) await select(items[0].id);
-    });
-  }
+  const filtered = async () => {
+    if (!(await refreshList())) return;
+    if (currentId === null && items.length) await select(items[0].id);
+    else renderPager();
+    history.replaceState(null, "", address(currentId));
+  };
+  for (const id of ["fSource", "fStatus", "fCause"]) $(id).addEventListener("change", filtered);
+  $("fNotes").addEventListener("click", () => {
+    $("fNotes").setAttribute("aria-pressed", String(!notesOnly()));
+    filtered();
+  });
   window.addEventListener("pagehide", sendNow);
 }
 
 const options = (names) =>
   Object.entries(names).map(([value, label]) => `<option value="${value}">${esc(label)}</option>`).join("");
 
-const filtering = () => ["fSource", "fStatus", "fCause"].some((id) => $(id).value);
+const filtering = () => ["fSource", "fStatus", "fCause"].some((id) => $(id).value) || notesOnly();
 
 /** The filters as API query parameters. "Due for re-test" is due and re-tested before. */
 function query() {
@@ -92,6 +129,7 @@ function query() {
     params.append("status", "missed");
   } else if (status) params.set("status", status);
   if ($("fCause").value) params.set("cause", $("fCause").value);
+  if (notesOnly()) params.set("notes", "missing");
   const text = params.toString();
   return text ? "?" + text : "";
 }
@@ -131,6 +169,7 @@ function renderList() {
     const when = [];
     if (item.source !== "fen") when.push(esc(timeControl(item.speed, item.tc_label) || "No time control"));
     if (item.played_on) when.push(esc(fmtDate(item.played_on)));
+    if (item.needs_notes) when.push('<span class="todo">needs notes</span>');
     const li = document.createElement("li");
     li.innerHTML = `<button class="item" type="button" aria-current="${item.id === currentId}">`
       + markPill(item.judgment)
@@ -156,7 +195,7 @@ function markCurrent() {
 }
 
 async function pick(id) {
-  history.replaceState(null, "", "#log/" + id);
+  history.replaceState(null, "", address(id));
   await select(id);
   if (window.matchMedia(NARROW).matches) $("detail").scrollIntoView({ block: "start" });
 }
@@ -181,6 +220,23 @@ async function select(id) {
   entry = data;
   ply = positions(entry).blunder;
   renderDetail();
+}
+
+/** Previous / Next over the list as it's filtered, and "3 of 12". */
+function renderPager() {
+  const box = $("pager");
+  if (!box || !entry) return;
+  const at = items.findIndex((item) => item.id === entry.id);
+  const to = (i, label) => {
+    const item = items[i];
+    return `<button class="btn ghost" type="button" data-id="${item ? item.id : ""}" ${item ? "" : "disabled"}>${label}</button>`;
+  };
+  box.innerHTML = at < 0
+    ? '<span class="small">Not in the list: it doesn\'t match the filters.</span>'
+    : `${to(at - 1, "← Previous")}<span class="small" aria-live="polite">${at + 1} of ${items.length}</span>${to(at + 1, "Next →")}`;
+  for (const b of box.querySelectorAll("button[data-id]")) {
+    if (b.dataset.id) b.addEventListener("click", () => pick(Number(b.dataset.id)));
+  }
 }
 
 function renderNoEntry() {
@@ -215,6 +271,7 @@ function renderDetail() {
   if (g.played_on) meta.push(esc(fmtDate(g.played_on)));
   const due = isDue(e.due_on) ? "<b>today</b>" : esc(fmtDate(e.due_on));
   $("detail").innerHTML = `
+  <nav class="pager" id="pager" aria-label="Entries in the list"></nav>
   <div class="detail">
     <div class="boardwrap">
       <div class="board" id="dBoard"></div>
@@ -267,6 +324,7 @@ function renderDetail() {
   });
   drawBoard();
   renderCauses();
+  renderPager();
   showExplanation($("explain"), e.id, e.explanation, e.judgment);
   $("tBest").onchange = (ev) => { showBest = ev.target.checked; drawBoard(); };
   $("tThink").addEventListener("input", (ev) => edit("thinking", ev.target.value));
@@ -360,6 +418,7 @@ function flush() {
     try {
       await api(`/api/blunders/${id}`, { method: "PATCH", body });
       if (id === currentId && !unsaved.size) savedMessage("Saved");
+      if (id === currentId) noteWritten();
     } catch (err) {
       if (id !== currentId) { toast("A note wasn't saved: " + err.message); return; }
       for (const [field, value] of Object.entries(body)) if (!unsaved.has(field)) unsaved.set(field, value);
@@ -367,6 +426,17 @@ function flush() {
     }
   });
   return saving;
+}
+
+/** The list's "needs notes" follows what you just wrote: a cause and a lesson clear it. */
+function noteWritten() {
+  const item = items.find((i) => i.id === entry.id);
+  const needs = !entry.causes.length || !entry.lesson.trim();
+  if (!item || item.needs_notes === needs) return;
+  item.needs_notes = needs;
+  const top = $("list").scrollTop;
+  renderList();
+  $("list").scrollTop = top;
 }
 
 /** Closing the page: send what's left without waiting. */
@@ -433,11 +503,7 @@ async function remove() {
   entriesChanged();
   toast(`Deleted ${name} from your Log.`);
   const next = items[Math.min(Math.max(at, 0), items.length - 1)];
-  if (next) {
-    history.replaceState(null, "", "#log/" + next.id);
-    await select(next.id);
-  } else {
-    history.replaceState(null, "", "#log");
-    renderNoEntry();
-  }
+  history.replaceState(null, "", address(next ? next.id : null));
+  if (next) await select(next.id);
+  else renderNoEntry();
 }
