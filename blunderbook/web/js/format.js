@@ -18,6 +18,16 @@ export const markPill = (judgment) => judgment === "missed"
   ? '<span class="pill p-missed-win">Missed win</span>'
   : `<span class="pill p-blunder">${MARK[judgment]}</span>`;
 
+/** An entry's re-test pill: New, Due, Solved or Missed. */
+export function statusPill(status, dueOn) {
+  if (status === "new") return '<span class="pill p-new">New</span>';
+  if (isDue(dueOn)) return '<span class="pill p-due">Due</span>';
+  return status === "solved" ? '<span class="pill p-solved">Solved</span>' : '<span class="pill p-missed">Missed</span>';
+}
+
+/** "1 game", "3 games". */
+export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
 /** "6. " for White, "5... " for Black. */
 export const moveLabel = (moveNo, color) => moveNo + (color === "white" ? ". " : "... ");
 

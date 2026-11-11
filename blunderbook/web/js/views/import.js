@@ -6,7 +6,7 @@
 // A file is sent as its raw bytes, so the server reads its encoding (UTF-8 or Windows-1252).
 
 import { api } from "../api.js";
-import { MARK } from "../format.js";
+import { MARK, plural } from "../format.js";
 import { entriesChanged, esc, showError } from "../ui.js";
 
 const PGN_TYPE = "application/x-chess-pgn";
@@ -32,7 +32,6 @@ let pollTimer = null;
 let lastStatus = null;
 
 const $ = (id) => document.getElementById(id);
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /** "2 blunders", "1 missed win", or "1 blunder and 1 missed win". */
 function entriesFound(entries) {

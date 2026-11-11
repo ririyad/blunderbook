@@ -12,7 +12,7 @@
 
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
-import { MARK, fmtDate, markText } from "/js/format.js";
+import { MARK, fmtDate, markText, plural } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
 
 const FILTERS = ["player", "color", "result", "opening", "phase"];
@@ -45,7 +45,6 @@ let jobId = sessionStorage.getItem(SAVED_JOB); // the import shown on #collectio
 let pollTimer = null;
 
 const $ = (id) => document.getElementById(id);
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const num = (v) => (v == null ? "—" : String(Math.round(v)));
 const pair = (a, b) => `${num(a)} · ${num(b)}`;
 

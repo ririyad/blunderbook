@@ -1,13 +1,14 @@
 // The page shell: hash router (#log, #games, #retest, #patterns, #import, and a tab per
-// extension) and the Re-test badge. A route can carry more after a slash (#log/12); the
-// view gets that part.
+// extension) and the Re-test badge. A route can carry more after a slash (#log/12) and a
+// query (#log/12?cause=…, #log?cause=…); the view gets both, as "12?cause=…" or "?cause=…".
+// Opening another tab starts at the top of the page; a route inside a tab doesn't scroll.
 //
 // Extensions (CLAUDE.md §15) are listed by /api/extensions. Each gets a tab and a section;
 // its /ext/<name>/view.js is loaded the first time its tab opens, and has the same
 // show(root, rest) as the built-in views.
 
 import { api } from "./api.js";
-import { showError } from "./ui.js";
+import { onRetry, showError } from "./ui.js";
 import * as games from "./views/games.js";
 import * as importView from "./views/import.js";
 import * as log from "./views/log.js";
@@ -18,22 +19,31 @@ const VIEWS = { log, games, retest, patterns, import: importView };
 const TITLES = { log: "Log", games: "Games", retest: "Re-test", patterns: "Patterns", import: "Import" };
 const DEFAULT = "log";
 const extensions = new Map(); // name -> its view module, a promise once it's asked for
+let open = null; // the tab that's showing
 
 function route() {
-  const [name, ...rest] = location.hash.replace(/^#/, "").split("/");
+  const hash = location.hash.replace(/^#/, "");
+  const at = hash.indexOf("?");
+  const query = at < 0 ? "" : hash.slice(at);
+  const [name, ...rest] = (at < 0 ? hash : hash.slice(0, at)).split("/");
   if (!(name in VIEWS) && !extensions.has(name)) {
     history.replaceState(null, "", "#" + DEFAULT);
     show(DEFAULT, "");
     return;
   }
-  show(name, rest.join("/"));
+  show(name, rest.join("/") + query);
 }
 
 async function show(name, rest) {
   for (const tab of document.querySelectorAll(".tab")) {
-    if (tab.dataset.view === name) tab.setAttribute("aria-current", "page");
-    else tab.removeAttribute("aria-current");
+    if (tab.dataset.view === name) {
+      tab.setAttribute("aria-current", "page");
+      // On a phone the tabs are one row that scrolls sideways.
+      if (open !== name) tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else tab.removeAttribute("aria-current");
   }
+  if (open !== null && open !== name) window.scrollTo(0, 0);
+  open = name;
   for (const view of document.querySelectorAll(".view")) {
     view.classList.toggle("on", view.id === "view-" + name);
   }
@@ -106,6 +116,7 @@ async function refreshBadge() {
 }
 
 window.addEventListener("hashchange", route);
+onRetry(() => { route(); refreshBadge(); });
 document.addEventListener("entries-changed", refreshBadge);
 await addExtensions(); // first: #library/... must find its tab
 route();

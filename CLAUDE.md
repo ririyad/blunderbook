@@ -133,7 +133,7 @@ blunderbook/
 │       ├── js/app.js          # router (hash-based: #log, #retest, #patterns)
 │       ├── js/api.js          # fetch helper: JSON in and out, the server's error message
 │       ├── js/ui.js           # esc(), toast, the error line
-│       ├── js/format.js       # pure display helpers: evals, clocks, dates, results
+│       ├── js/format.js       # pure display helpers: evals, clocks, dates, results, pills
 │       ├── js/causes.js       # the fixed cause list (a test checks it against CAUSES)
 │       ├── js/explain.js      # the optional AI explanation block (Log and Re-test)
 │       ├── js/board.js        # board renderer (ported from the demo)
@@ -748,8 +748,13 @@ a due-count badge on Re-test. Games are added on the Import tab or on the CLI
 
 The shell:
 - Tabs are links (`<a href="#log">`, `aria-current="page"` on the open one).
-- A route can carry more after a slash (`#log/12`), which goes to the view. An unknown route
-  goes to `#log`.
+- A route can carry more after a slash (`#log/12`) and a query (`#log?cause=…`,
+  `#log/12?cause=…`); both go to the view. An unknown route goes to `#log`.
+- Opening another tab starts at the top of the page. A route inside a tab doesn't scroll.
+- The error line above the views has "Try again" (loads the open tab again) and "Dismiss".
+- Under 640 px the tagline is hidden and the tabs are one row that scrolls sideways; the
+  header stays at the top. On a touch screen controls are at least 44 px high.
+- A tab that hasn't drawn anything yet says "Loading…" after 300 ms.
 - The badge counts entries due today or earlier, new ones included, and is hidden at 0.
 - Each view is a module in `js/views/` with `show(root, rest)`. After a change, a view
   dispatches `entries-changed`, and the badge updates.
@@ -913,6 +918,8 @@ Design language (from the demo and the paper template):
 12. **Collection (extension):** a collection of anyone's games, analysed.
 13. **Missed wins:** log a mate or a big gain you didn't take, even when you stay winning,
     and suggest "Missed my tactic" (§7.6, §7.7).
+14. **Page polish:** the shell (scroll, error line, phone header), one board with step
+    controls, a review flow in the Log, and import and re-test feedback.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -1000,7 +1007,7 @@ extension = ext.Extension(
   (`score_positions` is pass 1 on its own), `models`.
 - Nothing else: not `db`, `config`, `api`, `cli`, `importer`, `ai` or `sources`.
 - On the page, Blunderbook's modules by absolute path: `/js/api.js` (`api`, `ApiError`),
-  `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` and `/js/board.js`
+  `/js/ui.js` (`esc`, `toast`, `showError`), `/js/format.js` (dates, evals, marks, `plural`) and `/js/board.js`
   (`renderBoard`, `fenToBoard`, `squareLabel`, square helpers). A test checks these exports
   stay. Its own modules by relative path.
 - On the page, the page's shared CSS classes (`webcheck.SHARED_CLASSES`), so its tab looks

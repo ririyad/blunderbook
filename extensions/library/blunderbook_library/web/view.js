@@ -8,7 +8,7 @@
 
 import { api } from "/js/api.js";
 import { renderBoard, uciSquares } from "/js/board.js";
-import { MARK, fmtDate } from "/js/format.js";
+import { MARK, fmtDate, plural } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
 import * as practise from "./practise.js";
 
@@ -29,7 +29,6 @@ let listScroll = 0; // where the index was, for "← Library"
 let token = 0; // only the newest answer is drawn
 
 const $ = (id) => document.getElementById(id);
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const sideName = (side) => (side === "white" ? "White" : "Black");
 
 export async function show(section, rest) {

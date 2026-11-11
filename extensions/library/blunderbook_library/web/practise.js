@@ -8,7 +8,7 @@
 
 import { api } from "/js/api.js";
 import { renderBoard, sqIdx, sqName, uciSquares } from "/js/board.js";
-import { fmtDate } from "/js/format.js";
+import { fmtDate, plural } from "/js/format.js";
 import { esc, showError, toast } from "/js/ui.js";
 
 export const QUEUE = "/api/ext/library/practise";
@@ -31,7 +31,6 @@ let hintSquare = null; // the hint's square, kept lit while you pick a piece
 let done = false;
 
 const $ = (id) => document.getElementById(id);
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export async function show(container, to) {
   box = container;

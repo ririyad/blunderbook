@@ -7,7 +7,7 @@
 import { api } from "../api.js";
 import { renderBoard, uciSquares } from "../board.js";
 import {
-  JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtDate, isDue, localDay, markPill, moveLabel, timeControl,
+  JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtDate, localDay, markPill, moveLabel, plural, statusPill, timeControl,
 } from "../format.js";
 import { esc, showError } from "../ui.js";
 
@@ -32,7 +32,6 @@ let searchTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const na = (v) => (v == null || v === "" ? '<span class="na">—</span>' : esc(v));
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export async function show(section, rest) {
   if (root !== section) build(section);
@@ -304,12 +303,6 @@ function entriesHtml(entries, g) {
       ${statusPill(e.status, e.due_on)}
       <span class="small">Open in the Log</span>
     </a></li>`).join("") + "</ul>";
-}
-
-function statusPill(status, dueOn) {
-  if (status === "new") return '<span class="pill p-new">New</span>';
-  if (isDue(dueOn)) return '<span class="pill p-due">Due</span>';
-  return status === "solved" ? '<span class="pill p-solved">Solved</span>' : '<span class="pill p-missed">Missed</span>';
 }
 
 /** The move list in rows of a move number, White's move and Black's. Position i + 1 is

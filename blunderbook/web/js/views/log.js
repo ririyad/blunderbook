@@ -10,7 +10,7 @@ import { CAUSES } from "../causes.js";
 import { showExplanation } from "../explain.js";
 import {
   JUDGMENT_WORD, MARK, SOURCE_NAME, SOURCE_TAG, fmtClock, fmtDate, fmtEval, fmtSpent, isDue, moveLabel,
-  markPill, outcome, percent, timeControl,
+  markPill, outcome, percent, statusPill, timeControl,
 } from "../format.js";
 import { entriesChanged, esc, showError, toast } from "../ui.js";
 
@@ -117,12 +117,6 @@ async function refreshList() {
   items = found;
   renderList();
   return true;
-}
-
-function statusPill(status, dueOn) {
-  if (status === "new") return '<span class="pill p-new">New</span>';
-  if (isDue(dueOn)) return '<span class="pill p-due">Due</span>';
-  return status === "solved" ? '<span class="pill p-solved">Solved</span>' : '<span class="pill p-missed">Missed</span>';
 }
 
 const sourceTag = (source) => `<span class="src s-${esc(source)}">${esc(SOURCE_TAG[source] || source)}</span>`;

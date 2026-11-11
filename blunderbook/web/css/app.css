@@ -31,7 +31,16 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:
 .tab:hover{color:var(--ink);background:var(--hover)}
 .tab[aria-current="page"]{background:var(--ink);color:#fff}
 .badge{background:var(--red);color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:0 6px;min-width:18px;text-align:center;line-height:18px}
-@media (max-width:640px){.top{position:static;min-height:0}}
+/* a phone: no tagline, and the tabs are one row that scrolls sideways */
+@media (max-width:640px){
+  :root{--head:88px}
+  .top{gap:6px;padding:10px 0 8px;margin-bottom:14px}
+  .brand h1{font-size:22px}
+  .brand span{display:none}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;width:100%;scrollbar-width:none;padding:2px 0}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none}
+}
 
 /* controls */
 .btn{border:1px solid var(--ink);background:var(--panel);border-radius:var(--radius-sm);min-height:34px;padding:6px 14px;cursor:pointer;font-weight:600;transition:background .12s,border-color .12s}
@@ -51,12 +60,25 @@ input.text{width:100%;padding:7px 10px;background:#fffefb}
 textarea:focus,select:focus,input.text:focus,.field input:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
 ::placeholder{color:#8f897d}
 .err{color:var(--red);font-size:13px;margin:0 0 14px;padding:9px 12px;background:var(--red-bg);border-radius:var(--radius-sm)}
+#appError{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+#appError span{flex:1 1 300px}
+#appError .btn{min-height:28px;padding:3px 10px;font-size:12.5px;color:var(--ink)}
+/* fingers: controls at least 44 px high */
+@media (pointer:coarse){
+  .btn,.tab,.chip,.icon,.seg button,select,.mbtn{min-height:44px}
+  .icon{width:46px}
+  .mbtn{padding:3px 9px}
+  #appError .btn{min-height:36px}
+}
 .card .err{margin:8px 0 0;padding:0;background:none;min-height:16px}
 
 /* layout */
 .view{display:none}
 .view.on{display:block;animation:fade .15s ease-out}
 @keyframes fade{from{opacity:.4}to{opacity:1}}
+/* a tab that hasn't drawn anything yet says so, if it takes a moment */
+.view.on:empty::before{content:"Loading…";display:block;padding:24px;text-align:center;color:var(--muted);animation:wait .3s step-end both}
+@keyframes wait{from{visibility:hidden}to{visibility:visible}}
 @media (prefers-reduced-motion:reduce){.view.on,.pieces .pc,.arrows{animation:none}*{transition:none !important}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .empty{padding:24px;color:var(--muted);text-align:center}

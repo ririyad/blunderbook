@@ -212,7 +212,16 @@ def test_core_never_imports_an_extension() -> None:
 HOST_PAGE_EXPORTS = {
     "api.js": ("api", "ApiError"),
     "ui.js": ("esc", "toast", "showError"),
-    "format.js": ("fmtDate", "fmtEval", "fmtClock", "MARK", "moveLabel", "percent"),
+    "format.js": (
+        "fmtDate",
+        "fmtEval",
+        "fmtClock",
+        "MARK",
+        "markText",
+        "moveLabel",
+        "percent",
+        "plural",
+    ),
     "board.js": ("renderBoard", "fenToBoard", "squareLabel", "sqIdx", "sqName", "uciSquares"),
 }
 

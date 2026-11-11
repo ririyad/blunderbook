@@ -222,6 +222,42 @@ def test_pieces_slide_unless_you_ask_for_less_motion() -> None:
     assert ".pieces .pc" in reduced.split("}}")[0]
 
 
+def test_the_shell_starts_a_tab_at_the_top_and_passes_the_query_on() -> None:
+    """Opening another tab scrolls to the top (a route inside a tab doesn't), and a route's
+    query (#log?cause=…) reaches the view instead of making the route unknown."""
+    app = (WEB / "js" / "app.js").read_text("utf-8")
+    assert "if (open !== null && open !== name) window.scrollTo(0, 0);" in app
+    assert 'hash.indexOf("?")' in app and 'rest.join("/") + query' in app
+
+
+def test_the_error_line_has_a_way_out() -> None:
+    """The error line offers "Try again" and "Dismiss", built without innerHTML: its text
+    can be a server's message."""
+    ui = (WEB / "js" / "ui.js").read_text("utf-8")
+    assert '"Try again"' in ui and '"Dismiss"' in ui
+    assert "innerHTML" not in ui
+    assert "onRetry(" in (WEB / "js" / "app.js").read_text("utf-8")
+
+
+def test_the_shell_fits_a_phone_and_fingers() -> None:
+    """Under 640 px the tabs are one row that scrolls and the header stays in view; on a
+    touch screen the controls are at least 44 px high."""
+    css = (WEB / "css" / "app.css").read_text("utf-8")
+    phone = css[css.index("@media (max-width:640px){") :].split("\n}")[0]
+    assert ".tabs{flex-wrap:nowrap;overflow-x:auto" in phone
+    assert "position:static" not in phone
+    touch = css[css.index("@media (pointer:coarse){") :].split("\n}")[0]
+    assert ".btn,.tab,.chip,.icon,.seg button,select,.mbtn{min-height:44px}" in touch
+
+
+def test_shared_helpers_have_one_copy() -> None:
+    """statusPill and plural live in format.js; no view keeps its own."""
+    for path in JS_FILES:
+        if path.name != "format.js":
+            text = path.read_text("utf-8")
+            assert "function statusPill" not in text and "const plural" not in text, path
+
+
 def test_retest_shows_where_the_piece_can_go() -> None:
     """Picking a piece in Re-test puts a dot on each square its legal moves reach."""
     retest = (WEB / "js" / "views" / "retest.js").read_text("utf-8")

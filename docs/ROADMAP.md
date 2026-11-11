@@ -23,8 +23,10 @@ _Last updated: 2026-11-11_
 | M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
+| M14 Page polish | In progress (1/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 
-**Next up:** v1's milestones are all done. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 14.2, one board with step controls for every tab (arrow keys that work at
+once, the Log's too), and the Log's rough edges. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1063,6 +1065,44 @@ Asked for on 2026-11-10: track the attacks you missed, not only your blunders. D
         Not checked at 390 px wide: the browser window couldn't be resized, as in 8.4
         (`TODO(verify)`).
 
+### M14 Page polish
+
+Asked for on 2026-11-11, after v1's milestones: a smoother, more solid page. From reading
+the shell, the styles and every view. See Decided.
+
+- [x] **14.1** The shell.
+      _Done:_
+      - **Tabs:** opening another tab starts at the top of the page (a route inside a tab
+        doesn't scroll: Games and the Library put their lists back themselves). A route can
+        carry a query (`#log?cause=…`, `#log/12?cause=…`), passed to the view with the rest;
+        before, `#log?…` was an unknown route. 14.3 uses it.
+      - **The error line** has "Try again" (loads the open tab and the badge again) and
+        "Dismiss", built with DOM calls. `showError(text)` is unchanged for extensions.
+      - **A phone** (under 640 px): no tagline, the tabs are one row that scrolls sideways
+        (the open one scrolled into view), and the header stays at the top. Before, seven
+        tabs wrapped into three rows and the header scrolled away.
+      - **Fingers** (`pointer: coarse`): buttons, tabs, chips, step buttons, menus and move
+        buttons are at least 44 px high.
+      - **A tab that hasn't drawn yet** says "Loading…" after 300 ms (CSS only).
+      - **One copy** of `statusPill` and `plural`, in `format.js`; the views and both
+        extensions use it (`plural` and `markText` join the names extensions may import).
+      - **Tests** (4 more): the scroll and the query, the error line, the phone and touch
+        rules, and that no view keeps its own copy of the helpers.
+      - **Checked in headless Chrome at 390 px** through the DevTools protocol (the Chrome
+        extension wasn't connected): no sideways scroll on `#log`, `#patterns`,
+        `#collection` and `#games/<id>`; the tab row scrolls and keeps the open tab in view;
+        the header is sticky; Patterns → Log lands at the top; `#log?cause=…` opens the Log;
+        with the network off the error line shows, and "Try again" loads the tab. No
+        console errors. Screenshots at 500 px and 1200 px looked right.
+- [ ] **14.2** One board with step controls (`js/steps.js`) for the Log, Games, the Library
+      and the Collection: keys that work without clicking first, the Log's End button and
+      keys. The Log: delete asks in the page, the open entry scrolled into view in the list,
+      a save line that stays, "Try again" on a failed save.
+- [ ] **14.3** Review flow: "Needs your notes" (`?notes=missing`, `needs_notes`), the Log's
+      filters in the address, Previous / Next entry, and Patterns linking into the Log.
+- [ ] **14.4** Import and Re-test feedback: the percentage on the Import tab, a toast when
+      an import ends, a Re-test session summary.
+
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
 digest), Anki / Lichess-study export, mobile PWA.
@@ -1363,3 +1403,10 @@ None open.
     before your move (pieces, side to move, castling, en passant) is in the game, so a master
     game that reached the position you went wrong in shows it, as the Library does. Move
     numbers are ignored: the same position comes up at different moves.
+- **2026-11-11: Page polish (M14).**
+  - **What's in it:** fixes at the seams between views, one board with step controls, a
+    review flow for going through new entries, and feedback for imports and re-test sessions.
+  - **Left out, by choice:** dragging pieces in Re-test, and a dark theme. Also a side picker
+    for web imports (still out of v1), Games filters in the address, a promotion picker.
+  - **The phone header** scrolls its tabs sideways rather than wrapping or hiding them in a
+    menu: every tab stays one tap away, and extensions add more.

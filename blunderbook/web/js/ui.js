@@ -14,11 +14,31 @@ export function toast(text) {
   toastTimer = setTimeout(() => t.classList.remove("on"), 2400);
 }
 
-/** Show a problem above the views (or clear it with null). */
+let retry = null;
+/** What "Try again" on the error line does: the shell loads the open tab again. */
+export function onRetry(fn) {
+  retry = fn;
+}
+
+/** Show a problem above the views (or clear it with null), with "Try again" and "Dismiss". */
 export function showError(text) {
   const el = document.getElementById("appError");
-  el.textContent = text || "";
+  el.replaceChildren();
   el.hidden = !text;
+  if (!text) return;
+  const message = document.createElement("span");
+  message.textContent = text;
+  el.append(message);
+  const button = (label, act) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn ghost";
+    b.textContent = label;
+    b.addEventListener("click", act);
+    el.append(b);
+  };
+  if (retry) button("Try again", () => { showError(null); retry(); });
+  button("Dismiss", () => showError(null));
 }
 
 /** Tell the page that entries changed (the Re-test badge updates). */
