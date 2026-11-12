@@ -1318,10 +1318,10 @@ def backup_(
         what = "the database" if store is connection.CORE else f"{store.label}'s database"
         typer.echo(f"Backed up {what} to\n  {snapshot.backup.path}")
         if snapshot.removed:
-            typer.echo(
-                f"Deleted {_plural(len(snapshot.removed), 'older backup')}, keeping the newest "
-                f"{cfg.backup.keep}."
-            )
+            kept = backup.kept(cfg.backup.keep, store)
+            newest = "only the newest" if kept == 1 else f"the newest {kept}"
+            deleted = _plural(len(snapshot.removed), "older backup")
+            typer.echo(f"Deleted {deleted}, keeping {newest}.")
 
 
 @app.command()

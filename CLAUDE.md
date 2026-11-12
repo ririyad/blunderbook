@@ -388,7 +388,8 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   `<name>.db` next to the DB (`ext.open_db`), and everything above applies to it too: the
   daily backup, `backup`, `-pre-migrate` and restore. Its backups start with its name
   (`library-2026-11-07_120000Z.db`), and rotation, the daily check and `keep` count each
-  name's files separately. `restore` picks the database from the file name's prefix (none =
+  name's files separately. An extension whose data can be downloaded again may keep fewer
+  (`backups_kept`, never more than `keep`): Rankings keeps only its newest. `restore` picks the database from the file name's prefix (none =
   Blunderbook's), refuses one for an extension that's off, and checks that the file's tables
   are exactly the ones that database's migrations make, so one database's backup can't
   replace another's.
@@ -1012,6 +1013,8 @@ extension = ext.Extension(
     web=files(__name__) / "web",            # optional: view.js (+ view.css) at /ext/library/
     migrations=files(__name__) / "migrations",  # optional: NNNN_name.sql for library.db
     cli=commands,                           # optional: `blunderbook library ...`
+    backups_kept=None,                      # optional: keep fewer of its backups than
+                                            #   backup.keep (1 or more); Rankings keeps 1
 )
 ```
 

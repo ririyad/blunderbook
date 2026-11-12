@@ -2,6 +2,7 @@
 migrations, its pre-migrate backup, and the backups, daily backup and restore that cover
 it. The sample "notes" extension is in ext_samples.py."""
 
+import dataclasses
 import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
@@ -182,6 +183,29 @@ def test_rotation_keeps_each_databases_own(cfg_file: Path, db_file: Path) -> Non
         "blunderbook-2026-11-07_120200Z.db",
         "notes-2026-11-07_130000Z.db",
     ]
+
+
+def test_an_extension_can_keep_fewer_backups(cfg_file: Path, db_file: Path) -> None:
+    """backups_kept caps backup.keep for that database only (Rankings keeps one: its lists
+    can be downloaded again)."""
+    cfg = settings(cfg_file, "notes")
+    core_with_data(db_file)
+    note(cfg, "first")
+    few = dataclasses.replace(NOTES, keep=1)
+    where = folder(db_file)
+    for minutes in range(3):
+        backup.take(db_file, where, keep=14, now=NOW + timedelta(minutes=minutes))
+        backup.take(
+            ext.db_path(notes), where, keep=14, now=NOW + timedelta(minutes=minutes), store=few
+        )
+    assert names(where) == [
+        "blunderbook-2026-11-07_120000Z.db",
+        "blunderbook-2026-11-07_120100Z.db",
+        "blunderbook-2026-11-07_120200Z.db",
+        "notes-2026-11-07_120200Z.db",
+    ]
+    assert (backup.kept(14, few), backup.kept(14, NOTES), backup.kept(1, few)) == (1, 14, 1)
+    assert ext.store(dataclasses.replace(notes, backups_kept=1)) == few
 
 
 def test_backup_command_covers_extensions(cfg_file: Path, db_file: Path) -> None:

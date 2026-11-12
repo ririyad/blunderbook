@@ -518,7 +518,8 @@ blunderbook restore blunderbook-2026-11-05_081756Z.db
   own is looked up in the backup folder.
 - **Extensions** that keep data (see `blunderbook ext list`) have their own database,
   backed up with yours as `<name>-…db`, for example `library-2026-11-05_081756Z.db`. Each
-  name keeps its own 14. `restore` works out from the file name which database it replaces.
+  name keeps its own 14, except Rankings, which keeps only its newest (its lists can be
+  downloaded again). `restore` works out from the file name which database it replaces.
 - **Settings aren't in backups.** config.toml, and your Lichess token and OpenRouter key in
   it, stay out of them. Saved AI explanations are in the database, so they are backed up.
 

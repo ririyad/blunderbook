@@ -69,3 +69,10 @@ no_view = ext.Extension(name="noview", title="No view", host_api=ext.HOST_API, w
 no_migrations = ext.Extension(
     name="nomigrations", title="X", host_api=ext.HOST_API, migrations=NOTES / "missing"
 )
+no_backups = ext.Extension(name="nobackups", title="X", host_api=ext.HOST_API, backups_kept=0)
+odd_backups = ext.Extension(
+    name="oddbackups",
+    title="X",
+    host_api=ext.HOST_API,
+    backups_kept="1",  # type: ignore[arg-type]
+)

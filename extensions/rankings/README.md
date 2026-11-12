@@ -63,6 +63,8 @@ Chess.com: 4 leaderboards updated.
   Girls, from the latest list only. An update that saves a new list deletes the one before,
   so there's no change since last month. That's about 18,000 players a list, and
   rankings.db stays about 5 MB.
+- **Only its newest backup is kept** (`rankings-….db`, about 4.5 MB), whatever `keep` says
+  in config.toml: the lists can always be downloaded again. Your own database keeps its 14.
 - **A failed update keeps the lists you had.** Ctrl+C keeps the sources already done and
   changes nothing in the one being updated.
 - **Chess.com asks for contact details** in each request. Set `contact` under `[chesscom]`

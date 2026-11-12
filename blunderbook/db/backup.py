@@ -120,10 +120,12 @@ def take(
     store: Store = CORE,
 ) -> Snapshot:
     """Back up ``db`` into ``folder``, then keep only the newest ``keep`` of ``store``'s
-    backups there. ``keep=None`` skips rotation (a restore must not rotate away the file it
-    reads)."""
+    backups there (fewer when ``store.keep`` says so). ``keep=None`` skips rotation (a
+    restore must not rotate away the file it reads)."""
     if keep is not None and keep < 1:
         raise ValueError("keep must be 1 or more.")
+    if keep is not None:
+        keep = kept(keep, store)
     moment = _utc(now)
     file_name(moment, reason, store=store)  # check the reason before doing any work
     if not db.is_file():
@@ -185,6 +187,12 @@ def _free_name(folder: Path, moment: datetime, reason: str | None, store: Store)
         if not target.exists() and not target.with_name(target.name + ".partial").exists():
             return target
         moment += timedelta(seconds=1)
+
+
+def kept(keep: int, store: Store = CORE) -> int:
+    """How many of ``store``'s backups are kept: ``keep`` (config.toml's backup.keep), or the
+    store's own smaller number (an extension whose data can be downloaded again)."""
+    return keep if store.keep is None else min(keep, store.keep)
 
 
 def rotate(folder: Path, keep: int, store: Store = CORE) -> tuple[Path, ...]:

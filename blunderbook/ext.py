@@ -53,6 +53,9 @@ class Extension:
     web: Traversable | None = None  # a folder with view.js (and view.css), at /ext/<name>/
     migrations: Traversable | None = None  # its own NNNN_name.sql files, for <name>.db
     cli: typer.Typer | None = field(default=None, repr=False)  # `blunderbook <name> ...`
+    # The most backups of <name>.db kept, when fewer than backup.keep will do (its data can
+    # be downloaded again); None: backup.keep, like Blunderbook's own.
+    backups_kept: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +146,9 @@ def load_one(point: EntryPoint) -> tuple[Extension | None, str | None]:
             return None, f"The {name} extension's page folder has no view.js."
     if value.migrations is not None and not value.migrations.is_dir():
         return None, f"The {name} extension's migrations folder is missing."
+    kept = value.backups_kept
+    if kept is not None and (type(kept) is not int or kept < 1):
+        return None, f"The {name} extension's backups_kept must be 1 or more, not {kept!r}."
     return value, None
 
 
@@ -200,7 +206,12 @@ def store(extension: Extension) -> Store | None:
     """The extension's own database, or None when it has no migrations (and so no DB)."""
     if extension.migrations is None:
         return None
-    return Store(extension.name, f"the {extension.name} extension", extension.migrations)
+    return Store(
+        extension.name,
+        f"the {extension.name} extension",
+        extension.migrations,
+        keep=extension.backups_kept,
+    )
 
 
 def db_path(extension: Extension, core: Path | None = None) -> Path:

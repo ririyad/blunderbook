@@ -155,6 +155,8 @@ def test_no_log_yet_is_a_503(client: TestClient, db_file: Path) -> None:
     [
         ("no_view", "The noview extension's page folder has no view.js."),
         ("no_migrations", "The nomigrations extension's migrations folder is missing."),
+        ("no_backups", "The nobackups extension's backups_kept must be 1 or more, not 0."),
+        ("odd_backups", "The oddbackups extension's backups_kept must be 1 or more, not '1'."),
     ],
 )
 def test_an_extension_with_missing_files_isnt_loaded(attr: str, reason: str) -> None:

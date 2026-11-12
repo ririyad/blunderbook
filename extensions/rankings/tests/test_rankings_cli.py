@@ -211,15 +211,19 @@ def test_through_blunderbook(server: Server, cfg_file: Path, restore_commands: N
     assert ext.db_path(extension).exists()
 
 
-def test_rankings_db_is_backed_up(server: Server, cfg_file: Path) -> None:
+def test_rankings_db_is_backed_up_once(server: Server, cfg_file: Path) -> None:
+    """Only the newest backup of rankings.db is kept: the lists can be downloaded again."""
     with closing(connection.open_db(config.db_path(), create=True)):
         pass
     serve_fide(server, "dec26", DEC)
     call("update", "fide")
-    done = runner.invoke(cli.app, ["backup"])
-    assert done.exit_code == 0, done.output
     folder = config.backup_folder(config.load(cfg_file))
-    assert any(p.name.startswith("rankings-") for p in folder.iterdir())
+    for _ in range(3):
+        done = runner.invoke(cli.app, ["backup"])
+        assert done.exit_code == 0, done.output
+    assert "Deleted 1 older backup, keeping only the newest." in done.output
+    assert len([p for p in folder.iterdir() if p.name.startswith("rankings-")]) == 1
+    assert extension.backups_kept == 1
 
 
 def test_only_the_host_api_is_used() -> None:

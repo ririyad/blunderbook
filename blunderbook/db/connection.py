@@ -37,6 +37,7 @@ class Store:
     name: str  # "blunderbook", or the extension's name; also its backups' prefix
     label: str  # for messages: "Blunderbook", "the library extension"
     migrations: Traversable
+    keep: int | None = None  # the most backups of it kept; None: config.toml's backup.keep
 
 
 CORE = Store("blunderbook", "Blunderbook", MIGRATIONS)

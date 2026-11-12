@@ -1684,5 +1684,10 @@ None open.
   list reuses the old one's pages. The cost: no change in place or rating since last month,
   and no "new" mark (FIDE's XML has no previous rating to show instead). Lichess and
   Chess.com already kept only their latest boards. A failed update still keeps the lists you
-  had. Backups are unchanged: each one holds the lists of its day (`keep` = 14 is about
-  60 MB of Rankings backups).
+  had.
+- **2026-11-12: Rankings keeps only its newest backup.** Asked for next. An extension may
+  set `ext.Extension(backups_kept=N)` (1 or more; an addition, so `HOST_API` stays 1), and
+  its backups keep the smaller of N and `backup.keep`; Rankings sets 1, since its lists can
+  be downloaded again (about 4.5 MB of backups, not 60). Blunderbook's own database and the
+  other extensions keep `keep`. A `-pre-restore` copy isn't rotated by the restore that
+  makes it, as before; the next backup of that database replaces it. (CLAUDE.md §6, §15)

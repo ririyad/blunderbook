@@ -194,4 +194,5 @@ extension = ext.Extension(
     web=files(__name__) / "web",
     migrations=files(__name__) / "migrations",
     cli=commands,
+    backups_kept=1,  # the lists can always be downloaded again
 )
