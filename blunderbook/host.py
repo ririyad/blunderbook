@@ -16,7 +16,8 @@ For routes (an extension's router is mounted at ``/api/ext/<name>``):
 
 For anything (routes and commands):
 
-- ``settings()``: your names, thresholds and engine settings. Never a token or a key.
+- ``settings()``: your names, thresholds, engine settings and Chess.com contact. Never a
+  token or a key.
 - ``engine()``: Stockfish, found as Blunderbook finds it, in a ``with`` block.
 - ``daily_backup()``: the daily backups, for a command that changes data (CLAUDE.md §6).
 - ``read_log()``: your Log, read-only, outside a request (``with host.read_log() as log``).
@@ -77,6 +78,9 @@ class Settings:
     engine_depth: int
     engine_threads: int
     engine_hash_mb: int
+    # [chesscom] contact, for the User-Agent Chess.com asks for; "" when not set. Added in
+    # host API 1 (ROADMAP 16.2): it isn't a secret, it's meant to be sent to Chess.com.
+    chesscom_contact: str = ""
 
 
 def settings() -> Settings:
@@ -88,6 +92,7 @@ def settings() -> Settings:
         engine_depth=cfg.engine_depth,
         engine_threads=cfg.engine_threads,
         engine_hash_mb=cfg.engine_hash_mb,
+        chesscom_contact=cfg.chesscom.contact.strip(),
     )
 
 

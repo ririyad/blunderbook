@@ -25,9 +25,9 @@ _Last updated: 2026-11-12_
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
-| M16 Rankings | In progress (1/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
+| M16 Rankings | In progress (2/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 
-**Next up:** 16.2, the Lichess and Chess.com leaderboards in the Rankings extension. v1 is done; M15, the desktop app, is planned below, not started. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 16.3, the Rankings tab with its Update button. v1 is done; M15, the desktop app, is planned below, not started. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1266,10 +1266,32 @@ rankings aren't about your own mistakes.
       - `TODO(verify)`: FIDE's XML element names, title codes and member name, and its
         junior rule; the fixtures are hand-built from FIDE's description until a real
         download is recorded (16.4).
-- [ ] **16.2** Lichess (`GET /api/player/top/100/{perfType}` for bullet, blitz, rapid,
-      classical and ultraBullet, one at a time) and Chess.com (`GET /pub/leaderboards`, with
-      its ETag); `blunderbook rankings update lichess|chesscom|all`. `host.settings()` gains
-      `chesscom_contact`, for Chess.com's User-Agent (added, so `HOST_API` stays 1).
+- [x] **16.2** The Lichess and Chess.com leaderboards.
+      _Done:_
+      - **`lichess.py`:** `GET https://lichess.org/api/player/top/100/{perfType}` for
+        bullet, blitz, rapid, classical and ultraBullet, one at a time (checked in the
+        official API spec on 2026-11-12). Lichess sends no ETag, so its five small answers
+        are fetched each time. Its own `progress` is kept as the change.
+      - **`chesscom.py`:** `GET https://api.chess.com/pub/leaderboards`, one answer for
+        every board; `live_rapid`, `live_blitz`, `live_bullet` and `daily` are kept (top
+        50), the others (variants, tactics, lessons) left out. Its ETag is sent back, so an
+        unchanged answer is a 304: "already up to date".
+      - **Both:** an entry without a name or a rating is skipped; names and titles are cut to
+        a sane length; an answer that isn't a leaderboard is a plain error. A source's boards
+        are replaced together, in one transaction, or not at all.
+      - **The User-Agent** carries `[chesscom] contact` when it's set, for Chess.com only,
+        as Chess.com asks. `host.settings()` gains `chesscom_contact` (added, so `HOST_API`
+        stays 1); a contact with a line break is never sent.
+      - **`blunderbook rankings update [fide|lichess|chesscom|all]`**, `all` by default:
+        one line per source; one source failing doesn't stop the next (exit 1 at the end);
+        Ctrl+C keeps the sources already done and says which wasn't changed.
+        **`status`** has a line per source and each one's last failure.
+      - **Tests** (29 more): both answers (titles, missing fields, sorting and the cap, not a
+        leaderboard), updates (one at a time, a failure keeps the boards, a 429, a stop,
+        the 304, new boards replace the old), the User-Agent, and the command for each
+        source, all of them, a failure in the middle and a stop.
+      - `TODO(verify)`: whether Chess.com's entries carry `title`; the JSON fixtures follow
+        the docs' examples until real answers are recorded (16.4).
 - [ ] **16.3** The routes (`/status`, `/fide`, `/lichess`, `/chesscom`, `POST /update` with
       `same_origin`, `GET /update/{job_id}`), a background job (one at a time, stopped with
       `serve`), and the tab: FIDE / Lichess / Chess.com sub-tabs, filters, the table with

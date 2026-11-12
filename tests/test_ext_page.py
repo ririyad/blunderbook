@@ -17,7 +17,7 @@ from test_api_blunders import NOW, elephant, fen_entry, scholars
 
 from blunderbook import config, ext, host, webcheck
 from blunderbook.api.app import CONTENT_SECURITY_POLICY, WEB, create_app
-from blunderbook.config import Config, ExtensionsConfig, LichessConfig
+from blunderbook.config import AiConfig, ChesscomConfig, Config, ExtensionsConfig, LichessConfig
 from blunderbook.core.models import Thresholds
 from blunderbook.db import connection, repo
 
@@ -176,6 +176,8 @@ def test_settings_never_carry_secrets(cfg_file: Path) -> None:
         engine_depth=14,
         thresholds=Thresholds(blunder=0.2),
         lichess=LichessConfig(username="rashed_l", token="lip_secret"),
+        chesscom=ChesscomConfig(contact=" me@example.org "),
+        ai=AiConfig(key="sk-or-secret"),
     )
     config.save(cfg, cfg_file)
     got = host.settings()
@@ -185,10 +187,12 @@ def test_settings_never_carry_secrets(cfg_file: Path) -> None:
         engine_depth=14,
         engine_threads=2,
         engine_hash_mb=128,
+        chesscom_contact="me@example.org",
     )
-    assert "lip_secret" not in repr(got)
+    assert "lip_secret" not in repr(got) and "sk-or-secret" not in repr(got)
     assert set(host.Settings.__slots__) == {  # type: ignore[attr-defined]
-        "my_names", "thresholds", "engine_depth", "engine_threads", "engine_hash_mb"
+        "my_names", "thresholds", "engine_depth", "engine_threads", "engine_hash_mb",
+        "chesscom_contact",
     }  # fmt: skip
 
 

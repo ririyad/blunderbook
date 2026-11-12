@@ -5,7 +5,7 @@ It goes online only when you ask: ``blunderbook rankings update`` (and, from 16.
 tab's Update button). Nothing checks or downloads on its own.
 
 16.1 has the database, FIDE's lists (:mod:`blunderbook_rankings.fide`) and two commands,
-``update`` and ``status``.
+``update`` and ``status``; 16.2 adds the Lichess and Chess.com leaderboards.
 """
 
 import sqlite3
@@ -19,7 +19,7 @@ from typing import Annotated, NoReturn
 import typer
 
 from blunderbook import ext, host
-from blunderbook_rankings import fide, net, store, update
+from blunderbook_rankings import chesscom, fide, lichess, net, store, update
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -29,15 +29,21 @@ STALE = "A newer FIDE list is usually out after the 1st: blunderbook rankings up
 
 
 class _Source(StrEnum):
+    all = "all"
     fide = "fide"
+    lichess = "lichess"
+    chesscom = "chesscom"
 
 
 @commands.command("update")
 def update_(
-    source: Annotated[_Source, typer.Argument(help="Which lists to download.")] = _Source.fide,
+    source: Annotated[
+        _Source, typer.Argument(help="Which lists to download: fide, lichess, chesscom or all.")
+    ] = _Source.all,
 ) -> None:
     """Download the latest lists. Only what changed since last time is downloaded."""
     try:
+        contact = host.settings().chesscom_contact
         done = host.daily_backup()
     except host.HostError as exc:
         _fail(str(exc))
@@ -46,50 +52,85 @@ def update_(
     for problem in done.problems:
         typer.echo(f"Warning: {problem}", err=True)
 
+    wanted = update.SOURCES if source is _Source.all else (source.value,)
+    failed = False
     progress = _Progress()
     with closing(_open()) as conn, net.client() as http:
-        try:
-            outcome = update.update_fide(
-                conn,
-                http,
-                progress=progress,
-                stop=lambda: False,
-                wait=_wait,
-                today=_today(),
-            )
-        except KeyboardInterrupt, net.Stopped:
+        for name in wanted:
+            try:
+                outcome = update.one(
+                    conn,
+                    http,
+                    name,
+                    progress=progress,
+                    stop=lambda: False,
+                    wait=_wait,
+                    today=_today(),
+                    contact=contact,
+                )
+            except KeyboardInterrupt, net.Stopped:
+                progress.clear()
+                typer.echo(f"Stopped. The {update.NAMES[name]} lists weren't changed.", err=True)
+                raise typer.Exit(130) from None
             progress.clear()
-            typer.echo("Stopped. Nothing was changed.", err=True)
-            raise typer.Exit(130) from None
-    progress.clear()
-    if outcome.error is not None:
-        _fail(f"{outcome.message}\nThe lists you had are kept.")
-    typer.echo(outcome.message)
+            if outcome.error is None:
+                typer.echo(outcome.message)
+            else:
+                failed = True
+                typer.echo(
+                    f"{outcome.message}\nThe {update.NAMES[name]} lists you had are kept.",
+                    err=True,
+                )
+    if failed:
+        raise typer.Exit(1)
 
 
 @commands.command("status")
 def status() -> None:
     """When each list was last downloaded, and how many players are kept."""
     with closing(_open()) as conn:
-        row = store.source(conn, "fide")
-        counts = store.fide_counts(conn)
-    if row is None or row.list_month is None:
+        rows = {name: store.source(conn, name) for name in update.SOURCES}
+        fide_counts = store.fide_counts(conn)
+        boards = {name: store.board_counts(conn, name) for name in ("lichess", "chesscom")}
+
+    fide_row = rows["fide"]
+    if fide_row is None or fide_row.list_month is None:
         typer.echo(
             f"FIDE: not downloaded yet. Run: blunderbook rankings update fide ({FIDE_SIZE})."
         )
     else:
-        kept = DOT.join(f"{c.speed} {c.players:,}" for c in counts)
-        line = f"FIDE: {fide.month_label(row.list_month)} lists"
+        kept = DOT.join(f"{c.speed} {c.players:,}" for c in fide_counts)
+        line = f"FIDE: {fide.month_label(fide_row.list_month)} lists"
         if kept:
             line += f"{DOT}{kept} players kept"
-        if row.fetched_at:
-            line += f"{DOT}downloaded {_when(row.fetched_at)}"
-        typer.echo(line)
-        if update.stale(row.list_month, _today()):
+        typer.echo(line + _downloaded(fide_row))
+        if update.stale(fide_row.list_month, _today()):
             typer.echo(STALE)
+    _error(fide_row)
+
+    for name, top in (("lichess", lichess.TOP), ("chesscom", chesscom.TOP)):
+        row = rows[name]
+        title = update.NAMES[name]
+        if not boards[name]:
+            typer.echo(f"{title}: not downloaded yet. Run: blunderbook rankings update {name}")
+        else:
+            count = len(boards[name])
+            noun = "leaderboard" if count == 1 else "leaderboards"
+            typer.echo(f"{title}: {count} {noun}, top {top}" + _downloaded(row))
+        _error(row)
+
+
+def _downloaded(row: store.SourceRow | None) -> str:
+    if row is None or not row.fetched_at:
+        return ""
+    return f"{DOT}downloaded {_when(row.fetched_at)}"
+
+
+def _error(row: store.SourceRow | None) -> None:
     if row is not None and row.last_error:
         when = _when(row.checked_at) if row.checked_at else "last time"
-        typer.echo(f"The update on {when} failed: {row.last_error}")
+        title = update.NAMES[row.source]
+        typer.echo(f"{title}: the update on {when} failed: {row.last_error}")
 
 
 def _today() -> date:

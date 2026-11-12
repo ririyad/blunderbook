@@ -51,6 +51,15 @@ class Downloaded:
     validators: Validators
 
 
+def user_agent(contact: str = "") -> str:
+    """The User-Agent, with ``contact`` (``[chesscom] contact``) when it's set: Chess.com asks
+    for "a recognizable user-agent that contains contact information"."""
+    contact = contact.strip()
+    if not contact or not contact.isprintable():
+        return USER_AGENT
+    return f"Blunderbook-Rankings/{VERSION} (local chess app; contact: {contact})"
+
+
 def client(user_agent: str = USER_AGENT) -> httpx.Client:
     """The client for one update. Close it (``with``) when the update ends."""
     return httpx.Client(headers={"User-Agent": user_agent}, timeout=TIMEOUT, follow_redirects=True)

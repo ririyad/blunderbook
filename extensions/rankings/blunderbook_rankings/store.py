@@ -8,6 +8,7 @@ from typing import Final
 
 from blunderbook_rankings.fide import JUNIOR_AGE, Category, FideList, Speed
 from blunderbook_rankings.net import Validators
+from blunderbook_rankings.site import SitePlayer
 
 KEEP_MONTHS: Final = 2  # the newest list, and the one before for "change since last month"
 
@@ -175,3 +176,42 @@ def fide_top(
         params,
     )
     return [FideRow(*row) for row in rows]
+
+
+# ---------------------------------------------------------------- Lichess and Chess.com
+
+
+def replace_boards(
+    conn: sqlite3.Connection, source_name: str, boards: dict[str, list[SitePlayer]]
+) -> None:
+    """Put in ``source_name``'s latest boards, in place of everything it had. Call inside a
+    transaction."""
+    conn.execute("DELETE FROM site_players WHERE source = ?", (source_name,))
+    conn.executemany(
+        "INSERT INTO site_players (source, board, rank, username, title, rating, progress)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            (source_name, board, p.rank, p.username, p.title, p.rating, p.progress)
+            for board, players in boards.items()
+            for p in players
+        ),
+    )
+
+
+def board(conn: sqlite3.Connection, source_name: str, name: str) -> list[SitePlayer]:
+    """One board, best first."""
+    rows = conn.execute(
+        "SELECT rank, username, title, rating, progress FROM site_players"
+        " WHERE source = ? AND board = ? ORDER BY rank",
+        (source_name, name),
+    )
+    return [SitePlayer(*row) for row in rows]
+
+
+def board_counts(conn: sqlite3.Connection, source_name: str) -> dict[str, int]:
+    """Players kept per board."""
+    rows = conn.execute(
+        "SELECT board, count(*) FROM site_players WHERE source = ? GROUP BY board",
+        (source_name,),
+    )
+    return {row[0]: row[1] for row in rows}

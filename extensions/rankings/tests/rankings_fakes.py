@@ -6,13 +6,14 @@ Not a conftest.py: core's tests import their own ``conftest`` by name, and a sec
 the path would shadow it. Each test module imports these fixtures instead."""
 
 import io
+import json
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import httpx
 import pytest
-from blunderbook_rankings import fide, net
+from blunderbook_rankings import chesscom, fide, lichess, net
 
 from blunderbook import config
 
@@ -149,3 +150,50 @@ def serve_fide(fake: Server, month: str = "nov26", modified: str = NOV) -> None:
             fide.url(speed),
             ok(month_zip(speed, month), etag=f'"{speed}-{month}"', modified=modified),
         )
+
+
+# ---------------------------------------------------------------- Lichess and Chess.com
+# Shaped like the official docs' examples (checked 2026-11-12). TODO(verify): replace with
+# recorded answers (ROADMAP 16.4).
+
+
+def lichess_json(board: str, *users: tuple[str, int, int], title: str | None = "GM") -> bytes:
+    """A leaderboard of ``users`` (name, rating, progress), best first."""
+    rows = []
+    for name, rating, progress in users or (("DrNykterstein", 3200, 12),):
+        row: dict[str, object] = {
+            "id": name.lower(),
+            "username": name,
+            "perfs": {board: {"rating": rating, "progress": progress}},
+        }
+        if title:
+            row["title"] = title
+        rows.append(row)
+    return json.dumps({"users": rows}).encode()
+
+
+def chesscom_json(**boards: list[tuple[str, int]]) -> bytes:
+    """Boards of (username, score), best first; every board used when none is given."""
+    chosen = boards or {
+        board: [("Hikaru", 3300), ("MagnusCarlsen", 3290)] for board in chesscom.BOARDS
+    }
+    answer: dict[str, object] = {"tactics": [{"username": "Puzzler", "score": 5000, "rank": 1}]}
+    for board, entries in chosen.items():
+        answer[board] = [
+            {
+                "player_id": 1000 + i,
+                "@id": f"https://api.chess.com/pub/player/{name.lower()}",
+                "url": f"https://www.chess.com/member/{name}",
+                "username": name,
+                "score": score,
+                "rank": i,
+            }
+            for i, (name, score) in enumerate(entries, start=1)
+        ]
+    return json.dumps(answer).encode()
+
+
+def serve_sites(fake: Server, etag: str = '"cc-1"') -> None:
+    for board in lichess.BOARDS:
+        fake.on(lichess.url(board), ok(lichess_json(board), modified=None))
+    fake.on(chesscom.URL, ok(chesscom_json(), etag=etag, modified=NOV))

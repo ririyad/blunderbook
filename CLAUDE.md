@@ -154,8 +154,9 @@ blunderbook/
 │   │   └── tests/
 │   └── rankings/              # the Rankings extension (§15): FIDE, Lichess and Chess.com
 │       ├── blunderbook_rankings/    # top lists. __init__.py (the Extension, commands),
-│       │                            #   net.py (HTTP), fide.py (reading a list), store.py
-│       │                            #   (its SQL), update.py (one update)
+│       │                            #   net.py (HTTP), fide.py, lichess.py, chesscom.py
+│       │                            #   (reading each source), store.py (its SQL),
+│       │                            #   update.py (one update)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -1032,7 +1033,8 @@ extension = ext.Extension(
     `dependencies=[Depends(host.same_origin)]` to every route that changes something).
   - `transaction(conn)` groups writes to its own database that belong together (§14).
   - Anywhere: `settings()` (`my_names` with your site usernames, thresholds, engine depth,
-    threads and hash; never a token or a key), `engine()` (Stockfish, found as §6 says, in a
+    threads and hash, and `chesscom_contact` for a Chess.com User-Agent; never a token or a
+    key), `engine()` (Stockfish, found as §6 says, in a
     `with` block), and for commands `read_log()`, `open_db(extension)` and
     `daily_backup()` (§6's daily backups, before a command that changes data).
   - Problems are `host.HostError` (or `host.StorageError`), with plain messages.
