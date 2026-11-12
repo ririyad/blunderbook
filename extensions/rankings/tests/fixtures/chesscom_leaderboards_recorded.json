@@ -1,0 +1,187 @@
+{
+ "daily": [
+  {
+   "player_id": 542843503,
+   "@id": "https://api.chess.com/pub/player/mahmoudchessis",
+   "url": "https://www.chess.com/member/Mahmoudchessis",
+   "username": "Mahmoudchessis",
+   "score": 2613,
+   "rank": 1,
+   "country": "https://api.chess.com/pub/country/MA",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  },
+  {
+   "player_id": 606386282,
+   "@id": "https://api.chess.com/pub/player/l-regulus-l",
+   "url": "https://www.chess.com/member/l-Regulus-l",
+   "username": "l-Regulus-l",
+   "score": 2604,
+   "rank": 2,
+   "country": "https://api.chess.com/pub/country/XX",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  }
+ ],
+ "live_rapid": [
+  {
+   "player_id": 3889224,
+   "@id": "https://api.chess.com/pub/player/magnuscarlsen",
+   "url": "https://www.chess.com/member/MagnusCarlsen",
+   "username": "MagnusCarlsen",
+   "score": 2941,
+   "rank": 1,
+   "title": "GM",
+   "country": "https://api.chess.com/pub/country/NO",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  },
+  {
+   "player_id": 26824392,
+   "@id": "https://api.chess.com/pub/player/gutovandrey",
+   "url": "https://www.chess.com/member/GutovAndrey",
+   "username": "GutovAndrey",
+   "score": 2938,
+   "rank": 2,
+   "title": "GM",
+   "country": "https://api.chess.com/pub/country/US",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  }
+ ],
+ "live_blitz": [
+  {
+   "player_id": 15448422,
+   "@id": "https://api.chess.com/pub/player/hikaru",
+   "url": "https://www.chess.com/member/Hikaru",
+   "username": "Hikaru",
+   "score": 3476,
+   "rank": 1,
+   "title": "GM",
+   "country": "https://api.chess.com/pub/country/US",
+   "trend_score": {
+    "direction": 1,
+    "delta": 6
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  },
+  {
+   "player_id": 42022994,
+   "@id": "https://api.chess.com/pub/player/firouzja2003",
+   "url": "https://www.chess.com/member/Firouzja2003",
+   "username": "Firouzja2003",
+   "score": 3391,
+   "rank": 2,
+   "title": "GM",
+   "country": "https://api.chess.com/pub/country/FR",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  }
+ ],
+ "live_bullet": [
+  {
+   "player_id": 465636602,
+   "@id": "https://api.chess.com/pub/player/arkadiikhromaev",
+   "url": "https://www.chess.com/member/ArkadiiKhromaev",
+   "username": "ArkadiiKhromaev",
+   "score": 3602,
+   "rank": 1,
+   "country": "https://api.chess.com/pub/country/RU",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  },
+  {
+   "player_id": 575663324,
+   "@id": "https://api.chess.com/pub/player/gmbrewchess",
+   "url": "https://www.chess.com/member/GMBrewChess",
+   "username": "GMBrewChess",
+   "score": 3500,
+   "rank": 2,
+   "title": "GM",
+   "country": "https://api.chess.com/pub/country/US",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  }
+ ],
+ "tactics": [
+  {
+   "player_id": 518999647,
+   "@id": "https://api.chess.com/pub/player/elcrazyknight",
+   "url": "https://www.chess.com/member/ElCrazyKnight",
+   "username": "ElCrazyKnight",
+   "score": 65540,
+   "rank": 1,
+   "country": "https://api.chess.com/pub/country/TR",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  },
+  {
+   "player_id": 309417681,
+   "@id": "https://api.chess.com/pub/player/siliiiiiiiiiiiiiuuuuuuuu",
+   "url": "https://www.chess.com/member/SIlIIIIIIIIIIIIIUUUUUUUU",
+   "username": "SIlIIIIIIIIIIIIIUUUUUUUU",
+   "score": 65540,
+   "rank": 2,
+   "country": "https://api.chess.com/pub/country/PT",
+   "trend_score": {
+    "direction": 0,
+    "delta": 0
+   },
+   "trend_rank": {
+    "direction": 0,
+    "delta": 0
+   }
+  }
+ ]
+}

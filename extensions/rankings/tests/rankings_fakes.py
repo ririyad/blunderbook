@@ -153,8 +153,8 @@ def serve_fide(fake: Server, month: str = "nov26", modified: str = NOV) -> None:
 
 
 # ---------------------------------------------------------------- Lichess and Chess.com
-# Shaped like the official docs' examples (checked 2026-11-12). TODO(verify): replace with
-# recorded answers (ROADMAP 16.4).
+# Shaped like the recorded answers in fixtures/ (lichess_blitz_recorded.json,
+# chesscom_leaderboards_recorded.json, 2026-11-12), with only the fields that are read.
 
 
 def lichess_json(board: str, *users: tuple[str, int, int], title: str | None = "GM") -> bytes:

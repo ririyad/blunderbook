@@ -25,9 +25,9 @@ _Last updated: 2026-11-12_
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
-| M16 Rankings | In progress (2/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
+| M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 
-**Next up:** 16.3, the Rankings tab with its Update button. v1 is done; M15, the desktop app, is planned below, not started. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** M15, the desktop app (planned below, not started). M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1221,8 +1221,8 @@ Chess.com, each on its own sub-tab of a Rankings tab. An extension (CLAUDE.md §
 rankings aren't about your own mistakes.
 
 - **Decided:**
-  - **Online only when you ask:** `blunderbook rankings update` and, from 16.3, the tab's
-    Update button. Nothing checks or downloads on its own. The tab says when a newer FIDE
+  - **Online only when you ask:** `blunderbook rankings update`, or the tab's Update
+    button. Nothing checks or downloads on its own. The tab says when a newer FIDE
     list is probably out (a list from an earlier month), without asking the network. For an
     automatic monthly update, schedule the command (Windows Task Scheduler, cron).
   - **Only what changed is downloaded:** the ETag and Last-Modified of each file are kept
@@ -1236,8 +1236,8 @@ rankings aren't about your own mistakes.
     The XML is read as a stream.
   - **Small:** rankings.db is in every backup, so it keeps only what the tab shows: FIDE's
     active players, the world top 100 and each federation's top 50 in Open, Women, Juniors
-    and Girls, for each list's newest month and the one before (for "change since last
-    month"); the latest Lichess and Chess.com boards.
+    and Girls, from the latest list of each speed only (the one before is deleted when a
+    new one is saved; see Decided, 2026-11-12); the latest Lichess and Chess.com boards.
 - [x] **16.1** The package, rankings.db and FIDE's lists on the command line.
       _Done:_
       - **`extensions/rankings/`**, a workspace package like the Collection, with its entry
@@ -1292,12 +1292,71 @@ rankings aren't about your own mistakes.
         source, all of them, a failure in the middle and a stop.
       - `TODO(verify)`: whether Chess.com's entries carry `title`; the JSON fixtures follow
         the docs' examples until real answers are recorded (16.4).
-- [ ] **16.3** The routes (`/status`, `/fide`, `/lichess`, `/chesscom`, `POST /update` with
-      `same_origin`, `GET /update/{job_id}`), a background job (one at a time, stopped with
-      `serve`), and the tab: FIDE / Lichess / Chess.com sub-tabs, filters, the table with
-      the change since last month, the source line and the Update button with its progress.
-- [ ] **16.4** Docs (README, CLAUDE.md), then one real update to record fixtures in place of
-      the hand-built ones, and the size of rankings.db.
+- [x] **16.3** The Rankings tab and its Update button.
+      _Done:_
+      - **Routes** at `/api/ext/rankings`: `GET /status` (each source's list, when it was
+        downloaded and checked, the last failure, whether FIDE's list is from an earlier
+        month, and a running update's id, so a reload follows it); `GET /fide?speed=&list=&fed=`
+        (the world's top 100 or a federation's top 50 from the latest list, the
+        federations for the filter, and each player's FIDE page); `GET /lichess?board=` and
+        `GET /chesscom?board=` (each board, with the site's own recent change and each
+        player's profile); `POST /update {source}` (202 with a job id; 409 while one runs;
+        `same_origin`); `GET /update/{id}` (status, percent, what it's doing, one outcome per
+        source, the daily backup's note). Every route but `POST /update` only reads
+        rankings.db (a test checks).
+      - **`jobs.py`:** one update at a time in a background thread, through the same
+        `update.one` as the command, with the daily backup first. Stopping `serve` stops it
+        between steps (a wait after a 429 within a second): the source being updated keeps
+        its lists.
+      - **The tab** (`web/view.js`, `view.css`): FIDE / Lichess / Chess.com sub-tabs
+        (`#rankings/fide`, `#rankings/lichess`, `#rankings/chesscom`, links with
+        `aria-current`); filters kept in the address (`?speed=blitz&list=women&fed=NOR`); a
+        table with the rank, the title, the player (a link to their profile, in a new
+        tab), federation, rating, games and birth year; a credit
+        line naming the source and the month. The source line says when it was downloaded,
+        "A newer FIDE list is usually out after the 1st" in amber, and the last failure in
+        red. **Update** names the source ("Update FIDE"), disables while it runs ("Updating…"),
+        shows what it's doing and a progress bar (`aria-live`), then each source's outcome
+        and redraws the list.
+      - Profile links come from the API, so the page loads nothing from anywhere else (the
+        page checks); the table scrolls inside its panel on a narrow screen.
+      - **Tests** (31 more): status, each list and its filters (only the latest list, a
+        federation, Women, Juniors, Girls, bad values are a 422), both boards, the Update
+        button (all, one source, a failure, another site's Origin, a bad body, one at a time,
+        an unknown job, a stop, progress), the tab and its files (`webcheck`), and that only
+        `POST /update` changes anything.
+- [x] **16.4** One real update, recorded answers, docs.
+      _Done:_
+      - **A real `blunderbook rankings update`** on a scratch config and data folder (no
+        `[chesscom] contact`) on 2026-11-12: FIDE November 2026 (standard 19,044 players
+        kept, rapid 17,512, blitz 15,980; Carlsen first at 2823, Hou Yifan first of the
+        women), 5 Lichess and 4 Chess.com boards, in 91 s. Run again: "already up to date"
+        for FIDE (304) and Chess.com, 3.2 s. rankings.db is 5.2 MB (a backup 4.5 MB), and
+        stays that size: only the latest list is kept.
+      - **What it showed:**
+        - FIDE's zip member has **no month in its name** (`blitz_rating_list.xml`, 90.7 MB
+          of XML), so the month comes from the file's Last-Modified date (November's lists
+          were dated 11 Nov). A file dated from the 25th on counts as the next month's list
+          (`update.list_month`); `TODO(verify)` over a few months.
+        - The XML's element names, titles (`GM`, `WGM` in `w_title`) and flags (`w`, `i`) are
+          as described.
+        - Chess.com's entries carry `title`, and `trend_score` (`{"direction", "delta"}`),
+          now kept as the board's change, like Lichess's `progress`.
+        - Lichess sends no ETag.
+        - `rankings status` took 47 s on real data: the count of players kept ran a subquery
+          per row. Now one grouped query, instantly.
+        - At 390 px the table's screen-reader labels (absolute) widened the whole page; the
+          table's panel now contains them.
+      - **Recorded answers** in `tests/fixtures/`: five well-known players' records from
+        FIDE's blitz list (`fide_blitz_recorded.xml`), Lichess's top 3 in blitz, and
+        Chess.com's boards (two entries each, trimmed to the fields read). The
+        `TODO(verify)` markers they settle are gone.
+      - **Checked in headless Chrome** through `serve` on the real data: each sub-tab and
+        its filters (the women's list, Bangladesh's blitz top 50, the rapid juniors), the
+        links, the Update button (FIDE "already up to date", Chess.com updated), 390 px (the
+        page 390 px wide, the table scrolling inside), the API under 40 ms a request, no
+        console errors. `backup` takes `rankings-….db` and `restore` puts it back.
+      - **Docs:** README (the tab, the button), the extension's README, CLAUDE.md.
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
@@ -1619,3 +1678,11 @@ None open.
     test publishes nothing.
   - **CI is tried out on a throwaway branch** (for example `ci/desktop`), then lands on `main`
     as one commit, so `main` stays linear.
+- **2026-11-12: Rankings keeps only the latest lists (M16).** Asked for after 16.4. A FIDE
+  update that saves a new list deletes the one it replaces, in the same transaction, so
+  rankings.db holds one list of each speed (about 5 MB, not 10) and doesn't grow: the new
+  list reuses the old one's pages. The cost: no change in place or rating since last month,
+  and no "new" mark (FIDE's XML has no previous rating to show instead). Lichess and
+  Chess.com already kept only their latest boards. A failed update still keeps the lists you
+  had. Backups are unchanged: each one holds the lists of its day (`keep` = 14 is about
+  60 MB of Rankings backups).

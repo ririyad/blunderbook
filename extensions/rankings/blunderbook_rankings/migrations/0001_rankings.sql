@@ -19,7 +19,7 @@ CREATE TABLE downloads (
 ) WITHOUT ROWID;
 
 -- FIDE's active players the tab can show (the world top 100 and each federation's top 50 in
--- Open, Women, Juniors and Girls), for the two newest months of each list.
+-- Open, Women, Juniors and Girls), from the latest list of each speed only.
 CREATE TABLE fide_players (
   list_month  TEXT NOT NULL,                 -- "2026-11"
   speed       TEXT NOT NULL CHECK (speed IN ('standard','rapid','blitz')),

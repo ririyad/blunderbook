@@ -1,0 +1,35 @@
+{
+ "users": [
+  {
+   "id": "tarzansmurf",
+   "username": "tarzansmurf",
+   "perfs": {
+    "blitz": {
+     "rating": 2981,
+     "progress": 21
+    }
+   }
+  },
+  {
+   "id": "asdert9",
+   "username": "asdert9",
+   "perfs": {
+    "blitz": {
+     "rating": 2953,
+     "progress": -11
+    }
+   }
+  },
+  {
+   "id": "dr_tiger",
+   "username": "Dr_Tiger",
+   "perfs": {
+    "blitz": {
+     "rating": 2945,
+     "progress": 5
+    }
+   },
+   "title": "GM"
+  }
+ ]
+}

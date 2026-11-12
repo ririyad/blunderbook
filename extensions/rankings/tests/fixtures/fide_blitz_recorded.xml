@@ -1,0 +1,77 @@
+<!-- Five records from FIDE's blitz list, downloaded on 2026-11-12 from
+     https://ratings.fide.com/download/blitz_rating_list_xml.zip (its one member is
+     blitz_rating_list.xml, 90.7 MB, Last-Modified Wed, 11 Nov 2026 22:04:44 GMT).
+     Well-known players only. Kasparov's "i" flag: inactive. -->
+<playerslist>
+<player>
+<fideid>1503014</fideid>
+<name>Carlsen, Magnus</name>
+<country>NOR</country>
+<sex>M</sex>
+<title>GM</title>
+<w_title></w_title>
+<o_title></o_title>
+<foa_title></foa_title>
+<rating>2860</rating>
+<games>0</games>
+<k>10</k>
+<birthday>1990</birthday>
+<flag></flag>
+</player><player>
+<fideid>46616543</fideid>
+<name>Gukesh D</name>
+<country>IND</country>
+<sex>M</sex>
+<title>GM</title>
+<w_title></w_title>
+<o_title></o_title>
+<foa_title></foa_title>
+<rating>2659</rating>
+<games>0</games>
+<k>10</k>
+<birthday>2006</birthday>
+<flag></flag>
+</player><player>
+<fideid>8602980</fideid>
+<name>Hou, Yifan</name>
+<country>CHN</country>
+<sex>F</sex>
+<title>GM</title>
+<w_title>WGM</w_title>
+<o_title>FA</o_title>
+<foa_title></foa_title>
+<rating>2521</rating>
+<games>0</games>
+<k>10</k>
+<birthday>1994</birthday>
+<flag>w</flag>
+</player><player>
+<fideid>4100018</fideid>
+<name>Kasparov, Garry</name>
+<country>RUS</country>
+<sex>M</sex>
+<title>GM</title>
+<w_title></w_title>
+<o_title></o_title>
+<foa_title></foa_title>
+<rating>2712</rating>
+<games>0</games>
+<k>10</k>
+<birthday>1963</birthday>
+<flag>i</flag>
+</player><player>
+<fideid>2016192</fideid>
+<name>Nakamura, Hikaru</name>
+<country>USA</country>
+<sex>M</sex>
+<title>GM</title>
+<w_title></w_title>
+<o_title></o_title>
+<foa_title></foa_title>
+<rating>2800</rating>
+<games>0</games>
+<k>10</k>
+<birthday>1987</birthday>
+<flag></flag>
+</player>
+</playerslist>

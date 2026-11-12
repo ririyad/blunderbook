@@ -1,5 +1,5 @@
 """Updating FIDE's lists (ROADMAP 16.1) against a fake server: only what changed is
-downloaded, a failure keeps the lists you had, and two months of each list are kept."""
+downloaded, a failure keeps the lists you had, and only the latest list of each is kept."""
 
 import sqlite3
 from collections.abc import Iterator
@@ -11,6 +11,7 @@ import pytest
 from blunderbook_rankings import extension, fide, net, store, update
 from rankings_fakes import (  # noqa: F401  (fixtures)
     DEC,
+    FIXTURES,
     NOV,
     Server,
     cfg_file,
@@ -55,7 +56,12 @@ def run(
 
 
 def months(conn: sqlite3.Connection) -> dict[str, list[str]]:
-    return {s: store.fide_months(conn, s) for s in fide.SPEEDS}
+    """The months in rankings.db for each speed, newest first."""
+    rows = conn.execute(
+        "SELECT speed, list_month FROM fide_players GROUP BY speed, list_month"
+        " ORDER BY list_month DESC"
+    ).fetchall()
+    return {s: [m for speed, m in rows if speed == s] for s in fide.SPEEDS}
 
 
 def test_first_update(conn: sqlite3.Connection, server: Server) -> None:
@@ -117,20 +123,25 @@ def test_a_new_month(conn: sqlite3.Connection, server: Server) -> None:
         "FIDE December 2026: standard list updated; rapid and blitz already up to date."
     )
     assert months(conn) == {
-        "standard": ["2026-12", "2026-11"],  # last month's kept, for the change
+        "standard": ["2026-12"],  # November's is gone
         "rapid": ["2026-11"],
         "blitz": ["2026-11"],
     }
+    assert store.fide_month(conn, "standard") == "2026-12"
     row = store.source(conn, "fide")
     assert row is not None and row.list_month == "2026-12"
 
 
-def test_only_two_months_are_kept(conn: sqlite3.Connection, server: Server) -> None:
+def test_only_the_latest_list_is_kept(conn: sqlite3.Connection, server: Server) -> None:
     for i, month in enumerate(["sep26", "oct26", "nov26"]):
         for speed in fide.SPEEDS:
             server.on(fide.url(speed), ok(month_zip(speed, month), etag=f'"{i}"', modified=None))
         run(conn, server)
-    assert months(conn) == {s: ["2026-11", "2026-10"] for s in fide.SPEEDS}
+    assert months(conn) == {s: ["2026-11"] for s in fide.SPEEDS}
+    # The old lists' pages are reused, so the file doesn't grow with each month.
+    free = conn.execute("PRAGMA freelist_count").fetchone()[0]
+    pages = conn.execute("PRAGMA page_count").fetchone()[0]
+    assert free < pages / 2
 
 
 def test_a_republished_month_replaces_it(conn: sqlite3.Connection, server: Server) -> None:
@@ -280,3 +291,31 @@ def test_stale() -> None:
 
 def test_its_own_database(conn: sqlite3.Connection) -> None:
     assert ext.db_path(extension).name == "rankings.db"
+
+
+@pytest.mark.parametrize(
+    ("last_modified", "month"),
+    [
+        ("Wed, 11 Nov 2026 22:04:44 GMT", "2026-11"),  # November's real lists
+        ("Sun, 01 Nov 2026 00:10:00 GMT", "2026-11"),
+        ("Tue, 24 Nov 2026 09:00:00 GMT", "2026-11"),
+        ("Wed, 25 Nov 2026 09:00:00 GMT", "2026-12"),  # out a few days early
+        ("Thu, 31 Dec 2026 18:00:00 GMT", "2027-01"),
+        ("yesterday", None),
+        (None, None),
+    ],
+)
+def test_list_month(last_modified: str | None, month: str | None) -> None:
+    assert update.list_month(last_modified) == month
+
+
+def test_a_recorded_list_gets_its_month(conn: sqlite3.Connection, server: Server) -> None:
+    """FIDE's real member name has no month: it comes from Last-Modified."""
+    data = (FIXTURES / "fide_blitz_recorded.xml").read_bytes()
+    for speed in fide.SPEEDS:
+        member = f"{speed}_rating_list.xml"
+        server.on(fide.url(speed), ok(fide_zip(data, member), modified=NOV))
+    got = run(conn, server)
+    assert got.message == "FIDE November 2026: standard, rapid and blitz lists updated."
+    top = store.fide_top(conn, "2026-11", "standard", "women", None, 10)
+    assert [p.name for p in top] == ["Hou, Yifan"]

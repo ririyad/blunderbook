@@ -156,7 +156,8 @@ blunderbook/
 │       ├── blunderbook_rankings/    # top lists. __init__.py (the Extension, commands),
 │       │                            #   net.py (HTTP), fide.py, lichess.py, chesscom.py
 │       │                            #   (reading each source), store.py (its SQL),
-│       │                            #   update.py (one update)
+│       │                            #   update.py (one update), jobs.py (the Update
+│       │                            #   button), routes.py, web/ (its tab)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)

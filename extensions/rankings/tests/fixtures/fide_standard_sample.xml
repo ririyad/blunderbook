@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TODO(verify): hand-built from FIDE's description of its XML lists (ratings.fide.com,
-     download_lists.phtml, 2026-11-12). Replace with a few real records from a download
-     (ROADMAP 16.4). The players and ratings are made up. -->
+<!-- Made-up players in the format of FIDE's XML lists (checked against a real download,
+     fide_blitz_recorded.xml): the cases a real list has that five famous players don't
+     (unrated, an inactive woman, no birth year, a woman's title only). -->
 <playerslist>
 <player><fideid>9000001</fideid><name>Ivanova, Anna</name><country>ESP</country><sex>F</sex><title>IM</title><w_title>WGM</w_title><o_title></o_title><foa_title></foa_title><rating>2512</rating><games>9</games><k>10</k><birthday>2007</birthday><flag>w</flag></player>
 <player><fideid>9000002</fideid><name>Smith,  John </name><country>ENG</country><sex>M</sex><title>GM</title><w_title></w_title><o_title>FT</o_title><foa_title></foa_title><rating>2701</rating><games>0</games><k>10</k><birthday>1988</birthday><flag></flag></player>

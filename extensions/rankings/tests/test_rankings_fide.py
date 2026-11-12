@@ -204,3 +204,26 @@ def test_categories() -> None:
     assert cats(birthday="2010") == ["open", "juniors"]
     assert cats(sex="F", birthday="2010") == ["open", "women", "juniors", "girls"]
     assert cats(birthday="") == ["open"]
+
+
+# ---------------------------------------------------------------- a real list (2026-11-12)
+
+
+def test_a_recorded_list(tmp_path: Path) -> None:
+    """Five records from FIDE's real blitz list. Its member has no month in its name, so
+    the month is the one the update passes in (from the file's Last-Modified)."""
+    data = (FIXTURES / "fide_blitz_recorded.xml").read_bytes()
+    path = write(tmp_path, fide_zip(data, "blitz_rating_list.xml"))
+    got = fide.read_list(path, "blitz", "2026-11")
+    assert got.month == "2026-11"
+    assert (got.read, got.active) == (5, 4)  # Kasparov is inactive
+    assert [(p.name, p.fed, p.title, p.rating) for p in got.players] == [
+        ("Carlsen, Magnus", "NOR", "GM", 2860),
+        ("Nakamura, Hikaru", "USA", "GM", 2800),
+        ("Gukesh D", "IND", "GM", 2659),
+        ("Hou, Yifan", "CHN", "GM", 2521),  # GM over her WGM
+    ]
+    hou = got.players[-1]
+    assert (hou.sex, hou.born) == ("F", 1994)
+    gukesh = got.players[2]
+    assert list(fide.categories(gukesh, 2026)) == ["open", "juniors"]  # born 2006: 20 in 2026

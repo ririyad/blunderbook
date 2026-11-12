@@ -9,12 +9,13 @@ November 2026 lists were dated 11 Nov 2026; a new month's lists come out around 
 - https://ratings.fide.com/download/blitz_rating_list_xml.zip     (about 8 MB)
 
 Each zip holds one XML file, ``<playerslist>`` with one ``<player>`` per rated player:
-``fideid``, ``name``, ``country``, ``sex``, ``title``, ``w_title``, ``o_title``,
-``foa_title``, ``rating``, ``games``, ``k``, ``birthday`` (a year) and ``flag`` (``i`` or
-``wi``: inactive; ``w``: a woman). The member's name carries the month, for example
-``standard_nov26frl_xml.xml``.
-TODO(verify): the element names, the title codes and the member name, from a real download
-(ROADMAP 16.4). The test fixtures are hand-built from FIDE's description until then.
+``fideid``, ``name``, ``country``, ``sex``, ``title`` ("GM", "IM", ...), ``w_title``
+("WGM", ...), ``o_title``, ``foa_title``, ``rating``, ``games``, ``k``, ``birthday`` (a year)
+and ``flag`` (``i`` or ``wi``: inactive; ``w``: a woman). Checked against a real download on
+2026-11-12 (``tests/fixtures/fide_blitz_recorded.xml``): the member is called
+``blitz_rating_list.xml`` (90.7 MB), with no month in its name, so the month comes from the
+file's Last-Modified date (see ``update.list_month``). An older name with the month in it
+(``standard_nov26frl_xml.xml``) is still read.
 
 What's kept (so rankings.db stays small in every backup): active players only, as FIDE's own
 top lists are, and of those the world top 100 and each federation's top 50 in each of Open,

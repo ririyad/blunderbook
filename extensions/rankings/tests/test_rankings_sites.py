@@ -10,6 +10,7 @@ import pytest
 from blunderbook_rankings import chesscom, extension, lichess, net, store, update
 from blunderbook_rankings.site import BadBoard, SitePlayer
 from rankings_fakes import (  # noqa: F401  (fixtures)
+    FIXTURES,
     Server,
     cfg_file,
     chesscom_json,
@@ -251,3 +252,41 @@ def test_one_dispatches(conn: sqlite3.Connection, server: Server) -> None:
                 today=date(2026, 11, 12),
             )
     assert "contact: me@example.org" in server.requests[0].headers["User-Agent"]
+
+
+# ---------------------------------------------------------------- recorded answers (2026-11-12)
+
+
+def test_a_recorded_lichess_answer() -> None:
+    data = (FIXTURES / "lichess_blitz_recorded.json").read_bytes()
+    assert lichess.parse("blitz", data) == [
+        SitePlayer(1, "tarzansmurf", None, 2981, 21),
+        SitePlayer(2, "asdert9", None, 2953, -11),
+        SitePlayer(3, "Dr_Tiger", "GM", 2945, 5),
+    ]
+
+
+def test_a_recorded_chesscom_answer() -> None:
+    got = chesscom.parse((FIXTURES / "chesscom_leaderboards_recorded.json").read_bytes())
+    assert list(got) == list(chesscom.BOARDS)  # tactics left out
+    assert got["live_blitz"] == [
+        SitePlayer(1, "Hikaru", "GM", 3476, 6),
+        SitePlayer(2, "Firouzja2003", "GM", 3391, 0),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("value", "change"),
+    [
+        ({"direction": 1, "delta": 6}, 6),
+        ({"direction": -1, "delta": 6}, -6),
+        ({"direction": 0, "delta": 0}, 0),
+        ({"direction": 2, "delta": 6}, None),
+        ({"direction": 1}, None),
+        ({"direction": True, "delta": 1}, None),
+        ("up", None),
+        (None, None),
+    ],
+)
+def test_chesscom_trend(value: object, change: int | None) -> None:
+    assert chesscom.trend(value) == change

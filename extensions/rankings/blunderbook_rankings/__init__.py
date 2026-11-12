@@ -1,11 +1,13 @@
 """The Rankings extension (CLAUDE.md §15, ROADMAP M16): the FIDE, Lichess and Chess.com top
 lists, kept in rankings.db and never in your Log.
 
-It goes online only when you ask: ``blunderbook rankings update`` (and, from 16.3, the
-tab's Update button). Nothing checks or downloads on its own.
+It goes online only when you ask: ``blunderbook rankings update``, or the tab's Update
+button. Nothing checks or downloads on its own.
 
 16.1 has the database, FIDE's lists (:mod:`blunderbook_rankings.fide`) and two commands,
-``update`` and ``status``; 16.2 adds the Lichess and Chess.com leaderboards.
+``update`` and ``status``; 16.2 adds the Lichess and Chess.com leaderboards; 16.3 the tab
+(:mod:`blunderbook_rankings.routes`, ``web/``) and its Update button
+(:mod:`blunderbook_rankings.jobs`).
 """
 
 import sqlite3
@@ -20,6 +22,7 @@ import typer
 
 from blunderbook import ext, host
 from blunderbook_rankings import chesscom, fide, lichess, net, store, update
+from blunderbook_rankings.routes import router
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -187,6 +190,8 @@ extension = ext.Extension(
     name="rankings",
     title="Rankings",
     host_api=ext.HOST_API,
+    router=router,
+    web=files(__name__) / "web",
     migrations=files(__name__) / "migrations",
     cli=commands,
 )

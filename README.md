@@ -452,10 +452,16 @@ line or in its tab.
 - Its games are kept in `collection.db` next to your database, backed up with it, and never
   in your Log. More in [extensions/collection/README.md](extensions/collection/README.md).
 
-**Rankings** (in progress) keeps FIDE's top lists, the official world ratings, and the
-Lichess and Chess.com leaderboards (`blunderbook ext install rankings`). A tab with an
-Update button is coming next.
+**Rankings** keeps FIDE's top lists, the official world ratings, and the Lichess and
+Chess.com leaderboards (`blunderbook ext install rankings`).
 
+- **The Rankings tab** (restart `blunderbook serve` after turning it on) has a sub-tab for
+  each: FIDE's world top 100 or a federation's top 50 in Open, Women, Juniors or Girls, for
+  standard, rapid or blitz, from FIDE's latest list; the Lichess and Chess.com boards
+  with the site's own recent change. Only the latest lists are kept: an update replaces
+  them. Names link to
+  the player's profile. **Update** downloads that source's latest lists and shows its
+  progress.
 - `blunderbook rankings update` downloads all three; name one to download only it
   (`fide`, `lichess` or `chesscom`).
   - **FIDE:** the standard, rapid and blitz lists (about 35 MB). FIDE publishes new lists
@@ -466,8 +472,9 @@ Update button is coming next.
     `[chesscom]` in config.toml and it's sent along, as Chess.com asks.
 - `blunderbook rankings status` shows when each was downloaded, when a newer FIDE list is
   probably out, and any update that failed.
-- **It goes online only when you run `update`.** Nothing checks on its own. To update every
-  month without thinking about it, schedule the command (Windows Task Scheduler, or cron).
+- **It goes online only when you press Update or run `update`.** Nothing checks on its
+  own; the tab says when a newer FIDE list is probably out. To update every month without
+  thinking about it, schedule the command (Windows Task Scheduler, or cron).
 - Only the top players are kept (the world top 100 and each federation's top 50 in Open,
   Women, Juniors and Girls, for this month and last), in `rankings.db` next to your database,
   backed up with it. A failed update keeps the lists you had. More in
@@ -712,8 +719,9 @@ providers that may keep requests. Pick another with `blunderbook ai model NAME`.
   Chess.com, or when you press "Explain this blunder" with AI explanations on, and then only
   to OpenRouter, with the position and the engine's lines (see
   [AI explanations](#ai-explanations-optional)).
-- With the Rankings extension on, `blunderbook rankings update` downloads FIDE's rating
-  lists from ratings.fide.com and the leaderboards of Lichess and Chess.com. It sends
+- With the Rankings extension on, its Update button and `blunderbook rankings update`
+  download FIDE's rating lists from ratings.fide.com and the leaderboards of Lichess and
+  Chess.com. It sends
   nothing about you, except your `[chesscom] contact`, to Chess.com only, when you set it.
 - Backups are local files. They leave your computer only if you put the backup folder inside
   a folder your cloud drive syncs.

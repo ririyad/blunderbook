@@ -7,8 +7,10 @@ Endpoint, checked on 2026-11-12 in the official docs
   Boards used here: ``live_rapid``, ``live_blitz``, ``live_bullet`` and ``daily`` (others,
   such as ``daily960``, ``live_bughouse`` and ``tactics``, are left out).
 - Each board is a list of up to 50 entries: ``player_id``, ``@id``, ``url``, ``username``,
-  ``score`` and ``rank``. TODO(verify): whether entries carry ``title`` (not documented;
-  used when present).
+  ``score`` and ``rank``. A real answer (2026-11-12, ``tests/fixtures/
+  chesscom_leaderboards_recorded.json``) also carries ``title``, ``name``, ``country``,
+  ``trend_score`` and ``trend_rank`` (``{"direction": 1 | 0 | -1, "delta": n}``), ``avatar``
+  and the win, loss and draw counts. ``title`` and ``trend_score`` (as the change) are kept.
 - It sends ``ETag`` and ``Last-Modified``: send them back (``If-None-Match``,
   ``If-Modified-Since``) for a 304 when nothing changed. Requests one at a time; a
   descriptive User-Agent with contact details, as Chess.com asks.
@@ -28,6 +30,17 @@ NAMES: Final = {
     "daily": "Daily",
 }
 TOP: Final = 50
+
+
+def trend(value: object) -> int | None:
+    """``{"direction": -1, "delta": 6}`` -> -6: the score's recent change. None when it isn't
+    one."""
+    if not isinstance(value, dict):
+        return None
+    direction, delta = whole(value.get("direction")), whole(value.get("delta"))
+    if direction not in (-1, 0, 1) or delta is None:
+        return None
+    return direction * abs(delta)
 
 
 def profile(username: str) -> str:
@@ -51,7 +64,7 @@ def parse(data: bytes) -> dict[str, list[SitePlayer]]:
         entries = answer.get(board)
         if not isinstance(entries, list):
             continue
-        rows: list[tuple[int, str, str | None, int]] = []
+        rows: list[tuple[int, str, str | None, int, int | None]] = []
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -60,10 +73,11 @@ def parse(data: bytes) -> dict[str, list[SitePlayer]]:
             if name is None or score is None:
                 continue
             rank = whole(entry.get("rank")) or len(rows) + 1
-            rows.append((rank, name, text(entry.get("title"), MAX_TITLE), score))
+            title = text(entry.get("title"), MAX_TITLE)
+            rows.append((rank, name, title, score, trend(entry.get("trend_score"))))
         rows.sort(key=lambda r: r[0])
         boards[board] = [
-            SitePlayer(i, name, title, score, None)
-            for i, (_, name, title, score) in enumerate(rows[:TOP], start=1)
+            SitePlayer(i, name, title, score, change)
+            for i, (_, name, title, score, change) in enumerate(rows[:TOP], start=1)
         ]
     return boards

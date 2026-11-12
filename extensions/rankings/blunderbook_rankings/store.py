@@ -4,13 +4,10 @@ here, with every value a parameter."""
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Final
 
 from blunderbook_rankings.fide import JUNIOR_AGE, Category, FideList, Speed
 from blunderbook_rankings.net import Validators
 from blunderbook_rankings.site import SitePlayer
-
-KEEP_MONTHS: Final = 2  # the newest list, and the one before for "change since last month"
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,11 +95,10 @@ def save_validators(conn: sqlite3.Connection, url: str, got: Validators) -> None
 
 
 def replace_fide(conn: sqlite3.Connection, found: FideList) -> None:
-    """Put ``found`` in as its month's list (replacing that month's, if FIDE republished it),
-    and keep only the newest KEEP_MONTHS months of that speed. Call inside a transaction."""
-    conn.execute(
-        "DELETE FROM fide_players WHERE speed = ? AND list_month = ?", (found.speed, found.month)
-    )
+    """Put ``found`` in as its speed's list, in place of the one kept before: only the latest
+    list of each speed is kept. Call inside a transaction, so a failure keeps the old one; the
+    old list's pages are freed first, so the new one reuses them and the file doesn't grow."""
+    conn.execute("DELETE FROM fide_players WHERE speed = ?", (found.speed,))
     conn.executemany(
         "INSERT INTO fide_players (list_month, speed, fide_id, name, fed, sex, title, born,"
         " rating, games) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -122,29 +118,25 @@ def replace_fide(conn: sqlite3.Connection, found: FideList) -> None:
             for p in found.players
         ),
     )
-    conn.execute(
-        "DELETE FROM fide_players WHERE speed = ? AND list_month NOT IN ("
-        "  SELECT DISTINCT list_month FROM fide_players WHERE speed = ?"
-        "  ORDER BY list_month DESC LIMIT ?)",
-        (found.speed, found.speed, KEEP_MONTHS),
-    )
 
 
-def fide_months(conn: sqlite3.Connection, speed: Speed) -> list[str]:
-    """The months kept for ``speed``, newest first."""
-    rows = conn.execute(
-        "SELECT DISTINCT list_month FROM fide_players WHERE speed = ? ORDER BY list_month DESC",
-        (speed,),
-    )
-    return [row[0] for row in rows]
+def fide_month(conn: sqlite3.Connection, speed: Speed) -> str | None:
+    """The month of the list kept for ``speed``, or None before the first update."""
+    row = conn.execute(
+        "SELECT max(list_month) FROM fide_players WHERE speed = ?", (speed,)
+    ).fetchone()
+    return row[0] if row else None
 
 
 def fide_counts(conn: sqlite3.Connection) -> list[FideCount]:
     """Players kept per speed in its newest month, in the order of ``fide.SPEEDS``."""
     rows = conn.execute(
-        "SELECT speed, list_month, count(*) FROM fide_players f"
-        " WHERE list_month = (SELECT max(list_month) FROM fide_players WHERE speed = f.speed)"
-        " GROUP BY speed, list_month"
+        # The newest month of each speed first, then the count: a subquery per row is far
+        # too slow with tens of thousands of players.
+        "SELECT f.speed, f.list_month, count(*) FROM fide_players f"
+        " JOIN (SELECT speed, max(list_month) AS newest FROM fide_players GROUP BY speed) n"
+        " ON f.speed = n.speed AND f.list_month = n.newest"
+        " GROUP BY f.speed, f.list_month"
     ).fetchall()
     order = {"standard": 0, "rapid": 1, "blitz": 2}
     return sorted((FideCount(*row) for row in rows), key=lambda c: order.get(c.speed, 9))
@@ -215,3 +207,13 @@ def board_counts(conn: sqlite3.Connection, source_name: str) -> dict[str, int]:
         (source_name,),
     )
     return {row[0]: row[1] for row in rows}
+
+
+def federations(conn: sqlite3.Connection, month: str, speed: Speed) -> list[str]:
+    """The federations with players kept in ``month``'s ``speed`` list, A to Z."""
+    rows = conn.execute(
+        "SELECT DISTINCT fed FROM fide_players WHERE list_month = ? AND speed = ?"
+        " AND fed IS NOT NULL ORDER BY fed",
+        (month, speed),
+    )
+    return [row[0] for row in rows]

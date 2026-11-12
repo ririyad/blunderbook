@@ -16,7 +16,8 @@ class SitePlayer:
     username: str
     title: str | None  # "GM", ...; None when there's none
     rating: int
-    progress: int | None  # the site's own change (Lichess), else None
+    progress: int | None  # the site's own recent change (Lichess's progress, Chess.com's
+    # trend), else None
 
 
 class BadBoard(RankingsError):

@@ -25,6 +25,7 @@ from blunderbook_rankings.site import SitePlayer
 Step = Callable[[str, float], None]  # what it's doing, and 0..1 of this source
 
 SOURCES: Final = ("fide", "lichess", "chesscom")
+NEXT_MONTH_FROM_DAY: Final = 25  # a FIDE file dated from the 25th on is next month's list
 NAMES: Final = {"fide": "FIDE", "lichess": "Lichess", "chesscom": "Chess.com"}
 
 
@@ -70,7 +71,7 @@ def update_fide(
                 listed = fide.read_list(
                     got.path,
                     speed,
-                    _month_of(got.validators.last_modified) or f"{today:%Y-%m}",
+                    list_month(got.validators.last_modified) or f"{today:%Y-%m}",
                     _part(progress, f"Reading FIDE's {speed} list", (i + 0.5) / count, count),
                     stop,
                 )
@@ -201,14 +202,21 @@ def _part(progress: Step, label: str, start: float, count: int) -> Callable[[flo
     return lambda done: progress(label, start + done / (2 * count))
 
 
-def _month_of(last_modified: str | None) -> str | None:
-    """A Last-Modified header's "YYYY-MM", or None."""
+def list_month(last_modified: str | None) -> str | None:
+    """The month of the list a file dated ``last_modified`` is: its own month, or the next
+    one from the 25th on (a list published a few days early, as FIDE sometimes does). None
+    when the date can't be read. FIDE's file names carry no month (checked on 2026-11-12:
+    November's lists were dated 11 Nov). TODO(verify): the 25th, over a few months' lists."""
     if not last_modified:
         return None
     try:
-        return f"{parsedate_to_datetime(last_modified):%Y-%m}"
+        when = parsedate_to_datetime(last_modified)
     except TypeError, ValueError:
         return None
+    year, month = when.year, when.month
+    if when.day >= NEXT_MONTH_FROM_DAY:
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return f"{year}-{month:02d}"
 
 
 def _and(words: list[str]) -> str:

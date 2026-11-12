@@ -3,8 +3,8 @@
 A Blunderbook extension: the FIDE, Lichess and Chess.com top lists. It's a separate package
 (CLAUDE.md §15). Nothing here goes into your Log.
 
-Status: in progress (M16 of the roadmap). FIDE's lists and the Lichess and Chess.com
-leaderboards work on the command line; the tab comes next.
+Status: done (M16 of the roadmap). A tab with an Update button, and two commands,
+`update` and `status`.
 
 ## Install and turn on
 
@@ -12,7 +12,26 @@ leaderboards work on the command line; the tab comes next.
 blunderbook ext install rankings   # installs it and turns it on
 ```
 
-## Update
+## The tab
+
+Restart `blunderbook serve` after turning it on. **Rankings** has a sub-tab for each source:
+
+- **FIDE:** the world's top 100, or a federation's top 50, in Open, Women, Juniors (20 or
+  younger this year) or Girls, for standard, rapid or blitz. Each player's title, federation,
+  rating, games this period and birth year, from FIDE's latest list.
+- **Lichess:** the top 100 in bullet, blitz, rapid, classical and UltraBullet.
+- **Chess.com:** the top 50 in rapid, blitz, bullet and daily.
+
+Both sites' boards show the site's own recent change. A name opens the player's profile on
+that site, in a new tab. The filters stay in the address (`#rankings/fide?speed=blitz&fed=NOR`),
+so a reload or a bookmark keeps them.
+
+**Update** downloads that source's latest lists, only what changed, and shows what it's doing.
+When it's done, it says what changed ("FIDE: already up to date (November 2026 lists).") and
+redraws the list. The tab also says when a newer FIDE list is probably out, and when the last
+update failed. Stopping `serve` stops an update; the lists you had are kept.
+
+## Update on the command line
 
 ```sh
 blunderbook rankings update            # all three
@@ -28,7 +47,10 @@ Lichess: 5 leaderboards updated.
 Chess.com: 4 leaderboards updated.
 ```
 
-- **It goes online only when you run `update`.** Nothing checks or downloads on its own.
+- **It goes online only when you press Update or run `update`.** Nothing checks or
+  downloads on its own. To update every month without thinking about it, schedule
+  `blunderbook rankings update` (Windows Task Scheduler, or cron): FIDE's new lists come out
+  around the 1st.
 - **Only what changed is downloaded.** FIDE publishes new lists once a month, around the
   1st. Running `update` again before then says "already up to date". Chess.com's answer
   works the same way; Lichess's five small answers are fetched each time.
@@ -38,7 +60,9 @@ Chess.com: 4 leaderboards updated.
   `status` shows why.
 - **Only the top players are kept**, so the database stays small in your backups: active
   players only, the world top 100 and each federation's top 50 in Open, Women, Juniors and
-  Girls, for the newest list and the one before it.
+  Girls, from the latest list only. An update that saves a new list deletes the one before,
+  so there's no change since last month. That's about 18,000 players a list, and
+  rankings.db stays about 5 MB.
 - **A failed update keeps the lists you had.** Ctrl+C keeps the sources already done and
   changes nothing in the one being updated.
 - **Chess.com asks for contact details** in each request. Set `contact` under `[chesscom]`
