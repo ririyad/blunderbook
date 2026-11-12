@@ -34,6 +34,7 @@ members = ["extensions/*"]
 [tool.uv.sources]
 blunderbook-library = { workspace = true }
 blunderbook-collection = { workspace = true }
+blunderbook-rankings = { workspace = true }
 
 # ---------------------------------------------------------------- ruff
 
@@ -47,9 +48,11 @@ extend-exclude = ["*.md"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-# The Collection's tests import their fixtures from collection_fakes (it can't be a
-# conftest.py, see there), so each fixture parameter "redefines" an import.
+# The Collection's and the Rankings' tests import their fixtures from collection_fakes and
+# rankings_fakes (they can't be a conftest.py, see there), so each fixture parameter
+# "redefines" an import.
 "extensions/collection/tests/test_*.py" = ["F811"]
+"extensions/rankings/tests/test_*.py" = ["F811"]
 
 # ---------------------------------------------------------------- mypy
 # Whole package is type-checked; blunderbook/core is strict (CLAUDE.md §3).
@@ -61,6 +64,7 @@ files = [
     "blunderbook",
     "extensions/library/blunderbook_library",
     "extensions/collection/blunderbook_collection",
+    "extensions/rankings/blunderbook_rankings",
 ]
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -74,6 +78,7 @@ module = [
     "blunderbook_library.yours",
     "blunderbook_collection.games",
     "blunderbook_collection.stats",
+    "blunderbook_rankings.fide",
 ]
 disallow_any_generics = true
 disallow_subclassing_any = true
@@ -90,7 +95,12 @@ extra_checks = true
 # ---------------------------------------------------------------- pytest
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "extensions/library/tests", "extensions/collection/tests"]
+testpaths = [
+    "tests",
+    "extensions/library/tests",
+    "extensions/collection/tests",
+    "extensions/rankings/tests",
+]
 addopts = "-ra --strict-markers"
 markers = [
     "engine: needs a Stockfish binary; skipped when none is found",
@@ -108,6 +118,7 @@ filterwarnings = [
 dev = [
     "blunderbook-collection",
     "blunderbook-library",
+    "blunderbook-rankings",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",

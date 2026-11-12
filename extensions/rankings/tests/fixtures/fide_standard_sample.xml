@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TODO(verify): hand-built from FIDE's description of its XML lists (ratings.fide.com,
+     download_lists.phtml, 2026-11-12). Replace with a few real records from a download
+     (ROADMAP 16.4). The players and ratings are made up. -->
+<playerslist>
+<player><fideid>9000001</fideid><name>Ivanova, Anna</name><country>ESP</country><sex>F</sex><title>IM</title><w_title>WGM</w_title><o_title></o_title><foa_title></foa_title><rating>2512</rating><games>9</games><k>10</k><birthday>2007</birthday><flag>w</flag></player>
+<player><fideid>9000002</fideid><name>Smith,  John </name><country>ENG</country><sex>M</sex><title>GM</title><w_title></w_title><o_title>FT</o_title><foa_title></foa_title><rating>2701</rating><games>0</games><k>10</k><birthday>1988</birthday><flag></flag></player>
+<player><fideid>9000003</fideid><name>Old, Timer</name><country>GER</country><sex>M</sex><title>GM</title><w_title></w_title><o_title></o_title><foa_title></foa_title><rating>2750</rating><games>0</games><k>10</k><birthday>1960</birthday><flag>i</flag></player>
+<player><fideid>9000004</fideid><name>Rahman, Karim</name><country>BAN</country><sex>M</sex><title></title><w_title></w_title><o_title></o_title><foa_title></foa_title><rating>1850</rating><games>4</games><k>20</k><birthday></birthday><flag></flag></player>
+<player><fideid>9000005</fideid><name>Unrated, Una</name><country>FRA</country><sex>F</sex><title></title><w_title></w_title><o_title></o_title><foa_title></foa_title><rating>0</rating><games>0</games><k>40</k><birthday>2001</birthday><flag>w</flag></player>
+<player><fideid>9000006</fideid><name>Resting, Rita</name><country>USA</country><sex>F</sex><title>WGM</title><w_title>WGM</w_title><o_title></o_title><foa_title></foa_title><rating>2300</rating><games>0</games><k>10</k><birthday>1995</birthday><flag>wi</flag></player>
+<player><fideid>9000007</fideid><name>Chowdhury, Nila</name><country>BAN</country><sex>F</sex><title></title><w_title>WFM</w_title><o_title></o_title><foa_title></foa_title><rating>1990</rating><games>7</games><k>20</k><birthday>2010</birthday><flag>w</flag></player>
+</playerslist>

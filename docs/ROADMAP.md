@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-12_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -24,8 +24,10 @@ _Last updated: 2026-11-11_
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
+| M15 Desktop app | Planned | v2: a download anyone can double-click |
+| M16 Rankings | In progress (1/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 
-**Next up:** v1 is done. v2 starts with M15, the desktop app (planned below, not started). Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 16.2, the Lichess and Chess.com leaderboards in the Rankings extension. v1 is done; M15, the desktop app, is planned below, not started. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1211,6 +1213,69 @@ place of Python, uv, a git clone and a separate Stockfish.
   once; unsigned PyInstaller apps are sometimes flagged by antivirus; the download is about
   80 to 120 MB; a frozen Python 3.15 app is unproven until 15.4 (PyInstaller 6.22 and
   pywebview 6.2 do resolve on 3.15).
+
+### M16 Rankings (extension)
+
+Planned on 2026-11-12. The top lists of FIDE (the official world ratings), Lichess and
+Chess.com, each on its own sub-tab of a Rankings tab. An extension (CLAUDE.md §1.7, §15):
+rankings aren't about your own mistakes.
+
+- **Decided:**
+  - **Online only when you ask:** `blunderbook rankings update` and, from 16.3, the tab's
+    Update button. Nothing checks or downloads on its own. The tab says when a newer FIDE
+    list is probably out (a list from an earlier month), without asking the network. For an
+    automatic monthly update, schedule the command (Windows Task Scheduler, cron).
+  - **Only what changed is downloaded:** the ETag and Last-Modified of each file are kept
+    and sent back. A 304, or the same ETag (the same Last-Modified when there's no ETag),
+    is "already up to date".
+  - **Polite:** one request at a time, a descriptive User-Agent, a timeout; HTTP 429 waits
+    (Retry-After, at least a minute), tries once more, then stops with a plain message.
+  - **Safe:** everything is downloaded and read before anything is written, in one
+    transaction; a failure keeps the lists you had and records why; Ctrl+C changes nothing.
+    A download is capped at 200 MB, and the zip must hold one XML file of at most 400 MB.
+    The XML is read as a stream.
+  - **Small:** rankings.db is in every backup, so it keeps only what the tab shows: FIDE's
+    active players, the world top 100 and each federation's top 50 in Open, Women, Juniors
+    and Girls, for each list's newest month and the one before (for "change since last
+    month"); the latest Lichess and Chess.com boards.
+- [x] **16.1** The package, rankings.db and FIDE's lists on the command line.
+      _Done:_
+      - **`extensions/rankings/`**, a workspace package like the Collection, with its entry
+        point, `httpx` as a dependency (already core's), and `migrations/0001_rankings.sql`:
+        `sources` (each source's newest month, when it last changed, when it was last
+        checked, the last error), `downloads` (ETag and Last-Modified per URL),
+        `fide_players` and `site_players` (for 16.2).
+      - **`net.py`:** the client, conditional downloads to a file with a size cap, one retry
+        after a 429, and a wait that a stop interrupts.
+      - **`fide.py`:** the three XML lists' URLs, one player's fields (inactive `i`/`wi`,
+        unrated and unnamed players left out; title codes; a woman's title when there's no
+        other), the month from the member's name (`standard_nov26frl_xml.xml`) or else from
+        Last-Modified, and the selection, kept with small heaps while the file is read.
+      - **`store.py`:** all the SQL; a list replaces its month (FIDE sometimes republishes)
+        and only two months of each list are kept; `fide_top` for 16.3.
+      - **`update.py`:** `update_fide`, shared by the command and (16.3) the page.
+      - **Commands:** `blunderbook rankings update [fide]` (the daily backup first; Ctrl+C
+        exits 130 and changes nothing; a failure exits 1 and keeps the lists) and
+        `blunderbook rankings status` (each list's month, players kept, when it was
+        downloaded, a stale-list hint, the last failure).
+      - **Tests** (60): players, the zip's guards, who's kept (ties at the cut, Juniors at
+        20), updates against a fake server (304, a server that ignores the question, a new
+        month, two months kept, a republished month, a failure halfway, a bad file, offline,
+        too big, 429 once, twice and too long, a stop), the commands, the daily backup,
+        `rankings.db` in `backup`, and the host API boundary. No test goes online.
+      - `TODO(verify)`: FIDE's XML element names, title codes and member name, and its
+        junior rule; the fixtures are hand-built from FIDE's description until a real
+        download is recorded (16.4).
+- [ ] **16.2** Lichess (`GET /api/player/top/100/{perfType}` for bullet, blitz, rapid,
+      classical and ultraBullet, one at a time) and Chess.com (`GET /pub/leaderboards`, with
+      its ETag); `blunderbook rankings update lichess|chesscom|all`. `host.settings()` gains
+      `chesscom_contact`, for Chess.com's User-Agent (added, so `HOST_API` stays 1).
+- [ ] **16.3** The routes (`/status`, `/fide`, `/lichess`, `/chesscom`, `POST /update` with
+      `same_origin`, `GET /update/{job_id}`), a background job (one at a time, stopped with
+      `serve`), and the tab: FIDE / Lichess / Chess.com sub-tabs, filters, the table with
+      the change since last month, the source line and the Update button with its progress.
+- [ ] **16.4** Docs (README, CLAUDE.md), then one real update to record fixtures in place of
+      the hand-built ones, and the size of rankings.db.
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly

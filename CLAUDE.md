@@ -24,8 +24,9 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
 3. **Local-first and private.** All data lives in one SQLite file on the user's machine.
    No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, when
    the user runs a sync, in the optional AI explanation (off by default), when the user
-   presses its button, and in `update`, a `git fetch` from the install folder's own remote,
-   when the user runs it. Backups are local files too: the app never uploads them.
+   presses its button, in `update`, a `git fetch` from the install folder's own remote,
+   when the user runs it, and in the Rankings extension's update (FIDE, Lichess,
+   Chess.com), when the user runs it or presses its button. Backups are local files too: the app never uploads them.
    For an off-site copy, the user points the backup folder at a folder their cloud drive syncs.
 4. **Degrade gracefully.** Missing headers, ratings or clock times are normal (OTB games,
    typed-up score sheets). Show "—", skip the features that need the missing data, never fail
@@ -145,11 +146,16 @@ blunderbook/
 │   │   ├── blunderbook_library/   # __init__.py (the Extension, commands), content.py,
 │   │   │                          #   content/{openings,traps,tactics}/*.toml
 │   │   └── tests/
-│   └── collection/            # the Collection extension (§15): anyone's games, analysed
-│       ├── blunderbook_collection/  # __init__.py (the Extension, commands), games.py and
-│       │                            #   stats.py (pure), store.py (its SQL), collect.py
-│       │                            #   (adding games), jobs.py (adding them on the
-│       │                            #   page), routes.py, web/ (its tab)
+│   ├── collection/            # the Collection extension (§15): anyone's games, analysed
+│   │   ├── blunderbook_collection/  # __init__.py (the Extension, commands), games.py and
+│   │   │                            #   stats.py (pure), store.py (its SQL), collect.py
+│   │   │                            #   (adding games), jobs.py (adding them on the
+│   │   │                            #   page), routes.py, web/ (its tab)
+│   │   └── tests/
+│   └── rankings/              # the Rankings extension (§15): FIDE, Lichess and Chess.com
+│       ├── blunderbook_rankings/    # top lists. __init__.py (the Extension, commands),
+│       │                            #   net.py (HTTP), fide.py (reading a list), store.py
+│       │                            #   (its SQL), update.py (one update)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -944,6 +950,9 @@ Design language (from the demo and the paper template):
     and suggest "Missed my tactic" (§7.6, §7.7).
 14. **Page polish:** the shell (scroll, error line, phone header), one board with step
     controls, a review flow in the Log, and import and re-test feedback.
+15. **Desktop app (v2):** planned in `docs/ROADMAP.md`, not started.
+16. **Rankings (extension):** the FIDE, Lichess and Chess.com top lists, downloaded only when
+    you run `blunderbook rankings update` or press its button.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -979,7 +988,8 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 
 Bigger features that aren't about your own mistakes are extensions: separate packages, kept
 in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. The first
-two are **Library** (openings, traps and tactics) and **Collection** (anyone's games).
+two are **Library** (openings, traps and tactics) and **Collection** (anyone's games);
+**Rankings** (the FIDE, Lichess and Chess.com top lists) is the first with network calls.
 `tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
 
 **Found, not imported.** An extension package declares an entry point in the
