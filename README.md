@@ -480,6 +480,24 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   backed up with it. A failed update keeps the lists you had. More in
   [extensions/rankings/README.md](extensions/rankings/README.md).
 
+**Profile** keeps your own ratings on Lichess and Chess.com
+(`blunderbook ext install profile`). It has commands only for now; its tab comes next.
+
+- `blunderbook profile refresh` asks each site you have a username for (under `[lichess]`
+  and `[chesscom]` in config.toml) and prints your rating in bullet, blitz, rapid,
+  classical, daily and puzzles: how far it moved since the fetch before, your highest, and
+  your wins, losses and draws, where the site gives them. Name a site (`lichess` or
+  `chesscom`) to ask only it.
+- `blunderbook profile show` prints what was fetched last, and your rating in your newest
+  synced game of each site and time control. It asks no site.
+- **It goes online only when you run `refresh`**, and sends only your username, to the site
+  it belongs to (and your `[chesscom] contact`, to Chess.com). Your Lichess token isn't
+  sent: the ratings are public.
+- Chess.com has no classical rating, and gives only your highest puzzle rating.
+- The answers are kept in `profile.db` next to your database, one per site per day you
+  asked, backed up with it. More in
+  [extensions/profile/README.md](extensions/profile/README.md).
+
 ### Print your Blunder Log
 
 ```sh
@@ -686,6 +704,8 @@ back to the next one.
 | `blunderbook collection players [NAME]` | Everyone who played, with games, score and accuracy. |
 | `blunderbook rankings update [fide\|lichess\|chesscom\|all]` | Download the latest top lists, if they changed (with the Rankings on). |
 | `blunderbook rankings status` | When each list was downloaded, and whether a newer one is probably out. |
+| `blunderbook profile refresh [lichess\|chesscom\|all]` | Ask the sites for your ratings now and keep them (with the Profile on). |
+| `blunderbook profile show` | Your ratings as last fetched, and your rating in your newest games. Asks no site. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games
@@ -724,6 +744,9 @@ providers that may keep requests. Pick another with `blunderbook ai model NAME`.
   download FIDE's rating lists from ratings.fide.com and the leaderboards of Lichess and
   Chess.com. It sends
   nothing about you, except your `[chesscom] contact`, to Chess.com only, when you set it.
+- With the Profile extension on, `blunderbook profile refresh` asks Lichess and Chess.com
+  for your ratings. It sends your username to the site it belongs to, and your
+  `[chesscom] contact` to Chess.com. Your Lichess token isn't sent.
 - Backups are local files. They leave your computer only if you put the backup folder inside
   a folder your cloud drive syncs.
 

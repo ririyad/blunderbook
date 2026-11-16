@@ -35,6 +35,7 @@ members = ["extensions/*"]
 blunderbook-library = { workspace = true }
 blunderbook-collection = { workspace = true }
 blunderbook-rankings = { workspace = true }
+blunderbook-profile = { workspace = true }
 
 # ---------------------------------------------------------------- ruff
 
@@ -48,11 +49,12 @@ extend-exclude = ["*.md"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-# The Collection's and the Rankings' tests import their fixtures from collection_fakes and
-# rankings_fakes (they can't be a conftest.py, see there), so each fixture parameter
-# "redefines" an import.
+# The Collection's, the Rankings' and the Profile's tests import their fixtures from
+# collection_fakes, rankings_fakes and profile_fakes (they can't be a conftest.py, see
+# there), so each fixture parameter "redefines" an import.
 "extensions/collection/tests/test_*.py" = ["F811"]
 "extensions/rankings/tests/test_*.py" = ["F811"]
+"extensions/profile/tests/test_*.py" = ["F811"]
 
 # ---------------------------------------------------------------- mypy
 # Whole package is type-checked; blunderbook/core is strict (CLAUDE.md §3).
@@ -65,6 +67,7 @@ files = [
     "extensions/library/blunderbook_library",
     "extensions/collection/blunderbook_collection",
     "extensions/rankings/blunderbook_rankings",
+    "extensions/profile/blunderbook_profile",
 ]
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -79,6 +82,7 @@ module = [
     "blunderbook_collection.games",
     "blunderbook_collection.stats",
     "blunderbook_rankings.fide",
+    "blunderbook_profile.history",
 ]
 disallow_any_generics = true
 disallow_subclassing_any = true
@@ -100,6 +104,7 @@ testpaths = [
     "extensions/library/tests",
     "extensions/collection/tests",
     "extensions/rankings/tests",
+    "extensions/profile/tests",
 ]
 addopts = "-ra --strict-markers"
 markers = [
@@ -118,6 +123,7 @@ filterwarnings = [
 dev = [
     "blunderbook-collection",
     "blunderbook-library",
+    "blunderbook-profile",
     "blunderbook-rankings",
     "mypy>=2.4.1",
     "pytest>=9.2.0",

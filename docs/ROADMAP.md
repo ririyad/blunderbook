@@ -26,11 +26,11 @@ _Last updated: 2026-11-16_
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
-| M17 Profile | In progress (1/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
+| M17 Profile | In progress (2/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 
-**Next up:** 17.2, the Profile package (its database, the rating history from your games,
-`profile refresh` and `profile show`). Still to check from 17.1: one real answer from each
-site (the rating fixtures are hand-built, `TODO(verify)`). M15, the desktop app, is planned
+**Next up:** 17.3, the Profile tab (current ratings per site, and "Refresh ratings"). Still
+to check from 17.1 and 17.2: one real `blunderbook profile refresh` (the rating fixtures are
+hand-built, `TODO(verify)`). M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -1389,8 +1389,40 @@ to your blunders per game. Done before M15, which will bundle it with the other 
       - **Not checked:** a real answer from either site. The fixtures are hand-built from
         the docs (`TODO(verify)`): Chess.com's `chess_rapid` / `chess_bullet` names and its
         `date` as Unix seconds, and whether Lichess lists a kind you never played.
-- [ ] **17.2** Package: `extensions/profile`, `profile.db` (every fetch kept), the rating
-      history from your games (pure), `blunderbook profile refresh` and `profile show`.
+- [x] **17.2** The package, profile.db, your rating from your games, and two commands.
+      _Done:_
+      - **The package** (`extensions/profile`, a workspace member, no dependency of its own):
+        `history.py` (pure, mypy-strict), `store.py` (all its SQL) and the commands. It has
+        no HTTP: `host.fetch_ratings` asks, so `ext.boundary_problems` stays empty without
+        httpx.
+      - **profile.db:** `fetches` (one per site per local day) and `ratings` (one per kind
+        of play, every field the site gave). Asking twice on one day keeps the later answer,
+        so "since" always compares two different days, and the file grows by a few rows a
+        day at most. It keeps the usual number of backups: unlike the Rankings' lists, an
+        old answer can't be downloaded again.
+      - **Changed from the plan:** the plan kept every refresh. One per day is kept
+        instead: two refreshes a minute apart would otherwise make "since last time" say
+        +0.
+      - **"Since"** compares with the newest earlier day's answer for the same account
+        (ignoring case). After the username changes, nothing is compared.
+      - **Your rating from your games** (`history.py`): Lichess and Chess.com games with
+        your rating, a date and a time control; your side's rating; by site and speed, month
+        by month (the month's last game, games, blunders), and the newest game of each.
+      - **`blunderbook profile refresh [lichess|chesscom|all]`:** the daily backup, then
+        each site with a username, one after the other. A site that fails says why, keeps
+        the ratings you had, and doesn't stop the other; the command then exits 1. No
+        username at all is a message naming the config.toml keys, and nothing is created.
+      - **`blunderbook profile show`:** what was fetched last and, under it, "From your
+        games". It asks no site.
+      - **Tests** (36): the history (your side, games left out, months, order), the store
+        (round trip of every field, the same day, the day before, another account, sites
+        apart), the commands with `host.fetch_ratings` faked (both sites, one, none, a
+        failure, the change line, the backup, a broken config, through `blunderbook`), and
+        the host-API boundary.
+      - **Docs:** README (Extensions, the command reference, Privacy), the extension's
+        README, CLAUDE.md §4 and §15.
+      - **Not checked:** a real refresh. It's yours to run once: development never calls
+        the sites (CLAUDE.md §14).
 - [ ] **17.3** The tab: current ratings per site with the change since the last refresh,
       highest, record and puzzles, and "Refresh ratings".
 - [ ] **17.4** Rating over time: the chart from your games, blunders per game by month

@@ -1,0 +1,25 @@
+[project]
+name = "blunderbook-profile"
+version = "0.1.0"
+description = "A Blunderbook extension: your Lichess and Chess.com ratings."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.15"
+dependencies = [
+    "blunderbook",
+]
+
+# How Blunderbook finds it (CLAUDE.md §15). The name is the extension's.
+[project.entry-points."blunderbook.extensions"]
+profile = "blunderbook_profile:extension"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "blunderbook_profile"
+module-root = ""
+
+[tool.uv.sources]
+blunderbook = { workspace = true }

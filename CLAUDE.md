@@ -154,12 +154,18 @@ blunderbook/
 │   │   │                            #   (adding games), jobs.py (adding them on the
 │   │   │                            #   page), routes.py, web/ (its tab)
 │   │   └── tests/
-│   └── rankings/              # the Rankings extension (§15): FIDE, Lichess and Chess.com
-│       ├── blunderbook_rankings/    # top lists. __init__.py (the Extension, commands),
-│       │                            #   net.py (HTTP), fide.py, lichess.py, chesscom.py
-│       │                            #   (reading each source), store.py (its SQL),
-│       │                            #   update.py (one update), jobs.py (the Update
-│       │                            #   button), routes.py, web/ (its tab)
+│   ├── rankings/              # the Rankings extension (§15): FIDE, Lichess and Chess.com
+│   │   ├── blunderbook_rankings/    # top lists. __init__.py (the Extension, commands),
+│   │   │                            #   net.py (HTTP), fide.py, lichess.py, chesscom.py
+│   │   │                            #   (reading each source), store.py (its SQL),
+│   │   │                            #   update.py (one update), jobs.py (the Update
+│   │   │                            #   button), routes.py, web/ (its tab)
+│   │   └── tests/
+│   └── profile/               # the Profile extension (§15): your Lichess and Chess.com
+│       ├── blunderbook_profile/     # ratings. __init__.py (the Extension, commands),
+│       │                            #   history.py (pure: your rating over time, from
+│       │                            #   your games), store.py (its SQL). No HTTP: the
+│       │                            #   site adapters ask, through host.fetch_ratings
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -1010,6 +1016,8 @@ Bigger features that aren't about your own mistakes are extensions: separate pac
 in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. The first
 two are **Library** (openings, traps and tactics) and **Collection** (anyone's games);
 **Rankings** (the FIDE, Lichess and Chess.com top lists) is the first with network calls.
+**Profile** (your own ratings on Lichess and Chess.com) asks the sites through
+`host.fetch_ratings` and has no HTTP of its own.
 `tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
 
 **Found, not imported.** An extension package declares an entry point in the
