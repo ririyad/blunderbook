@@ -83,6 +83,7 @@ def test_before_any_refresh(client: TestClient, sites: Sites) -> None:
                 "problem": None,
             },
         ],
+        "history": [],
         "warnings": [],
     }
     assert sites.asked == []  # opening the tab asks no site
@@ -119,6 +120,66 @@ def test_your_rating_from_your_games(client: TestClient) -> None:
         },
     ]
     assert [(g["speed"], g["rating"]) for g in chesscom["from_games"]] == [("rapid", 1655)]
+
+
+def test_your_rating_over_time(client: TestClient, sites: Sites) -> None:
+    fill_log(
+        new_game(1, "lichess", "blitz", date(2026, 9, 3), 1600),
+        new_game(2, "chesscom", "blitz", date(2026, 9, 30), 1490),
+        new_game(3, "lichess", "blitz", date(2026, 11, 1), 1647, me="black"),
+        new_game(4, "chesscom", "rapid", date(2026, 10, 7), 1655),
+        new_game(5, "otb", "classical", date(2026, 11, 10), 1800),  # not a site rating
+    )
+    assert get(client)["history"] == [
+        {
+            "speed": "blitz",
+            "label": "Blitz",
+            "games": 3,
+            "months": [
+                {
+                    "month": "2026-09",
+                    "lichess": 1600,
+                    "chesscom": 1490,
+                    "games": 2,
+                    "blunders": 0,
+                    "blunders_per_game": 0.0,
+                },
+                {
+                    "month": "2026-10",
+                    "lichess": None,
+                    "chesscom": None,
+                    "games": 0,
+                    "blunders": 0,
+                    "blunders_per_game": None,
+                },
+                {
+                    "month": "2026-11",
+                    "lichess": 1647,
+                    "chesscom": None,
+                    "games": 1,
+                    "blunders": 0,
+                    "blunders_per_game": 0.0,
+                },
+            ],
+        },
+        {
+            "speed": "rapid",
+            "label": "Rapid",
+            "games": 1,
+            "months": [
+                {
+                    "month": "2026-10",
+                    "lichess": None,
+                    "chesscom": 1655,
+                    "games": 1,
+                    "blunders": 0,
+                    "blunders_per_game": 0.0,
+                }
+            ],
+        },
+    ]
+    assert press(client)["history"] == get(client)["history"]  # a refresh sends it too
+    assert sites.asked == ["lichess", "chesscom"]
 
 
 # ---------------------------------------------------------------- Refresh ratings
@@ -338,3 +399,25 @@ def test_the_page_reads_only_what_the_api_sends() -> None:
         read = set(re.findall(rf"\b{name}\.([a-z_]+)\b", text))
         assert read, name
         assert read <= set(model.model_fields), (name, read - set(model.model_fields))
+    # chart.js: a chart is c or chart, a month is m or month.
+    drawn = (folder / "chart.js").read_text("utf-8")
+    for name, model in (
+        ("c", routes.ChartOut),
+        ("chart", routes.ChartOut),
+        ("m", routes.MonthOut),
+        ("month", routes.MonthOut),
+    ):
+        read = set(re.findall(rf"\b{name}\.([a-z_]+)\b", drawn))
+        assert read, name
+        assert read <= set(model.model_fields), (name, read - set(model.model_fields))
+
+
+def test_the_chart_never_puts_the_apis_text_into_a_tooltip_as_html() -> None:
+    """The month readout is built with DOM calls (CLAUDE.md §11): no innerHTML after the
+    plot is drawn."""
+    folder = ext.web_folder(extension)
+    assert folder is not None
+    drawn = (folder / "chart.js").read_text("utf-8")
+    reading = drawn[drawn.index("function point(") :]
+    assert "innerHTML" not in reading
+    assert "textContent" in reading

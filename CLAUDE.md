@@ -165,8 +165,9 @@ blunderbook/
 │       ├── blunderbook_profile/     # ratings. __init__.py (the Extension, commands),
 │       │                            #   history.py (pure: your rating over time, from
 │       │                            #   your games), store.py (its SQL), labels.py,
-│       │                            #   routes.py, web/ (its tab). No HTTP: the site
-│       │                            #   adapters ask, through host.fetch_ratings
+│       │                            #   routes.py, web/ (its tab; chart.js draws your
+│       │                            #   rating over time). No HTTP: the site adapters
+│       │                            #   ask, through host.fetch_ratings
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)

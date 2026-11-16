@@ -490,6 +490,12 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   provisional. **Refresh ratings** asks each site you have a username for (under `[lichess]`
   and `[chesscom]` in config.toml). Until a site has been fetched, its panel shows your
   rating in your newest synced game of each time control, linked to the game.
+- **Rating over time**, under the panels, is drawn from the games in your Log, so it needs
+  no network: your rating in the last game of each month, a line per site (Lichess solid,
+  Chess.com dashed), for the time control you pick. Under it, on its own scale, your
+  blunders per game that month, so you can see whether fewer blunders moved the number.
+  Point at a month, or focus the chart and use ← → Home End, to read its numbers; "The
+  numbers" has them all as a table.
 - `blunderbook profile refresh` does the same on the command line. Name a site (`lichess`
   or `chesscom`) to ask only it.
 - `blunderbook profile show` prints what was fetched last, and your rating in your newest

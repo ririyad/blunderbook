@@ -26,11 +26,11 @@ _Last updated: 2026-11-16_
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
-| M17 Profile | In progress (3/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
+| M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 
-**Next up:** 17.4, your rating over time on the Profile tab (the chart from your games,
-blunders per game under it). Still to check from M17: one real `blunderbook profile refresh`
-or press of Refresh ratings (the rating fixtures are hand-built, `TODO(verify)`). M15, the desktop app, is planned
+**Next up:** M15, the desktop app (planned below, not started). M17, the Profile extension,
+is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
+ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -64,6 +64,10 @@ and in its tab: each collection, its players, and each game with an eval graph a
 your Log entries from its positions. Games can be added on the tab too.
 Missed wins (M13): a mate or a big gain you didn't take is logged too, even when you stay
 winning, shown as "Missed win" (no mark), with "Missed my tactic" suggested.
+Profile (M17), another extension, shows your own ratings on Lichess and Chess.com, fetched
+only when you press Refresh ratings or run `blunderbook profile refresh` and kept in
+`profile.db`, and your rating over time from the games in your Log, with your blunders per
+game under it.
 
 Scope (2026-11-05): the web page is for reading your blunders, writing notes, re-testing and
 patterns, and from M5 for importing too. See Decided.
@@ -1454,8 +1458,37 @@ to your blunders per game. Done before M15, which will bundle it with the other 
         rating's date hidden.
       - **Not checked:** a press of the real button against the real sites, and a touch
         screen (`TODO(verify)`).
-- [ ] **17.4** Rating over time: the chart from your games, blunders per game by month
-      under it. README and the extension's own README.
+- [x] **17.4** Rating over time, from your games.
+      _Done:_
+      - **The data** (`history.charts`, pure): for each speed you have games in, every month
+        from your first game to your last (the months you didn't play too, so time runs
+        evenly), each with your rating in each site's last game of the month, the games on
+        both sites and their blunders. `GET /api/ext/profile` sends it as `history`.
+      - **The chart** (`web/chart.js`): two plots over the same months, each with its own
+        scale and never one on top of the other: ratings as 2 px lines with a dot per month
+        and the last value beside each line's end, and blunders per game as thin red bars
+        from one baseline. A picker chooses the time control (the one with the most games
+        first). A legend names the lines, and "The numbers" has every month as a table.
+      - **Reading a month:** point at it, or focus the chart and press ← → Home End
+        (Escape to leave): a hairline through the month, and its ratings, blunders per game
+        and games beside it. Built with DOM calls and `textContent`.
+      - **Drawn at the panel's real width**, and again when that changes, not scaled from a
+        fixed size: lines stay 2 px and the text stays 11 px on a phone. Under 14 px a month,
+        only each line's last dot is drawn; month labels thin out to what fits.
+      - **Colours:** Lichess is the page's ink, solid; Chess.com its blue, dashed; the bars
+        are red, which is "your blunders" everywhere on the page. See Decided.
+      - **Tests** (4 more): the months side by side with gaps and across a new year,
+        `history` in the API and after a refresh, the fields chart.js reads, and that the
+        month readout never uses `innerHTML`. The page checks cover chart.js too.
+      - **Checked in Chrome** against scratch data (a year of made-up games; the sites
+        faked): the chart at 1200 px and at 390 px (the page 390 px wide, twelve months
+        fitting), pointing at a month with the real pointer, the readout flipping to the
+        left near the right edge, ← → Home End and Escape, the picker (focus stays on the
+        button), a time control with one site only, "The numbers", and no games at all. No
+        console errors.
+      - **Not checked:** your real games, a touch screen, and several years of months at
+        390 px (`TODO(verify)`).
+      - **Docs:** README, the extension's README, CLAUDE.md §4.
 
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
@@ -1807,3 +1840,16 @@ None open.
     not the current one, so it's shown as a best.
   - **Also shown:** the highest rating and the win / loss / draw record, puzzle ratings, and
     blunders per game next to the rating line.
+  - **profile.db keeps one answer per site per day** (17.2), not every refresh, so "since"
+    always compares two different days.
+  - **The chart's colours (17.4).** Two sites need two line colours, and §11 allows accents
+    only with a meaning. Lichess is ink and Chess.com is blue, dashed, so they differ by
+    more than colour, with a legend and each line's last value beside it. A palette check
+    (OKLab distance under simulated colour blindness) puts the pair far apart (27, where 8
+    is the target), but fails ink on two counts as a series colour: it's darker than the
+    band it allows and has no hue. Kept anyway, with the dash as the second cue. Blue and
+    amber passed every check, but amber means "due / suggested" on this page.
+  - **Not checked (17.4):** the month readout at phone width, where it can sit over the
+    hairline it belongs to.
+  - **Ratings and blunders are never on one scale.** They're two plots over the same
+    months: a second y-axis would let the eye read a crossing that means nothing.

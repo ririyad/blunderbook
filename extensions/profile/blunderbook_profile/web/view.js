@@ -1,13 +1,14 @@
-// The Profile tab (ROADMAP 17.3): your ratings on Lichess and Chess.com.
+// The Profile tab (ROADMAP 17.3, 17.4): your ratings on Lichess and Chess.com.
 //   #profile
 //
 // The sites are asked only when you press "Refresh ratings" (or run `blunderbook profile
 // refresh`). Opening the tab shows what was kept last time, and your rating in your newest
-// games, without asking anyone.
+// games and month by month (chart.js), without asking anyone.
 
 import { api } from "/js/api.js";
 import { fmtDate, localDay } from "/js/format.js";
 import { esc, showError } from "/js/ui.js";
+import { mountChart } from "./chart.js";
 
 const DASH = "—";
 const COMMAND = "blunderbook profile refresh";
@@ -49,6 +50,7 @@ function build(section) {
     </div>
     <div class="profile-notes" id="pfNotes" hidden></div>
     <div class="profile-sites" id="pfSites"></div>
+    <section class="panel profile-chart" id="pfChart" aria-label="Rating over time"></section>
   </div>`;
   $("pfRefresh").addEventListener("click", refresh);
 }
@@ -98,6 +100,7 @@ function draw(data) {
   notes.hidden = !data.warnings.length;
   notes.innerHTML = data.warnings.map((w) => `<p class="small">${esc(w)}</p>`).join("");
   $("pfSites").innerHTML = data.sites.map(site).join("");
+  mountChart($("pfChart"), data.history);
   const named = data.sites.filter((s) => s.username).map((s) => s.title);
   asked = named.join(" and ") || "the sites";
   $("pfRefresh").disabled = busy || !named.length;

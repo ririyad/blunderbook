@@ -24,6 +24,18 @@ fetched, its panel shows your rating in your newest synced game of each time con
 If one site can't be asked, its panel says why, the ratings you had from it are kept, and
 the other site is still asked.
 
+### Rating over time
+
+Under the panels, a chart drawn from the games in your Log (nothing is asked of a site):
+your rating in the last game of each month, a line per site, for one time control at a
+time. Under it, your blunders per game that month, on its own scale.
+
+- Only Lichess and Chess.com games with your rating, a date and a time control count. A
+  rating on one site says nothing about the other, so each has its own line.
+- A month you didn't play has no point and no bar; the line runs straight across it.
+- Point at a month, or focus the chart and press ← → Home End, to read its numbers.
+  "The numbers" has every month as a table.
+
 ## Commands
 
 - `blunderbook profile refresh [lichess|chesscom|all]` asks each site for your ratings now

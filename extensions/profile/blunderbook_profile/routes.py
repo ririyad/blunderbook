@@ -1,5 +1,6 @@
-"""The Profile's routes, mounted at ``/api/ext/profile`` (ROADMAP 17.3): your ratings as they
-were last fetched, your rating in your newest games, and the "Refresh ratings" button.
+"""The Profile's routes, mounted at ``/api/ext/profile`` (ROADMAP 17.3, 17.4): your ratings
+as they were last fetched, your rating in your newest games and month by month, and the
+"Refresh ratings" button.
 
 Only the refresh goes online, and only the Blunderbook page may call it
 (``host.same_origin``). It asks through ``host.fetch_ratings``: each site's own adapter makes
@@ -64,8 +65,28 @@ class SiteOut(BaseModel):
     problem: str | None = None  # why the refresh just now didn't work for this site
 
 
+class MonthOut(BaseModel):
+    month: str  # "2026-11"
+    lichess: int | None  # your rating in your last Lichess game of the month
+    chesscom: int | None
+    games: int  # on both sites; 0 in a month you didn't play
+    blunders: int
+    blunders_per_game: float | None  # None in a month you didn't play
+
+
+class ChartOut(BaseModel):
+    """Your rating over time in one speed, from your games: every month from the first to
+    the last."""
+
+    speed: Speed
+    label: str
+    games: int
+    months: list[MonthOut]
+
+
 class ProfileOut(BaseModel):
     sites: list[SiteOut]
+    history: list[ChartOut] = []  # bullet to classical; only speeds you have games in
     warnings: list[str] = []  # a daily backup that didn't work
 
 
@@ -126,8 +147,28 @@ def _accounts() -> dict[SyncSource, str]:
 def _profile(
     db: sqlite3.Connection, log: host.LogReader, accounts: dict[SyncSource, str]
 ) -> ProfileOut:
-    newest = history.latest(log.games())
+    rows = log.games()
+    newest = history.latest(rows)
     return ProfileOut(
+        history=[
+            ChartOut(
+                speed=chart.speed,
+                label=KIND_NAMES[chart.speed],
+                games=chart.games,
+                months=[
+                    MonthOut(
+                        month=m.month,
+                        lichess=m.ratings.get("lichess"),
+                        chesscom=m.ratings.get("chesscom"),
+                        games=m.games,
+                        blunders=m.blunders,
+                        blunders_per_game=m.blunders_per_game,
+                    )
+                    for m in chart.months
+                ],
+            )
+            for chart in history.charts(rows)
+        ],
         sites=[
             SiteOut(
                 source=name,
@@ -147,7 +188,7 @@ def _profile(
                 ],
             )
             for name in history.SITES
-        ]
+        ],
     )
 
 
