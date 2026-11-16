@@ -1853,3 +1853,22 @@ None open.
     hairline it belongs to.
   - **Ratings and blunders are never on one scale.** They're two plots over the same
     months: a second y-axis would let the eye read a crossing that means nothing.
+- **2026-11-16: Extension tabs sit in one rounded tray.** Asked for after M17: with four
+  extensions on, the header was nine identical pills and nothing said which were add-ons.
+  - **The tray** (`.tabgroup`, built in `addExtensions`): white with a hairline border,
+    after the built-in tabs. Inside, tabs behave as before: muted, a hover tint, the open
+    one a solid ink pill. Nothing new in the design language: a white panel and a hairline.
+  - **No visible label.** Nine tabs already fill the row. It's `role="group"` named
+    "Extensions" for a screen reader.
+  - **The header doesn't grow.** Tabs inside are 6 px shorter, so the tray is as high as a
+    tab (35 px). On a touch screen its tabs are 44 px like the rest and the border sits
+    outside that. Measured before and after at 1200 px and 390 px, mouse and touch: the
+    header ends at the same pixel.
+  - **Wrapping:** it moves to the next line as one piece (seen at 800 px). The radius is a
+    fixed 20 px, so two rows of its own tabs would be a rounded box, not an oval. On a
+    phone it scrolls with the row.
+  - **None on:** no tray. One on: a tray around one tab.
+  - **Not chosen:** a "More" menu (hides tabs behind a click), or only a divider.
+  - **Checked** in Chrome and at a true 390 px against scratch data: four, one and no
+    extensions, the focus ring, hover, opening a tab, the tab order. Touch was emulated
+    (a coarse pointer), not a real touch screen.

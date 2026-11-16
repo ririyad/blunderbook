@@ -245,9 +245,12 @@ def test_the_shell_fits_a_phone_and_fingers() -> None:
     css = (WEB / "css" / "app.css").read_text("utf-8")
     phone = css[css.index("@media (max-width:640px){") :].split("\n}")[0]
     assert ".tabs{flex-wrap:nowrap;overflow-x:auto" in phone
+    assert ".tabgroup{flex:none;flex-wrap:nowrap}" in phone  # the tray scrolls with the row
     assert "position:static" not in phone
     touch = css[css.index("@media (pointer:coarse){") :].split("\n}")[0]
     assert ".btn,.tab,.chip,.icon,.seg button,select,.mbtn{min-height:44px}" in touch
+    # The extensions' tray: its tabs are 44 px too, and it adds no height to the header.
+    assert ".tabgroup{padding:0 2px;margin-block:-1px;" in touch
 
 
 def test_shared_helpers_have_one_copy() -> None:
@@ -562,6 +565,17 @@ def test_extension_tabs_are_built_safely() -> None:
     assert "link.href = `/ext/${x.name}/view.css`;" in router
     assert "tab.textContent = x.title;" in router
     assert "innerHTML" not in router
+    # Their tabs go in one group after the built-in ones, named for a screen reader; it's
+    # made with the first one, so no extension means no empty group.
+    assert 'group.className = "tabgroup";' in router
+    assert 'group.setAttribute("role", "group");' in router
+    assert 'group.setAttribute("aria-label", "Extensions");' in router
+    assert "group.append(tab);" in router
+    assert "tabs.append(tab);" not in router
+    assert router.index("if (!group) {") > router.index("for (const x of list) {")
+    css = (WEB / "css" / "app.css").read_text("utf-8")
+    assert ".tabgroup{display:flex;flex-wrap:wrap;" in css
+    assert ".tabgroup .tab{padding:3px 12px}" in css  # 6 px shorter: the tray is a tab high
     assert "await addExtensions();" in router.split("route();")[-2]  # before the first route
 
 

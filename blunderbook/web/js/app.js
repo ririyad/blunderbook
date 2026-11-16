@@ -66,7 +66,8 @@ function viewOf(name) {
   return extensions.get(name);
 }
 
-/** A tab, a section and the styles of each extension that has a page. */
+/** A tab, a section and the styles of each extension that has a page. Their tabs sit
+ *  together in one rounded group after the built-in ones, so you can tell them apart. */
 async function addExtensions() {
   let list = [];
   try {
@@ -77,14 +78,22 @@ async function addExtensions() {
   }
   const tabs = document.querySelector(".tabs");
   const app = document.querySelector(".app");
+  let group = tabs.querySelector(".tabgroup");
   for (const x of list) {
     if (x.name in VIEWS || extensions.has(x.name)) continue;
+    if (!group) { // made with the first extension tab: none on, no empty group
+      group = document.createElement("div");
+      group.className = "tabgroup";
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", "Extensions");
+      tabs.append(group);
+    }
     const tab = document.createElement("a");
     tab.className = "tab";
     tab.href = "#" + x.name;
     tab.dataset.view = x.name;
     tab.textContent = x.title;
-    tabs.append(tab);
+    group.append(tab);
     const section = document.createElement("section");
     section.className = "view";
     section.id = "view-" + x.name;

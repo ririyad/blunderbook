@@ -357,7 +357,8 @@ the page loads nothing from the internet. Stop it with Ctrl+C.
   "See these games in Games" opens the list. While an import runs you can use the other
   tabs: the Import tab shows its percentage, and a message says when it's done. Games that need a side must be imported on the
   command line with `--side`.
-- **Extensions** that are on and have a page get a tab of their own after these. If one can't
+- **Extensions** that are on and have a page get a tab of their own after these, together
+  in one rounded outline, so you can tell them from Blunderbook's own tabs. If one can't
   be used, `serve` says why when it starts, and runs without it.
 
 ### AI explanations (optional)

@@ -797,6 +797,9 @@ The shell:
   dispatches `entries-changed`, and the badge updates.
 - Extensions: before the first route, the shell asks `/api/extensions` and adds a tab and a
   section for each, after the built-in tabs (and `/ext/<name>/view.css` when it has one).
+  Their tabs sit together in one rounded tray (`.tabgroup`: white, a hairline border,
+  `role="group"` named "Extensions"), which is as high as a tab, so the header doesn't
+  grow. No extension with a page: no tray.
   Their `/ext/<name>/view.js` is loaded with `import()` the first time the tab opens and has
   the same `show(root, rest)`. One that fails to load says so in the error line. Tabs are
   built with DOM calls and `textContent`, never `innerHTML`.
