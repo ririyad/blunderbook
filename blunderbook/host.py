@@ -8,7 +8,8 @@ removed or changed. An extension imports only this module, ``blunderbook.ext`` (
 For routes (an extension's router is mounted at ``/api/ext/<name>``):
 
 - ``ExtDb``: a connection to the extension's own database, per request.
-- ``Log``: your Log, read-only (the database is opened ``mode=ro``: a write fails in SQLite).
+- ``Log``: your Log, read-only (the database is opened ``mode=ro``: a write fails in SQLite):
+  ``entries()``, ``entry(id)``, ``game(id)`` and ``games()``.
 - ``same_origin``: add ``dependencies=[Depends(host.same_origin)]`` to a route that changes
   something, so only the Blunderbook page can call it.
 - ``transaction(conn)``: writes to the extension's database that belong together, in one
@@ -18,6 +19,9 @@ For anything (routes and commands):
 
 - ``settings()``: your names, thresholds, engine settings and Chess.com contact. Never a
   token or a key.
+- ``accounts()``: your username on each site ("" when it isn't set). Never the token.
+- ``fetch_ratings(site)``: your ratings on Lichess or Chess.com, asked for now. A network
+  call: only when you ask for it (a button, a command), never on its own (CLAUDE.md §1).
 - ``engine()``: Stockfish, found as Blunderbook finds it, in a ``with`` block.
 - ``daily_backup()``: the daily backups, for a command that changes data (CLAUDE.md §6).
 - ``read_log()``: your Log, read-only, outside a request (``with host.read_log() as log``).
@@ -38,12 +42,22 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from blunderbook import config, ext
+from blunderbook import config, ext, sources
 from blunderbook.api.common import same_origin
 from blunderbook.core.engine import Engine, EngineError
-from blunderbook.core.models import Entry, Game, Source, Status, Thresholds
+from blunderbook.core.models import (
+    Entry,
+    Game,
+    GameRow,
+    SiteRatings,
+    Source,
+    Status,
+    SyncSource,
+    Thresholds,
+)
 from blunderbook.db import connection, repo
 from blunderbook.db.connection import StorageError, transaction
+from blunderbook.sources.base import SyncError, redact
 
 __all__ = [
     "ExtDb",
@@ -52,8 +66,10 @@ __all__ = [
     "LogReader",
     "Settings",
     "StorageError",
+    "accounts",
     "daily_backup",
     "engine",
+    "fetch_ratings",
     "open_db",
     "read_log",
     "same_origin",
@@ -94,6 +110,25 @@ def settings() -> Settings:
         engine_hash_mb=cfg.engine_hash_mb,
         chesscom_contact=cfg.chesscom.contact.strip(),
     )
+
+
+def accounts() -> dict[SyncSource, str]:
+    """Your username on each site, as config.toml has it: "" when it isn't set. Never the
+    token. Raises HostError."""
+    cfg = _config()
+    return {name: sources.username(name, cfg) for name in sources.SITES}
+
+
+def fetch_ratings(site: SyncSource) -> SiteRatings:
+    """Ask Lichess or Chess.com for your ratings, now. This is a network call: make it only
+    when you were asked to (a button, a command), never on a timer or when a page opens
+    (CLAUDE.md §1). The site's own adapter does it, with your username from config.toml.
+    Raises HostError, with a plain message: no username, the site can't be reached."""
+    cfg = _config()
+    try:
+        return sources.ratings_for(site, cfg).fetch_ratings()
+    except SyncError as exc:
+        raise HostError(redact(str(exc), cfg.lichess.token)) from None
 
 
 def engine() -> Engine:
@@ -158,6 +193,11 @@ class LogReader:
 
     def game(self, game_id: int) -> Game | None:
         return repo.get_game(self._conn, game_id)
+
+    def games(self, *, source: Source | None = None) -> list[GameRow]:
+        """The games you imported, newest first, each with its entries counted by judgment,
+        as ``GET /api/games`` lists them. FEN entries aren't games."""
+        return repo.list_games(self._conn, source=source)
 
 
 def _read_only(db: Path) -> sqlite3.Connection:

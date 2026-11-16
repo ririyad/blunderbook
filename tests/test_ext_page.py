@@ -15,11 +15,12 @@ from ext_samples import notes
 from fastapi.testclient import TestClient
 from test_api_blunders import NOW, elephant, fen_entry, scholars
 
-from blunderbook import config, ext, host, webcheck
+from blunderbook import config, ext, host, sources, webcheck
 from blunderbook.api.app import CONTENT_SECURITY_POLICY, WEB, create_app
 from blunderbook.config import AiConfig, ChesscomConfig, Config, ExtensionsConfig, LichessConfig
-from blunderbook.core.models import Thresholds
+from blunderbook.core.models import Rating, SiteRatings, SyncSource, Thresholds
 from blunderbook.db import connection, repo
+from blunderbook.sources.base import SyncError
 
 URL = "http://127.0.0.1"
 
@@ -198,6 +199,68 @@ def test_settings_never_carry_secrets(cfg_file: Path) -> None:
     }  # fmt: skip
 
 
+def test_accounts_are_your_usernames_never_the_token(cfg_file: Path) -> None:
+    assert host.accounts() == {"lichess": "", "chesscom": ""}
+    cfg = Config(
+        lichess=LichessConfig(username=" rashed_l ", token="lip_secret"),
+        chesscom=ChesscomConfig(username="rashed_c", contact="rashed@example.com"),
+    )
+    config.save(cfg, cfg_file)
+    got = host.accounts()
+    assert got == {"lichess": "rashed_l", "chesscom": "rashed_c"}
+    assert list(got) == ["lichess", "chesscom"]
+    assert "lip_secret" not in repr(got) and "example.com" not in repr(got)
+
+
+class _Site:
+    """Stands in for a site's adapter."""
+
+    def __init__(self, name: SyncSource, problem: str = "") -> None:
+        self.name = name
+        self.problem = problem
+
+    def fetch_ratings(self) -> SiteRatings:
+        if self.problem:
+            raise SyncError(self.problem)
+        rating = Rating(kind="blitz", rating=1647, games=812)
+        return SiteRatings(source=self.name, username="rashed_l", ratings=(rating,))
+
+
+def test_fetch_ratings_asks_the_sites_adapter(
+    cfg_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config.save(Config(lichess=LichessConfig(username="rashed_l")), cfg_file)
+    asked: list[tuple[str, str]] = []
+
+    def ratings_for(name: SyncSource, cfg: Config) -> _Site:
+        asked.append((name, cfg.lichess.username))
+        return _Site(name)
+
+    monkeypatch.setattr(sources, "ratings_for", ratings_for)
+    got = host.fetch_ratings("lichess")
+    assert asked == [("lichess", "rashed_l")]  # config.toml is read each time
+    assert got.source == "lichess" and got.ratings[0].rating == 1647
+
+
+def test_fetch_ratings_problems_are_host_errors_without_the_token(
+    cfg_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config.save(Config(lichess=LichessConfig(username="rashed_l", token="lip_secret")), cfg_file)
+    monkeypatch.setattr(
+        sources, "ratings_for", lambda name, cfg: _Site(name, "Lichess said no to lip_secret.")
+    )
+    with pytest.raises(host.HostError) as caught:
+        host.fetch_ratings("lichess")
+    assert str(caught.value) == "Lichess said no to [token]."
+
+
+def test_fetch_ratings_needs_a_username(cfg_file: Path) -> None:
+    with pytest.raises(host.HostError, match=r"Set your Lichess username under \[lichess\]"):
+        host.fetch_ratings("lichess")  # no request: there's nobody to ask about
+    with pytest.raises(host.HostError, match=r"Set your Chess.com username under \[chesscom\]"):
+        host.fetch_ratings("chesscom")
+
+
 def test_a_broken_config_is_a_host_error(cfg_file: Path) -> None:
     cfg_file.write_text("engine_depth = 'deep'\n")
     with pytest.raises(host.HostError):
@@ -226,6 +289,22 @@ def test_read_log_outside_a_request(ids: dict[str, int]) -> None:
         assert log.entry(999) is None
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
             log._conn.execute("DELETE FROM blunders")
+
+
+def test_the_log_lists_your_games(ids: dict[str, int]) -> None:
+    with host.read_log() as log:
+        rows = log.games()
+        assert len(rows) == 2  # the FEN entry isn't a game
+        by_id = {row.game.id: row for row in rows}
+        one = log.entry(ids["elephant"])
+        assert one is not None
+        row = by_id[one.game.id]
+        assert row.game == one.game
+        assert row.blunders + row.mistakes + row.inaccuracies + row.missed == 1
+        assert log.games(source=one.game.source) == [
+            r for r in rows if r.game.source == one.game.source
+        ]
+        assert log.games(source="otb") == []
 
 
 def test_open_db_outside_a_request(cfg_file: Path) -> None:

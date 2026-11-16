@@ -1,0 +1,21 @@
+{
+  "id": "rashed",
+  "username": "Rashed",
+  "perfs": {
+    "bullet": {"games": 0, "rating": 1500, "rd": 500, "prog": 0, "prov": true},
+    "blitz": {"games": 812, "rating": 1647, "rd": 45, "prog": 12},
+    "rapid": {"games": 140, "rating": 1790, "rd": 70, "prog": -8},
+    "classical": {"games": 3, "rating": 1702, "rd": 190, "prog": 0, "prov": true},
+    "ultraBullet": {"games": 5, "rating": 1410, "rd": 160, "prog": 0, "prov": true},
+    "puzzle": {"games": 2104, "rating": 1985, "rd": 62, "prog": 0},
+    "storm": {"runs": 4, "score": 21}
+  },
+  "createdAt": 1577836800000,
+  "seenAt": 1794000000000,
+  "playTime": {"total": 1200000, "tv": 0},
+  "url": "https://lichess.org/@/Rashed",
+  "count": {
+    "all": 1010, "rated": 955, "ai": 12, "draw": 61, "drawH": 60, "loss": 470,
+    "lossH": 462, "win": 479, "winH": 476, "bookmark": 3, "playing": 0, "import": 0, "me": 0
+  }
+}

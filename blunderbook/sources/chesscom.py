@@ -1,4 +1,5 @@
-"""Chess.com sync adapter: downloads your games as PGN (CLAUDE.md §8).
+"""Chess.com sync adapter: downloads your games as PGN, and asks for your ratings
+(CLAUDE.md §8).
 
 API notes, checked 2026-11-05 against the official "Published-Data API" page
 (https://www.chess.com/news/view/published-data-api):
@@ -44,25 +45,50 @@ Game ids
     Each game's ``[Link "https://www.chess.com/game/live/<id>"]`` header gives the
     fingerprint (§7.4). TODO(verify) with a real download: the Link header and ``[%clk]``
     comments in the monthly PGN.
+
+Ratings (``fetch_ratings``), checked 2026-11-16 against the same page ("Player Stats"):
+
+``GET https://api.chess.com/pub/player/{username}/stats``
+    "Get ratings, win/loss, and other stats about a player's game play, tactics, lessons
+    and Puzzle Rush score." One request.
+
+    A stats object per rules and time class you have played: the page's example shows
+    ``chess_daily`` and ``chess_blitz``. TODO(verify): ``chess_rapid`` and ``chess_bullet``
+    follow the same naming but aren't in the example. There's no classical time class.
+    Each has:
+    - ``last``: "the current stats", ``{date, rating, rd}``;
+    - ``best``: "the best rating achieved by a win", ``{date, rating, game}``; absent until
+      you've won a game of that kind;
+    - ``record``: "summary of all games played", ``{win, loss, draw, ...}``.
+    There's no game count (we add up the record) and no provisional mark.
+    TODO(verify): ``date`` is taken as Unix time in seconds.
+
+    ``tactics`` is ``{highest: {rating, date}, lowest: {...}}``: your highest and lowest
+    puzzle ratings, not the current one, so the puzzle rating is shown as a best only.
+    ``lessons`` and ``puzzle_rush`` aren't used. "Tactics, Lessons and Puzzle Rush stats
+    may be missing, depending on player activity."
 """
 
 import re
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
-from typing import Final
+from typing import Any, Final
 from urllib.parse import quote
 
 import httpx
 
 from blunderbook.core import pgn
+from blunderbook.core.models import RATING_KINDS, Rating, RatingKind, SiteRatings
 from blunderbook.sources.base import (
     LONGEST_WAIT_S,
+    RATINGS_TIMEOUT,
     TRIES,
     USER_AGENT,
     SyncError,
     games_in,
     wait_for,
+    whole,
 )
 
 BASE_URL: Final = "https://api.chess.com/pub/player"
@@ -72,6 +98,15 @@ _NO_CONTACT = (
     "Set contact under [chesscom] in config.toml: an email address or web page where "
     "Chess.com can reach you. It goes in the User-Agent they ask for."
 )
+
+# Chess.com's stats object for each kind of play ("rules_timeclass"). It has no classical.
+STATS: Final[dict[RatingKind, str]] = {
+    "bullet": "chess_bullet",
+    "blitz": "chess_blitz",
+    "rapid": "chess_rapid",
+    "daily": "chess_daily",
+}
+_UNREADABLE: Final = "Chess.com sent ratings Blunderbook can't read."
 
 Month = tuple[int, int]  # (year, month)
 
@@ -123,6 +158,45 @@ class ChesscomAdapter:
         finally:
             if self._client is None:
                 client.close()
+
+    def fetch_ratings(self) -> SiteRatings:
+        """Your Chess.com ratings now, in one request."""
+        client = self._client if self._client is not None else httpx.Client(timeout=RATINGS_TIMEOUT)
+        try:
+            return self._ratings(client)
+        finally:
+            if self._client is None:
+                client.close()
+
+    def _ratings(self, client: httpx.Client) -> SiteRatings:
+        try:
+            response = client.get(
+                f"{self.player_url()}/stats",
+                headers={"User-Agent": self.user_agent},
+                follow_redirects=True,
+            )
+        except httpx.HTTPError as exc:
+            raise SyncError(f"Can't get your Chess.com ratings: {exc}") from None
+        if response.status_code == 404:
+            raise SyncError(f"Chess.com has no player named '{self.username}'.")
+        if response.status_code == 429:
+            raise SyncError(
+                "Chess.com is limiting requests right now (HTTP 429). Try again in a minute."
+            )
+        if response.status_code != 200:
+            raise SyncError(f"Chess.com answered HTTP {response.status_code}. Try again later.")
+        try:
+            stats = response.json()
+        except ValueError:
+            raise SyncError(_UNREADABLE) from None
+        if not isinstance(stats, dict):
+            raise SyncError(_UNREADABLE)
+        found = (_rating(kind, stats) for kind in RATING_KINDS)
+        return SiteRatings(
+            source="chesscom",
+            username=self.username,
+            ratings=tuple(rating for rating in found if rating is not None),
+        )
 
     def months(self, client: httpx.Client) -> list[Month]:
         """The months with games, oldest first, read from the archive list."""
@@ -187,3 +261,51 @@ def _month_in(url: str) -> Month | None:
         return None
     month = int(match[1]), int(match[2])
     return month if 1 <= month[1] <= 12 else None
+
+
+def _rating(kind: RatingKind, stats: dict[str, Any]) -> Rating | None:
+    """One kind of play from the stats answer, or None when you have no rating in it."""
+    if kind == "puzzle":
+        top = _part(stats.get("tactics"), "highest")
+        peak = whole(top.get("rating"))
+        if peak is None:
+            return None
+        # Only your highest is given, never the current one.
+        return Rating(kind=kind, rating=None, best=peak, best_at=_moment(top.get("date")))
+    if kind not in STATS:
+        return None
+    played = stats.get(STATS[kind])
+    last, best, record = _part(played, "last"), _part(played, "best"), _part(played, "record")
+    rating = whole(last.get("rating"))
+    if rating is None:
+        return None
+    wins, losses, draws = (whole(record.get(k)) for k in ("win", "loss", "draw"))
+    known = [n for n in (wins, losses, draws) if n is not None]
+    highest = whole(best.get("rating"))
+    return Rating(
+        kind=kind,
+        rating=rating,
+        games=sum(known) if known else None,
+        best=highest,
+        best_at=_moment(best.get("date")) if highest is not None else None,
+        wins=wins,
+        losses=losses,
+        draws=draws,
+    )
+
+
+def _part(value: object, key: str) -> dict[str, Any]:
+    """``value[key]`` when both are objects, else an empty one."""
+    part = value.get(key) if isinstance(value, dict) else None
+    return part if isinstance(part, dict) else {}
+
+
+def _moment(value: object) -> datetime | None:
+    """Chess.com's timestamp (Unix seconds) in UTC, or None."""
+    seconds = whole(value)
+    if seconds is None:
+        return None
+    try:
+        return datetime.fromtimestamp(seconds, UTC)
+    except OverflowError, OSError, ValueError:
+        return None

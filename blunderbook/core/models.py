@@ -418,3 +418,41 @@ class SyncState:
     last_synced: datetime | None  # when the newest game fetched was played (UTC)
     last_run_at: datetime | None
     last_error: str | None  # the last run's problem; None when it worked
+
+
+# ---------------------------------------------------------------- ratings (CLAUDE.md §8)
+
+RatingKind = Literal["bullet", "blitz", "rapid", "classical", "daily", "puzzle"]
+# Fixed order wherever ratings are listed. "daily" is Lichess's correspondence too.
+RATING_KINDS: Final[tuple[RatingKind, ...]] = (
+    "bullet",
+    "blitz",
+    "rapid",
+    "classical",
+    "daily",
+    "puzzle",
+)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Rating:
+    """Your rating in one kind of play, as a site reports it. What it doesn't give is None."""
+
+    kind: RatingKind
+    rating: int | None  # now; None when the site only gives a best (Chess.com's puzzles)
+    provisional: bool = False  # the site isn't sure of it yet
+    games: int | None = None
+    best: int | None = None  # your highest
+    best_at: datetime | None = None  # when you reached it (UTC)
+    wins: int | None = None
+    losses: int | None = None
+    draws: int | None = None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SiteRatings:
+    """Your ratings on one site, fetched just now (`fetch_ratings` in the sync adapters)."""
+
+    source: SyncSource
+    username: str  # as the site spells it, when it says
+    ratings: tuple[Rating, ...]  # in RATING_KINDS order; only the kinds you have a rating in

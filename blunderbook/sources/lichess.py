@@ -1,4 +1,4 @@
-"""Lichess sync adapter: downloads your games as PGN (CLAUDE.md §8).
+"""Lichess sync adapter: downloads your games as PGN, and asks for your ratings (CLAUDE.md §8).
 
 API notes, checked 2026-11-05 against the official OpenAPI spec (github.com/lichess-org/api,
 ``doc/specs/lichess-api.yaml`` and ``tags/games/api-games-user-username.yaml``; lichess.org/api
@@ -44,30 +44,67 @@ Rate limits
 
 Game ids
     Each game's ``[Site "https://lichess.org/<8-char id>"]`` gives the fingerprint (§7.4).
+
+Ratings (``fetch_ratings``), checked 2026-11-16 against the same spec
+(``tags/users/api-user-username.yaml``, ``tags/users/api-user-username-perf-perf.yaml``,
+``schemas/Perfs.yaml``, ``Perf.yaml``, ``PerfStat.yaml``, ``PerfType.yaml``):
+
+``GET /api/user/{username}`` ("Get user public data")
+    Query parameters, all sent explicitly: ``trophies=false`` (the default), ``profile=false``
+    (default true; we don't show it), ``rank=false`` (the default), ``fideId=false`` (the
+    default). The answer's ``perfs`` has one object per kind of play: ``bullet``, ``blitz``,
+    ``rapid``, ``classical``, ``correspondence``, ``puzzle`` (and variants, ``ultraBullet``
+    and the puzzle modes, which we leave out). Each is ``{games, rating, rd, prog}``, with
+    ``prov: true`` only while the rating is provisional. ``username`` is the name as Lichess
+    spells it. TODO(verify): whether a kind you never played is left out or listed with 0
+    games; we skip one with no games either way.
+
+``GET /api/user/{username}/perf/{perf}`` ("Get performance statistics of a user")
+    ``perf`` is a PerfType: ``bullet``, ``blitz``, ``rapid``, ``classical``,
+    ``correspondence`` (not ``puzzle``). In the answer, ``stat.highest`` is ``{int, at,
+    gameId}`` (your highest rating and when; optional), and ``stat.count`` has ``win``,
+    ``loss`` and ``draw`` (every game of that kind, casual ones too). One request per kind
+    you have games in, one at a time.
+
+    Both are public: no token is sent, so none can leak. A 429 is a message, not a wait.
 """
 
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
-from typing import Final
+from typing import Any, Final
 from urllib.parse import quote
 
 import httpx
 
+from blunderbook.core.models import RATING_KINDS, Rating, RatingKind, SiteRatings
 from blunderbook.sources.base import (
     LONGEST_WAIT_S,
+    RATINGS_TIMEOUT,
     TRIES,
     USER_AGENT,
     SyncError,
     games_in,
     redact,
     wait_for,
+    whole,
 )
 
 BASE_URL: Final = "https://lichess.org"
 # Standard chess only: the importer rejects variants anyway (CLAUDE.md §7.1).
 STANDARD: Final = "ultraBullet,bullet,blitz,rapid,classical,correspondence"
 TIMEOUT: Final = httpx.Timeout(60.0, connect=10.0)  # read = the longest gap in the stream
+# Lichess's name for each kind of play we show a rating for.
+PERFS: Final[dict[RatingKind, str]] = {
+    "bullet": "bullet",
+    "blitz": "blitz",
+    "rapid": "rapid",
+    "classical": "classical",
+    "daily": "correspondence",
+    "puzzle": "puzzle",
+}
+USER_PARAMS: Final = {"trophies": "false", "profile": "false", "rank": "false", "fideId": "false"}
+_UNREADABLE: Final = "Lichess sent ratings Blunderbook can't read."
 
 
 class LichessAdapter:
@@ -144,6 +181,69 @@ class LichessAdapter:
                 )
             self._sleep(wait)
 
+    # ------------------------------------------------------------ ratings
+
+    def fetch_ratings(self) -> SiteRatings:
+        """Your Lichess ratings now: one request for the ratings, then one per kind of play
+        for its highest rating and record. Public data, so no token is sent."""
+        client = self._client if self._client is not None else httpx.Client(timeout=RATINGS_TIMEOUT)
+        try:
+            return self._ratings(client)
+        finally:
+            if self._client is None:
+                client.close()
+
+    def _ratings(self, client: httpx.Client) -> SiteRatings:
+        url = f"{BASE_URL}/api/user/{quote(self.username, safe='')}"
+        user = self._json(client, url, USER_PARAMS)
+        if user is None:
+            raise SyncError(f"Lichess has no user named '{self.username}'.")
+        perfs = user.get("perfs")
+        if not isinstance(perfs, dict):
+            perfs = {}  # a closed account has none
+        ratings: list[Rating] = []
+        for kind in RATING_KINDS:
+            perf = perfs.get(PERFS[kind])
+            if not isinstance(perf, dict):
+                continue
+            rating, games = whole(perf.get("rating")), whole(perf.get("games"))
+            if rating is None or not games:
+                continue  # never played: there's no rating to show
+            # No statistics page for puzzles, and a missing one only loses the extras.
+            stat = None if kind == "puzzle" else self._json(client, f"{url}/perf/{PERFS[kind]}")
+            ratings.append(_rating(kind, rating, games, perf.get("prov") is True, stat))
+        name = user.get("username")
+        return SiteRatings(
+            source="lichess",
+            username=name if isinstance(name, str) and name else self.username,
+            ratings=tuple(ratings),
+        )
+
+    def _json(
+        self, client: httpx.Client, url: str, params: dict[str, str] | None = None
+    ) -> dict[str, Any] | None:
+        """One request, answered with a JSON object. None for a 404."""
+        headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+        try:
+            response = client.get(url, params=params, headers=headers)
+        except httpx.HTTPError as exc:
+            raise SyncError(f"Can't get your Lichess ratings: {exc}") from None
+        if response.status_code == 404:
+            return None
+        if response.status_code == 429:
+            raise SyncError(
+                "Lichess is limiting requests right now (HTTP 429). Try again in a minute."
+            )
+        if response.status_code != 200:
+            raise SyncError(f"Lichess answered HTTP {response.status_code}. Try again later.")
+        try:
+            data = response.json()
+        except ValueError:
+            raise SyncError(_UNREADABLE) from None
+        if not isinstance(data, dict):
+            raise SyncError(_UNREADABLE)
+        return data
+
     def _check(self, response: httpx.Response) -> None:
         status = response.status_code
         if status == 200:
@@ -163,3 +263,38 @@ def since_ms(since: datetime) -> int:
     if since.tzinfo is None:
         since = since.replace(tzinfo=UTC)
     return int(since.timestamp() * 1000)
+
+
+def _rating(
+    kind: RatingKind, rating: int, games: int, provisional: bool, page: dict[str, Any] | None
+) -> Rating:
+    """One kind of play: the rating, plus the highest and the record from its statistics
+    page (``page``) when it has them."""
+    stat = page.get("stat") if page is not None else None
+    stat = stat if isinstance(stat, dict) else {}
+    highest, count = stat.get("highest"), stat.get("count")
+    highest = highest if isinstance(highest, dict) else {}
+    count = count if isinstance(count, dict) else {}
+    best = whole(highest.get("int"))
+    return Rating(
+        kind=kind,
+        rating=rating,
+        provisional=provisional,
+        games=games,
+        best=best,
+        best_at=_moment(highest.get("at")) if best is not None else None,
+        wins=whole(count.get("win")),
+        losses=whole(count.get("loss")),
+        draws=whole(count.get("draw")),
+    )
+
+
+def _moment(value: object) -> datetime | None:
+    """Lichess's date-time text ("2022-02-23T13:44:54.633Z") in UTC, or None."""
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return when.replace(tzinfo=UTC) if when.tzinfo is None else when.astimezone(UTC)

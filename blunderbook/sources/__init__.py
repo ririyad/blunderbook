@@ -1,10 +1,11 @@
-"""Optional sync adapters (Lichess, Chess.com). They only download PGN text."""
+"""Optional sync adapters (Lichess, Chess.com). They download PGN text and, when you ask,
+your ratings."""
 
 from typing import Final
 
 from blunderbook.config import Config
 from blunderbook.core.models import SyncSource
-from blunderbook.sources.base import SourceAdapter
+from blunderbook.sources.base import RatingsSource, SourceAdapter
 from blunderbook.sources.chesscom import ChesscomAdapter
 from blunderbook.sources.lichess import LichessAdapter
 
@@ -20,4 +21,12 @@ def adapter_for(name: SyncSource, cfg: Config) -> SourceAdapter:
     """The adapter for a site, from config.toml. Raises SyncError for a missing setting."""
     if name == "lichess":
         return LichessAdapter(cfg.lichess.username, cfg.lichess.token)
+    return ChesscomAdapter(cfg.chesscom.username, cfg.chesscom.contact)
+
+
+def ratings_for(name: SyncSource, cfg: Config) -> RatingsSource:
+    """The adapter that asks a site for your ratings. Lichess gets no token: the ratings are
+    public. Raises SyncError for a missing setting."""
+    if name == "lichess":
+        return LichessAdapter(cfg.lichess.username)
     return ChesscomAdapter(cfg.chesscom.username, cfg.chesscom.contact)

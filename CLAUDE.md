@@ -23,10 +23,12 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
    "What I was thinking" or "Lesson", and never confirms a cause on the user's behalf.
 3. **Local-first and private.** All data lives in one SQLite file on the user's machine.
    No accounts, no telemetry, no cloud. Network calls only happen in sync adapters, when
-   the user runs a sync, in the optional AI explanation (off by default), when the user
-   presses its button, in `update`, a `git fetch` from the install folder's own remote,
-   when the user runs it, and in the Rankings extension's update (FIDE, Lichess,
-   Chess.com), when the user runs it or presses its button. Backups are local files too: the app never uploads them.
+   the user runs a sync or asks for their ratings (the Profile extension's button or
+   command), in the optional AI explanation (off by default), when the user presses its
+   button, in `update`, a `git fetch` from the install folder's own remote, when the
+   user runs it, and in the Rankings extension's update (FIDE, Lichess, Chess.com), when
+   the user runs it or presses its button. Backups are local files too: the app never
+   uploads them.
    For an off-site copy, the user points the backup folder at a folder their cloud drive syncs.
 4. **Degrade gracefully.** Missing headers, ratings or clock times are normal (OTB games,
    typed-up score sheets). Show "—", skip the features that need the missing data, never fail
@@ -580,6 +582,19 @@ class SourceAdapter(Protocol):
 
 They return **PGN text only**. The importer does everything else.
 
+- **Ratings.** Each adapter can also be asked for your ratings: `fetch_ratings() ->
+  SiteRatings` (`core/models.py`), one `Rating` per kind of play you have one in (bullet,
+  blitz, rapid, classical, daily, puzzle; Lichess's correspondence is "daily"), with the
+  highest and the win / loss / draw record where the site gives them, `None` where it
+  doesn't.
+  - Lichess: the user's public data, then one statistics request per kind, one at a time.
+    No token is sent.
+  - Chess.com: the player stats request, with the same `User-Agent`. It has no classical,
+    and its puzzle rating is a highest only (`rating` is `None`).
+  - Only when the user asks: core never calls it and stores nothing. An extension asks
+    through `host.fetch_ratings` (§15). A 429 is a message, never a wait: someone is waiting
+    for the answer.
+
 - **Lichess:** user games export endpoint, streaming PGN, with clocks and opening names
   enabled, filtered by `since`. Optional bearer token. Respect HTTP 429: back off and retry.
 - **Chess.com:** published-data API. List the monthly archives, then download each needed
@@ -956,6 +971,8 @@ Design language (from the demo and the paper template):
 15. **Desktop app (v2):** planned in `docs/ROADMAP.md`, not started.
 16. **Rankings (extension):** the FIDE, Lichess and Chess.com top lists, downloaded only when
     you run `blunderbook rankings update` or press its button.
+17. **Profile (extension):** your Lichess and Chess.com ratings, fetched when you ask, and
+    your rating over time next to your blunders.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -1033,7 +1050,8 @@ extension = ext.Extension(
 **What an extension may use** (`ext.boundary_problems(package)` checks its imports):
 - `blunderbook.host`, the host API:
   - For routes: `ExtDb` (its own database, per request), `Log` (your Log, read-only:
-    `entries()`, `entry(id)`, `game(id)`), and `same_origin` (add
+    `entries()`, `entry(id)`, `game(id)`, and `games()`, the games you imported with their
+    entries counted), and `same_origin` (add
     `dependencies=[Depends(host.same_origin)]` to every route that changes something).
   - `transaction(conn)` groups writes to its own database that belong together (§14).
   - Anywhere: `settings()` (`my_names` with your site usernames, thresholds, engine depth,
@@ -1041,6 +1059,10 @@ extension = ext.Extension(
     key), `engine()` (Stockfish, found as §6 says, in a
     `with` block), and for commands `read_log()`, `open_db(extension)` and
     `daily_backup()` (§6's daily backups, before a command that changes data).
+  - Your accounts: `accounts()` (your username on each site, "" when it isn't set; never
+    the token) and `fetch_ratings(site)` (your ratings on Lichess or Chess.com, asked for
+    now by that site's adapter, §8). It's a network call: an extension makes it only when
+    you press a button or run a command, never when a page opens or on a timer.
   - Problems are `host.HostError` (or `host.StorageError`), with plain messages.
 - `blunderbook.ext` (for `Extension` and `HOST_API`) and the pure `blunderbook.core`
   modules: `pgn`, `detect`, `retest`, `identity`, `source`, `timecontrol`, `engine`

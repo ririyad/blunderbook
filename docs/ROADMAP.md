@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-12_
+_Last updated: 2026-11-16_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -26,8 +26,12 @@ _Last updated: 2026-11-12_
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
+| M17 Profile | In progress (1/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 
-**Next up:** M15, the desktop app (planned below, not started). M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
+**Next up:** 17.2, the Profile package (its database, the rating history from your games,
+`profile refresh` and `profile show`). Still to check from 17.1: one real answer from each
+site (the rating fixtures are hand-built, `TODO(verify)`). M15, the desktop app, is planned
+below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
 hand-built, `TODO(verify)`).
@@ -1358,6 +1362,40 @@ rankings aren't about your own mistakes.
         console errors. `backup` takes `rankings-….db` and `restore` puts it back.
       - **Docs:** README (the tab, the button), the extension's README, CLAUDE.md.
 
+### M17 Profile (extension)
+
+Your ratings on Lichess and Chess.com in a Profile tab: the official numbers, fetched when
+you ask and kept in `profile.db`, and your rating over time from the games you synced, next
+to your blunders per game. Done before M15, which will bundle it with the other three.
+
+- [x] **17.1** Host: ratings from the site adapters.
+      _Done:_
+      - **The docs were checked first** (§8, 2026-11-16) and noted at the top of each
+        adapter: Lichess `GET /api/user/{username}` (`perfs`) and
+        `GET /api/user/{username}/perf/{perf}` (`stat.highest`, `stat.count`); Chess.com
+        `GET /pub/player/{username}/stats` (`last`, `best`, `record`, `tactics`).
+      - **Core:** `Rating`, `SiteRatings` and `RATING_KINDS` in `core/models.py` (bullet,
+        blitz, rapid, classical, daily, puzzle; what a site doesn't give is `None`).
+      - **Adapters:** `LichessAdapter.fetch_ratings()` (one request, then one per kind you
+        have games in; no token sent, since it's public data) and
+        `ChesscomAdapter.fetch_ratings()` (one request, with the contact `User-Agent`).
+        A 429 is a message and never a wait. `sources.ratings_for(name, cfg)`.
+      - **Host API** (additions: `HOST_API` stays 1): `accounts()`, `fetch_ratings(site)`
+        and `Log.games()`.
+      - **Tests** (30 more): every field read from hand-built answers, a kind never played,
+        a provisional rating, a closed account, odd values, plain messages for 404 / 429 /
+        5xx / unreadable answers / no connection, no `Authorization` header, the contact in
+        Chess.com's `User-Agent`, the host functions and the redacted token.
+      - **Not checked:** a real answer from either site. The fixtures are hand-built from
+        the docs (`TODO(verify)`): Chess.com's `chess_rapid` / `chess_bullet` names and its
+        `date` as Unix seconds, and whether Lichess lists a kind you never played.
+- [ ] **17.2** Package: `extensions/profile`, `profile.db` (every fetch kept), the rating
+      history from your games (pure), `blunderbook profile refresh` and `profile show`.
+- [ ] **17.3** The tab: current ratings per site with the change since the last refresh,
+      highest, record and puzzles, and "Refresh ratings".
+- [ ] **17.4** Rating over time: the chart from your games, blunders per game by month
+      under it. README and the extension's own README.
+
 **Later (not v1):** a side picker for web imports, FEN board editor in the browser, settings
 page, more AI helpers (reflection questions, cause suggestions from your notes, a monthly
 digest), Anki / Lichess-study export, mobile PWA.
@@ -1691,3 +1729,20 @@ None open.
   be downloaded again (about 4.5 MB of backups, not 60). Blunderbook's own database and the
   other extensions keep `keep`. A `-pre-restore` copy isn't rotated by the restore that
   makes it, as before; the next backup of that database replaces it. (CLAUDE.md §6, §15)
+- **2026-11-16: Profile (M17), an extension for your ratings.**
+  - **Two sources:** the official current ratings, fetched from Lichess and Chess.com and
+    kept in `profile.db`, and a history drawn from the ratings in the games you already
+    synced, which needs no network.
+  - **Fetched only when you ask:** a "Refresh ratings" button and `blunderbook profile
+    refresh`. Never when the tab opens or on a timer. It's a new network call, listed in
+    CLAUDE.md §1.
+  - **The HTTP code is in the site adapters**, not the extension: `fetch_ratings()` on
+    each, reached through `host.fetch_ratings`. They already hold your username, contact
+    and token, and a site changing its API still breaks only its adapter. §8's "PGN text
+    only" now has this one addition. (Rankings, M16, keeps its own HTTP: its lists are
+    public and have nothing to do with your accounts.)
+  - **No token for ratings:** Lichess's are public, so the token isn't sent.
+  - **Chess.com's puzzle rating is a highest only:** its API gives your highest and lowest,
+    not the current one, so it's shown as a best.
+  - **Also shown:** the highest rating and the win / loss / draw record, puzzle ratings, and
+    blunders per game next to the rating line.

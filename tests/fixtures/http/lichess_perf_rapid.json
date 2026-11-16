@@ -1,0 +1,18 @@
+{
+  "user": {"name": "Rashed"},
+  "perf": {"glicko": {"rating": 1790.02, "deviation": 70.1}, "nb": 140, "progress": -8},
+  "rank": null,
+  "percentile": 72.9,
+  "stat": {
+    "highest": {"int": 1821, "at": "2026-10-30T20:01:44.000Z", "gameId": "kL2mN4pQ"},
+    "lowest": {"int": 1455, "at": "2021-01-17T15:30:00.000Z", "gameId": "rS5tU7vW"},
+    "bestWins": {"results": []},
+    "worstLosses": {"results": []},
+    "count": {
+      "all": 151, "rated": 140, "win": 80, "loss": 58, "draw": 13, "tour": 0,
+      "berserk": 0, "opAvg": 1771.0, "seconds": 190000, "disconnects": 0
+    },
+    "resultStreak": {"win": {"cur": {"v": 2}, "max": {"v": 6}}, "loss": {"cur": {"v": 0}, "max": {"v": 5}}},
+    "playStreak": {"nb": {"cur": {"v": 0}, "max": {"v": 12}}, "time": {"cur": {"v": 0}, "max": {"v": 7000}}}
+  }
+}

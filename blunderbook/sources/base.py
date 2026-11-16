@@ -1,5 +1,6 @@
-"""What every sync adapter provides (CLAUDE.md §8): PGN text, nothing else. The importer does
-the rest, so a site changing its API only breaks its own adapter."""
+"""What every sync adapter provides (CLAUDE.md §8): PGN text for the importer, which does the
+rest, and your ratings when you ask for them. A site changing its API only breaks its own
+adapter."""
 
 from collections.abc import Iterable, Iterator
 from datetime import datetime
@@ -8,12 +9,16 @@ from typing import Final, Protocol
 import httpx
 
 from blunderbook import __version__
+from blunderbook.core.models import SiteRatings
 
 USER_AGENT: Final = f"Blunderbook/{__version__} (local chess mistake library)"
 # HTTP 429: both sites' docs say to slow down. Lichess: "waiting one minute before retrying".
 WAIT_429_S: Final = 60.0
 LONGEST_WAIT_S: Final = 300.0  # a longer Retry-After stops the sync instead of hanging it
 TRIES: Final = 3  # requests in all, for one URL
+# Ratings are asked for while you wait (a button, a command): a short timeout, and a 429
+# is a message, never a wait.
+RATINGS_TIMEOUT: Final = httpx.Timeout(15.0, connect=10.0)
 
 
 class SyncError(Exception):
@@ -27,6 +32,21 @@ class SourceAdapter(Protocol):
         """The PGN of each game played since `since` (all games when None), one game per
         item, oldest first where the site allows. Raises SyncError."""
         ...
+
+
+class RatingsSource(Protocol):
+    name: str  # 'lichess' | 'chesscom'
+
+    def fetch_ratings(self) -> SiteRatings:
+        """Your ratings on the site now, one request at a time. Raises SyncError."""
+        ...
+
+
+def whole(value: object) -> int | None:
+    """A whole number from a site's JSON. Anything else (missing, text, true) is None."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 def redact(text: str, *secrets: str) -> str:
