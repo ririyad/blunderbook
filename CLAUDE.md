@@ -164,8 +164,9 @@ blunderbook/
 │   └── profile/               # the Profile extension (§15): your Lichess and Chess.com
 │       ├── blunderbook_profile/     # ratings. __init__.py (the Extension, commands),
 │       │                            #   history.py (pure: your rating over time, from
-│       │                            #   your games), store.py (its SQL). No HTTP: the
-│       │                            #   site adapters ask, through host.fetch_ratings
+│       │                            #   your games), store.py (its SQL), labels.py,
+│       │                            #   routes.py, web/ (its tab). No HTTP: the site
+│       │                            #   adapters ask, through host.fetch_ratings
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)

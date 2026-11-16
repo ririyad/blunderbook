@@ -14,6 +14,16 @@ blunderbook ext install profile
 It uses the usernames you already have under `[lichess]` and `[chesscom]` in config.toml.
 Chess.com also needs `contact` there, as `blunderbook sync` does.
 
+## The tab
+
+Restart `blunderbook serve` after turning it on. The Profile tab has a panel for each site
+with your ratings, and **Refresh ratings**, which asks each site you have a username for.
+Opening the tab asks no one: it shows what was kept last time. Until a site has been
+fetched, its panel shows your rating in your newest synced game of each time control.
+
+If one site can't be asked, its panel says why, the ratings you had from it are kept, and
+the other site is still asked.
+
 ## Commands
 
 - `blunderbook profile refresh [lichess|chesscom|all]` asks each site for your ratings now
@@ -24,7 +34,7 @@ Chess.com also needs `contact` there, as `blunderbook sync` does.
 
 ## What goes online
 
-Only `refresh`. It sends your username to the site it belongs to: to Lichess
+Only **Refresh ratings** and `refresh`. They send your username to the site it belongs to: to Lichess
 (`/api/user/{username}` and `/api/user/{username}/perf/{perf}`), with no token, and to
 Chess.com (`/pub/player/{username}/stats`), with your `contact` in the User-Agent, as
 Chess.com asks. Nothing else is sent, and nothing is sent anywhere else.

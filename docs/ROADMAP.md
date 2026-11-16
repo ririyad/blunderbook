@@ -26,11 +26,11 @@ _Last updated: 2026-11-16_
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
 | M15 Desktop app | Planned | v2: a download anyone can double-click |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
-| M17 Profile | In progress (2/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
+| M17 Profile | In progress (3/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 
-**Next up:** 17.3, the Profile tab (current ratings per site, and "Refresh ratings"). Still
-to check from 17.1 and 17.2: one real `blunderbook profile refresh` (the rating fixtures are
-hand-built, `TODO(verify)`). M15, the desktop app, is planned
+**Next up:** 17.4, your rating over time on the Profile tab (the chart from your games,
+blunders per game under it). Still to check from M17: one real `blunderbook profile refresh`
+or press of Refresh ratings (the rating fixtures are hand-built, `TODO(verify)`). M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
 measured at 390 px in 10.3); from 13.3, the "Missed win" pills at 390 px. Before relying
 on sync, try one real `blunderbook sync` and record the responses (the fixtures are still
@@ -1423,8 +1423,37 @@ to your blunders per game. Done before M15, which will bundle it with the other 
         README, CLAUDE.md §4 and §15.
       - **Not checked:** a real refresh. It's yours to run once: development never calls
         the sites (CLAUDE.md §14).
-- [ ] **17.3** The tab: current ratings per site with the change since the last refresh,
-      highest, record and puzzles, and "Refresh ratings".
+- [x] **17.3** The Profile tab and its Refresh ratings button.
+      _Done:_
+      - **Routes** (`routes.py`, at `/api/ext/profile`): `GET` gives each site's username
+        (from config.toml), what was fetched last (each rating with its label and its change
+        since the fetch before) and your rating in your newest game of each speed. It asks
+        no site. `POST /refresh` (`host.same_origin`, `{site}`: all, lichess or chesscom)
+        takes the daily backup, asks each site with a username, keeps the answers and sends
+        the same shape back, with a `problem` on a site that couldn't be asked.
+      - **Not a background job**, unlike the Rankings' update: a refresh is at most seven
+        small requests with a 15 s timeout each, so the route answers when it's done. One at
+        a time: a second is a 409. No username is a 409 naming the config.toml key.
+      - **The tab** (`web/view.js`, `view.css`): a bar that says the sites are asked only
+        when you press Refresh ratings, the button (disabled with no username, "Refreshing…"
+        while it runs, an `aria-live` line for the outcome), and a panel per site: time
+        control, rating (`?` in amber while provisional, the change in green or red), best
+        with its date, won / lost / drawn. A site not fetched yet shows "From your games",
+        each rating linked to its game; one with no username says which key to set.
+      - **Tests** (18 more): the answer before and after a refresh, one site, the change,
+        a failing site, no username, another website's `Origin` (403), a bad body, one
+        refresh at a time, the backup, a broken config (503), the page checks
+        (`webcheck.problems(..., prefix="profile")`), that only the refresh isn't a GET, and
+        that view.js reads only fields the schemas have.
+      - **Checked in Chrome** against a scratch config and databases with the sites faked
+        (no request left the computer): the tab with ratings kept, Refresh (the button
+        "Refreshing…", then "+12" in green, "−15" in red and "changes since 9 Nov"), one
+        site failing (its reason in red on its panel, the other updated), nothing fetched
+        yet with "From your games", no Chess.com username. No console errors. At 390 px
+        (headless Chrome): the page 390 px wide, both tables inside their panels, the best
+        rating's date hidden.
+      - **Not checked:** a press of the real button against the real sites, and a touch
+        screen (`TODO(verify)`).
 - [ ] **17.4** Rating over time: the chart from your games, blunders per game by month
       under it. README and the extension's own README.
 

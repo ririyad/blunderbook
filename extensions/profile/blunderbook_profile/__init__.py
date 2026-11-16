@@ -1,13 +1,13 @@
 """The Profile extension (CLAUDE.md §15, ROADMAP M17): your ratings on Lichess and Chess.com,
 kept in profile.db and never in your Log.
 
-It goes online only when you ask: ``blunderbook profile refresh`` (and, from 17.3, the tab's
-button). Each site's own adapter asks, through ``host.fetch_ratings``; nothing here makes a
-request. Your rating over time is read from the games you imported
+It goes online only when you ask: ``blunderbook profile refresh``, or the tab's "Refresh
+ratings" button. Each site's own adapter asks, through ``host.fetch_ratings``; nothing here
+makes a request. Your rating over time is read from the games you imported
 (:mod:`blunderbook_profile.history`) and needs no network at all.
 
 17.2 has the database (:mod:`blunderbook_profile.store`), the history and two commands,
-``refresh`` and ``show``. The tab comes next.
+``refresh`` and ``show``; 17.3 the tab (:mod:`blunderbook_profile.routes`, ``web/``).
 """
 
 import sqlite3
@@ -15,30 +15,19 @@ from contextlib import closing
 from datetime import date, datetime
 from enum import StrEnum
 from importlib.resources import files
-from typing import Annotated, Final, NoReturn
+from typing import Annotated, NoReturn
 
 import typer
 
 from blunderbook import ext, host
-from blunderbook.core.models import Rating, RatingKind, SyncSource
+from blunderbook.core.models import Rating, SyncSource
 from blunderbook_profile import history, store
+from blunderbook_profile.labels import KIND_NAMES, NO_ACCOUNTS, SITE_NAMES, kind_name
+from blunderbook_profile.routes import router
 
 commands = typer.Typer(no_args_is_help=True)
 
 DOT = " \N{MIDDLE DOT} "
-SITE_NAMES: Final[dict[SyncSource, str]] = {"lichess": "Lichess", "chesscom": "Chess.com"}
-KIND_NAMES: Final[dict[RatingKind, str]] = {
-    "bullet": "Bullet",
-    "blitz": "Blitz",
-    "rapid": "Rapid",
-    "classical": "Classical",
-    "daily": "Daily",
-    "puzzle": "Puzzles",
-}
-NO_ACCOUNTS: Final = (
-    "No usernames yet: set yours under [lichess] or [chesscom] in config.toml,\n"
-    "or run blunderbook init."
-)
 
 
 class _Site(StrEnum):
@@ -156,13 +145,6 @@ def _from_games() -> None:
         typer.echo(f"  {label:<20}{found.rating}{DOT}{_day(found.day)}")
 
 
-def kind_name(source: SyncSource, kind: RatingKind) -> str:
-    """What a kind of play is called. Lichess calls daily chess correspondence."""
-    if source == "lichess" and kind == "daily":
-        return "Correspondence"
-    return KIND_NAMES[kind]
-
-
 def _source(site: _Site) -> SyncSource:
     return "lichess" if site is _Site.lichess else "chesscom"
 
@@ -193,6 +175,8 @@ extension = ext.Extension(
     name="profile",
     title="Profile",
     host_api=ext.HOST_API,
+    router=router,
+    web=files(__name__) / "web",
     migrations=files(__name__) / "migrations",
     cli=commands,
 )

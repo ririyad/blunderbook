@@ -481,18 +481,23 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   [extensions/rankings/README.md](extensions/rankings/README.md).
 
 **Profile** keeps your own ratings on Lichess and Chess.com
-(`blunderbook ext install profile`). It has commands only for now; its tab comes next.
+(`blunderbook ext install profile`).
 
-- `blunderbook profile refresh` asks each site you have a username for (under `[lichess]`
-  and `[chesscom]` in config.toml) and prints your rating in bullet, blitz, rapid,
-  classical, daily and puzzles: how far it moved since the fetch before, your highest, and
-  your wins, losses and draws, where the site gives them. Name a site (`lichess` or
-  `chesscom`) to ask only it.
+- **The Profile tab** (restart `blunderbook serve` after turning it on) has a panel for each
+  site: your rating in bullet, blitz, rapid, classical, daily and puzzles, how far it moved
+  since the fetch before (green up, red down), your highest and when, and your wins, losses
+  and draws, where the site gives them. A `?` marks a rating the site still calls
+  provisional. **Refresh ratings** asks each site you have a username for (under `[lichess]`
+  and `[chesscom]` in config.toml). Until a site has been fetched, its panel shows your
+  rating in your newest synced game of each time control, linked to the game.
+- `blunderbook profile refresh` does the same on the command line. Name a site (`lichess`
+  or `chesscom`) to ask only it.
 - `blunderbook profile show` prints what was fetched last, and your rating in your newest
   synced game of each site and time control. It asks no site.
-- **It goes online only when you run `refresh`**, and sends only your username, to the site
-  it belongs to (and your `[chesscom] contact`, to Chess.com). Your Lichess token isn't
-  sent: the ratings are public.
+- **It goes online only when you press Refresh ratings or run `refresh`**, never when the
+  tab opens. It sends only your username, to the site it belongs to (and your
+  `[chesscom] contact`, to Chess.com). Your Lichess token isn't sent: the ratings are
+  public. If one site can't be asked, the other still is, and the ratings you had are kept.
 - Chess.com has no classical rating, and gives only your highest puzzle rating.
 - The answers are kept in `profile.db` next to your database, one per site per day you
   asked, backed up with it. More in
@@ -744,8 +749,8 @@ providers that may keep requests. Pick another with `blunderbook ai model NAME`.
   download FIDE's rating lists from ratings.fide.com and the leaderboards of Lichess and
   Chess.com. It sends
   nothing about you, except your `[chesscom] contact`, to Chess.com only, when you set it.
-- With the Profile extension on, `blunderbook profile refresh` asks Lichess and Chess.com
-  for your ratings. It sends your username to the site it belongs to, and your
+- With the Profile extension on, its Refresh ratings button and `blunderbook profile
+  refresh` ask Lichess and Chess.com for your ratings. It sends your username to the site it belongs to, and your
   `[chesscom] contact` to Chess.com. Your Lichess token isn't sent.
 - Backups are local files. They leave your computer only if you put the backup folder inside
   a folder your cloud drive syncs.
