@@ -24,11 +24,12 @@ _Last updated: 2026-11-16_
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
-| M15 Desktop app | Planned | v2: a download anyone can double-click |
+| M15 Desktop app | Planned | v2: a download anyone can double-click, with extensions added and removed from its Extensions page |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 
-**Next up:** M15, the desktop app (planned below, not started). M17, the Profile extension,
+**Next up:** M15, the desktop app (planned below, not started), starting with 15.1 and 15.2:
+one swappable server and the Extensions page, which help `blunderbook serve` too. M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1190,36 +1191,70 @@ place of Python, uv, a git clone and a separate Stockfish.
 - **Decided:** desktop only (Windows, macOS, Linux); public, built by GitHub on every commit
   and published as release assets; not signed or notarised (the code is there to read);
   its own window (pywebview); Stockfish and both extensions inside (all GPL-3).
-- [ ] **15.1** One way to start the server (`blunderbook/server.py`, out of `cli.serve`); a
-      "bundled" step in the Stockfish lookup, between `stockfish_path` and PATH, when the app
-      is frozen; `update` and `ext install` say plainly what a downloaded app can't do;
-      `build_info.py` (version and commit), shown by `doctor`.
-- [ ] **15.2** Setup on the page: with no config.toml the app creates it and the database;
-      `GET` / `PUT /api/setup` and a Setup tab for your names and for turning extensions on.
-      This changes "no settings page in v1" (CLAUDE.md §6, §10); engine depth, thresholds,
-      sync, backups and AI stay in config.toml and the CLI.
-- [ ] **15.3** The window: `blunderbook/desktop.py` and `blunderbook app` (the server on a
+- **Extensions page (planned 2026-11-17).** Asked for: an "Extensions" item in the app's
+  menu, listing the app's extensions, with **Add** and then a red **Remove**. See Decided.
+- [ ] **15.1** One server, swappable: `blunderbook/server.py`, the "one way to start the
+      server". The server serves a thin holder that forwards each request to the current
+      FastAPI app; `build()` (config, `ext.load`, databases opened and upgraded with their
+      `-pre-migrate` backups, `create_app`) and `swap()` replace it without a restart: same
+      port, same window, requests already running finish on the old app. `cli.serve` uses
+      it, and `_serve_extensions` moves there.
+- [ ] **15.2** Extensions on the page (`#extensions`, a built-in view; "extensions" joins
+      `ext.RESERVED`):
+      - `Extension` gains `summary` (one line) and `network` (what it asks the network for,
+        "" if nothing): additions, so `HOST_API` stays 1. Filled in for all four.
+      - `ext.catalog(cfg)`: every known extension and its state: on, off, not installed (a
+        folder `update.available()` finds in a git install), or a problem.
+        `ext.enable` / `ext.disable` take over the logic in `cli.ext_enable` / `ext_disable`,
+        so the commands and the page run the same code.
+      - `GET /api/extensions/catalog`, `POST /api/extensions/{name}/add` and `/remove`
+        (`same_origin`; 409 while an import runs). Add or Remove changes config.toml, then
+        swaps in a fresh app (15.1), and the page reloads with the new tabs.
+      - The page: grouped On, Available, Not installed; each with its summary and what it
+        has (tab, commands, own database, "uses the network when you ask"). **Add** is the
+        primary button; **Remove** is red and asks in the page first ("Its data stays",
+        Remove / Keep). A not-installed one shows `blunderbook ext install NAME`; a broken
+        one says why.
+      - A quiet "Manage" link at the end of the extensions tray; with none on, the tray
+        holds just that link.
+      - Remove keeps the extension's data (like `ext disable`). Only the bundled extensions
+        are listed: nothing is downloaded and no outside code is loaded.
+      - Changes "no settings page in v1" (CLAUDE.md §6) and "settings go through the CLI
+        only" (§10), as Setup (15.3) would have. Also §9, §10, §11, §15, README.
+- [ ] **15.3** Setup on the page: with no config.toml the app creates it and the database;
+      `GET` / `PUT /api/setup` and a Setup tab for your names. Turning extensions on and off
+      is the Extensions page's (15.2). Engine depth, thresholds, sync, backups and AI stay in
+      config.toml and the CLI.
+- [ ] **15.4** The window: `blunderbook/desktop.py` and `blunderbook app` (the server on a
       thread, a pywebview window, a free port if 8732 is taken, closing the window stops the
-      server and any import). pywebview is an optional extra. On Linux with no WebKitGTK it
-      opens the browser.
-- [ ] **15.4** The build: a PyInstaller one-folder bundle (`packaging/`), with two programs
-      (`Blunderbook`, the window, and `blunderbook-cli`), the page, the migrations, both
-      extensions with their data and entry-point metadata, and Stockfish fetched at a pinned
-      version and SHA-256 (baseline x86-64 builds). A smoke test runs the built app: `doctor`,
-      an import of a fixture, `ext list`, the server.
-- [ ] **15.5** Built by GitHub on every push to `main`: the tests (their first CI run), then
+      server and any import). An application menu (`webview.start(menu=…)`) with
+      "Extensions…", which opens `#extensions`; pywebview's docs list only per-window menus
+      as unsupported on GTK (`TODO(verify)` on Windows and Linux). pywebview is an optional
+      extra. On Linux with no WebKitGTK it opens the browser, where the "Manage" link
+      reaches the same page.
+- [ ] **15.5** Frozen-app behaviour: a "bundled" step in the Stockfish lookup, between
+      `stockfish_path` and PATH, when the app is frozen; `update` and `ext install` say
+      plainly what a downloaded app can't do; `build_info.py` (version and commit), shown by
+      `doctor`.
+- [ ] **15.6** The build: a PyInstaller one-folder bundle (`packaging/`), with two programs
+      (`Blunderbook`, the window, and `blunderbook-cli`), the page, the migrations, every
+      extension with its data and entry-point metadata (so "Add" is turning it on, never an
+      install), and Stockfish fetched at a pinned version and SHA-256 (baseline x86-64
+      builds). A smoke test runs the built app: `doctor`, an import of a fixture, `ext list`,
+      the extensions catalog, the server.
+- [ ] **15.7** Built by GitHub on every push to `main`: the tests (their first CI run), then
       Windows, macOS (Apple silicon) and Linux builds with the smoke test, published as a
       rolling "Latest build" pre-release with `SHA256SUMS.txt` and build attestations; a
       `v*` tag makes a release. README gets a "Download" section: which file, the one-time
       Gatekeeper and SmartScreen steps, how to check a download, where your data lives.
-- [ ] **15.6** "Check for updates": in Setup and `update --check`, asks GitHub for the latest
+- [ ] **15.8** "Check for updates": in Setup and `update --check`, asks GitHub for the latest
       build's commit, only when pressed; it links to the release and never installs. A new
       network call, to list in CLAUDE.md §1.3.
 - **Not in it:** signing, app stores, automatic updates, phones, a full settings page,
-  installers (`.msi`, `.deb`).
+  installers (`.msi`, `.deb`), extensions from outside the app (a user folder, downloads).
 - **Risks:** Windows and Linux are checked only by CI's smoke test until someone opens each
   once; unsigned PyInstaller apps are sometimes flagged by antivirus; the download is about
-  80 to 120 MB; a frozen Python 3.15 app is unproven until 15.4 (PyInstaller 6.22 and
+  80 to 120 MB; a frozen Python 3.15 app is unproven until 15.6 (PyInstaller 6.22 and
   pywebview 6.2 do resolve on 3.15).
 
 ### M16 Rankings (extension)
@@ -1872,3 +1907,24 @@ None open.
   - **Checked** in Chrome and at a true 390 px against scratch data: four, one and no
     extensions, the focus ring, hover, opening a tab, the tab order. Touch was emulated
     (a coarse pointer), not a real touch screen.
+- **2026-11-17: Extensions page, with Add and Remove (planned in M15).** Asked for: an
+  "Extensions" item in the desktop app's menu, listing its extensions, with Add and then a
+  red Remove. Answers:
+  - **Where:** a native menu item and a page (`#extensions`), with a link in the header's
+    extensions tray, so the browser fallback reaches it too.
+  - **Remove keeps the data**, like `ext disable`; adding it again brings it all back.
+  - **Bundled extensions only.** Nothing is downloaded and no outside code runs.
+  - **The same page under `blunderbook serve`.** One that's in the repo but not installed
+    shows the `ext install` command (installing needs uv and takes a while).
+  - **Applied at once, no restart** (my proposal, part of the plan you accepted): a FastAPI
+    app can't cleanly gain or lose routes while running, so the server forwards to the
+    current app and swaps in a fresh one. Refused while an import runs. A package installed
+    from the CLI while `serve` runs still needs a restart (Python sees new packages at
+    start); the desktop app never hits this.
+  - **Order:** M15 is renumbered: 15.1 one swappable server and 15.2 the Extensions page
+    come first, since neither needs the desktop build and both help `serve` today. Setup
+    becomes 15.3, the window 15.4 (with the menu item), frozen-app behaviour 15.5, then the
+    build, CI and "Check for updates".
+    Slice numbers in Decided entries before this one are the old ones.
+  - **To check while building:** where the import job lives (so a swap never strands it),
+    whether `create_app` has shutdown hooks the holder must forward, Collection's own job.
