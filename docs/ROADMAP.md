@@ -27,6 +27,7 @@ _Last updated: 2026-11-16_
 | M15 Desktop app | Planned | v2: a download anyone can double-click, with extensions added and removed from its Extensions page |
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
+| M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 
 **Next up:** M15, the desktop app (planned below, not started), starting with 15.1 and 15.2:
 one swappable server and the Extensions page, which help `blunderbook serve` too. M17, the Profile extension,
@@ -1531,6 +1532,96 @@ digest), Anki / Lichess-study export, mobile PWA.
 
 ---
 
+### M18 Game commentary in the Collection (planned, not started)
+
+Planned on 2026-11-18. The Collection's game page has a board, an eval graph, the moves
+with marks and one box for the move shown. M18 makes it read like an annotated game: for
+each move, what it did, why it was played and what followed, as one commentary. See
+Decided for the answers it's built on.
+
+- **What a note says.** _What_ (python-chess): captures and recaptures, castling,
+  development, pawn advances, checks, promotions, queen trades, pieces newly attacked.
+  _Why_ (Stockfish): "Stockfish's choice", "one of its top three" or "Stockfish preferred
+  …"; the threat the move creates and the threat it stops. _What followed_: the position
+  in words ("level", "White is better", "Black is winning"), how it changed, and for a
+  mistake the line that punishes it, with its captures.
+- **Weighted.** Every move gets one line. Key moments get a paragraph and a small board:
+  every marked move, turning points (White's winning chances cross a band: lost, worse,
+  level, better, winning), only moves (Stockfish's top move far ahead of its second) and
+  the last move. A summary opens the game (result, who was better when, the decisive
+  moment, each side's accuracy) and each phase (opening, middlegame, endgame).
+- [ ] **18.1** Shared facts, and AI for extensions (core).
+      - `core/facts.py` (pure, mypy strict): the move and line facts moved out of
+        `core/explain.py` (reading a line, captures, move notes, line facts, pieces left
+        attacked, the game ending, `eval_words`), with the owner's wording as a parameter:
+        "your / their" for the Log, "White's / Black's" for anyone's game. The Log's
+        prompt stays byte-for-byte the same (a test).
+      - `ai.explain` gains `max_tokens` (default stays 1000).
+      - `host.ai_status()` (`enabled`, `model`; never the key) and
+        `host.ask_ai(system, user, *, max_tokens)` (text and model; `HostError` with a
+        plain, redacted message). Additions, so `HOST_API` stays 1. A network call only on
+        a button press.
+      - CLAUDE.md §1.3, §7.10, §15 (`facts` joins the core modules an extension may use).
+- [ ] **18.2** The deeper analysis, once per game, when you first open its commentary.
+      - `migrations/0002_commentary.sql`: `studies` (engine, depth, when), `threats` (per
+        position, the best move for the side not to move, from the position with the turn
+        passed; none when that side is in check) and `alternatives` (MultiPV 3 at the key
+        moments).
+      - `study.py`, a job like `jobs.py`: one at a time, its own connection and Stockfish,
+        progress as positions done / total, stops between positions when `serve` stops,
+        nothing saved for a game that stops halfway. The game's own depth.
+      - `POST /games/{id}/study` (`same_origin`; 409 while one runs), `GET /study/{job_id}`,
+        and `blunderbook collection study GAME_ID`.
+      - `TODO(verify)`: Stockfish with a turn-passed FEN (en passant cleared); the time per
+        game at depth 16.
+- [ ] **18.3** The built-in commentary and the page.
+      - `commentary.py` (pure, mypy strict): positions, study and `stats.moves()` in, a
+        summary, the phases and a note per move (key or quiet; what, why, what followed;
+        its line) out.
+      - `GET /games/{id}/commentary`: that, the PGN's own comments and variations (read
+        from the stored PGN), and the saved AI prose. No study yet: the page offers "Study
+        this game" with a progress bar.
+      - The page: a "Moves | Commentary" switch. Commentary reads like a book: the summary,
+        a heading and summary per phase, one line per quiet move, a block with a small
+        board per key moment, the PGN's comment in muted italics marked "From the PGN";
+        every move a button that shows it on the board. Under the board while stepping:
+        that move's note (the AI prose when saved, the facts in a "Facts" details).
+      - `blunderbook collection commentary GAME_ID` prints it.
+- [ ] **18.4** AI prose, one request per game.
+      - `prompt.py` (pure): the system prompt (only the facts given, no new moves or
+        variations, "White" and "Black", plain prose, no markdown, no exclamation marks,
+        one line per quiet move, a short paragraph per key moment) and the user message:
+        the moves, the notes and lines, evals in words, the opening and ECO.
+        `PROMPT_VERSION`.
+      - **Never sent:** player names, ratings, dates, event, site, the PGN, the
+        annotator's comments.
+      - The answer is asked for as JSON keyed by move (`"18b"`), with the summary and the
+        phases. Unknown keys are dropped, a missing move keeps its built-in note, markdown
+        is stripped; an answer that can't be read is a 502 and nothing is saved.
+        `TODO(verify)`: JSON mode for each model.
+      - Saved in `prose` (text, model, prompt version, when). `POST
+        /games/{id}/commentary/ai` (`same_origin`; 503 with the reason when AI is off; 502
+        on an OpenRouter problem) and `GET …/commentary/ai/prompt` (exactly what's sent).
+      - The page: "Write the commentary", the prose marked "AI commentary · auto",
+        "Written by {model} on {date}, from Stockfish's lines. It can be wrong", "Write
+        again", and "What's sent". An output limit of about 4000 tokens: a very long game
+        sends only its key moments in full, and the page says so.
+- [ ] **18.5** Annotated PGN, and docs.
+      - `GET /games/{id}/annotated.pgn` and a "Download annotated PGN" link: the headers
+        plus `Annotator`, the marks as NAGs (`??` `?` `?!`), each note as a `{comment}`
+        (the AI prose when saved), the PGN's own comments kept before it, Stockfish's best
+        line at a mistake as a variation. Built with python-chess; nothing is sent.
+      - README, `extensions/collection/README.md`, CLAUDE.md §4 and §15.
+- **Tests:** each fact in both wordings, the Log's prompt unchanged; `ask_ai` against
+  `MockTransport` (off, no key, 401, 429, a timeout, never the key); the study job with a
+  stub engine, and one engine test (`scholars_mate`: after 3. Qh5 the threat is Qxf7#);
+  the key-moment rules and the wording; nothing private in the prompt; parsing the
+  answer; 403 / 409 / 503 / 502; the annotated PGN read again by python-chess with every
+  move; the page and boundary checks.
+- **By hand:** a classic annotated game, studied, read, stepped through and downloaded,
+  with the AI answer faked; 390 px, the keyboard, no console errors. Left for you: one real
+  "Write the commentary" with your key and model.
+
 ## Development notes
 
 ```sh
@@ -1928,3 +2019,20 @@ None open.
     Slice numbers in Decided entries before this one are the old ones.
   - **To check while building:** where the import job lives (so a swap never strands it),
     whether `create_app` has shutdown hooks the holder must forward, Collection's own job.
+- **2026-11-18: Game commentary in the Collection (M18, planned).** Asked for: each move of a
+  Collection game explained (what it did, why, what followed) as one structured commentary.
+  Your answers:
+  - **Both writers:** the app always writes factual notes from Stockfish and python-chess
+    (offline, free); with `[ai]` on, a button turns them into prose, saved with the game.
+  - **Every move, weighted:** one line per move, a paragraph per key moment, a summary for
+    the game and each phase.
+  - **Shown two ways:** a book-style Commentary view, and the move's note under the board.
+  - **Extra Stockfish analysis**, once per game, when you ask: each side's threat at every
+    position, and the top three moves at key moments.
+  - **The PGN's own comments** are shown alongside, marked as the PGN's, never sent to AI.
+  - **No player names to AI:** White and Black, as for the Log's explanations (your own
+    games can be in a collection too).
+  - **One AI request per game**, and **an annotated PGN download**.
+  - **Mine, for you to overrule:** the facts move from `core/explain.py` into a shared
+    `core/facts.py` so the Log and the Collection say the same things the same way; AI
+    reaches the extension through two new host functions, never `ai.py` itself.
