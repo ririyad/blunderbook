@@ -1,17 +1,19 @@
 """The Journal tab's routes and page (ROADMAP 19.3): the list with search and tags, a note
 with its tree and its Log links, saving, pinning and deleting."""
 
+import io
 import re
 import threading
+import zipfile
 from collections.abc import Iterator
 from contextlib import closing
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, ClassVar, Self
 
 import chess
 import pytest
-from blunderbook_journal import extension, routes
+from blunderbook_journal import extension, routes, store
 from fastapi.testclient import TestClient
 from journal_fakes import ELEPHANT, FENCE, cfg_file  # noqa: F401  (fixtures)
 
@@ -239,6 +241,7 @@ def test_only_the_page_can_change_anything() -> None:
         ("/board", ["POST"]),
         ("/notes/{note_id}/lines", ["POST"]),
         ("/analyse", ["POST"]),
+        ("/notes/{note_id}/versions/{version_id}/restore", ["POST"]),
     ]
     assert all(deps == [host.same_origin] for _, _, deps in changes)
 
@@ -341,7 +344,7 @@ def test_the_tab(client: TestClient) -> None:
     assert client.get("/api/extensions").json() == [
         {"name": "journal", "title": "Journal", "css": True}
     ]
-    for name in ("view.js", "read.js", "write.js", "play.js"):
+    for name in ("view.js", "read.js", "write.js", "play.js", "history.js"):
         page = client.get(f"/ext/journal/{name}")
         assert page.status_code == 200, name
         assert page.headers["content-type"].startswith("text/javascript")
@@ -363,7 +366,7 @@ def test_the_page_reads_only_what_the_api_sends() -> None:
     that part's schema. In the page those are always called note, listed, n and r."""
     folder = ext.web_folder(extension)
     assert folder is not None
-    names = ("view.js", "read.js", "write.js", "play.js")
+    names = ("view.js", "read.js", "write.js", "play.js", "history.js")
     text = "\n".join((folder / f).read_text("utf-8") for f in names)
     parts = {
         "note": routes.NoteOut,
@@ -374,6 +377,10 @@ def test_the_page_reads_only_what_the_api_sends() -> None:
         "answer": routes.BoardOut,
         "analysis": routes.AnalyseOut,
         "engineLine": routes.EngineLineOut,
+        "listing": routes.HistoryOut,
+        "v": routes.VersionOut,
+        "shown": routes.VersionTextOut,
+        "version": routes.VersionTextOut,
     }
     for name, model in parts.items():
         read = set(re.findall(rf"\b{name}\.([a-z_]+)\b", text))
@@ -644,3 +651,88 @@ def test_one_analysis_at_a_time(client: TestClient, monkeypatch: pytest.MonkeyPa
 def test_analyse_an_unplayable_position(client: TestClient) -> None:
     response = client.post("/api/ext/journal/analyse", json={"fen": "8/8/8/8/8/8/8/8 w - - 0 1"})
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------- history and export (19.5)
+
+
+def versions_of(client: TestClient, note_id: int) -> Any:
+    return client.get(f"{API}/{note_id}/versions")
+
+
+def with_history(client: TestClient, db_file: Path) -> tuple[int, list[int]]:
+    """A note saved three times, each over 5 minutes after the last: two versions kept."""
+    made = new(client, "# First\nOne")
+    with closing(host.open_db(extension)) as conn:
+        noon = datetime(2026, 11, 7, 12, 0, tzinfo=UTC)
+        conn.execute("UPDATE notes SET updated_at = ? WHERE id = ?", (noon.isoformat(), made["id"]))
+        store.update(conn, made["id"], "# Second\nOne two", at=noon + timedelta(minutes=6))
+        store.update(conn, made["id"], "# Third\nOne two three", at=noon + timedelta(minutes=12))
+    ids = [v["id"] for v in versions_of(client, made["id"]).json()["versions"]]
+    return made["id"], ids
+
+
+def test_a_notes_history(client: TestClient, db_file: Path) -> None:
+    note_id, ids = with_history(client, db_file)
+    found = versions_of(client, note_id).json()
+    assert found["kept"] == 30
+    assert [(v["title"], v["words"]) for v in found["versions"]] == [("Second", 4), ("First", 3)]
+    assert found["versions"][0]["saved_at"] == "2026-11-07T12:06:00Z"
+    assert "body" not in found["versions"][0]
+    one = client.get(f"{API}/{note_id}/versions/{ids[1]}").json()
+    assert (one["title"], one["body"]) == ("First", "# First\nOne")
+
+
+def test_no_history_yet(client: TestClient) -> None:
+    made = new(client, "Just written")
+    assert versions_of(client, made["id"]).json()["versions"] == []
+
+
+def test_bring_a_version_back(client: TestClient, db_file: Path) -> None:
+    note_id, ids = with_history(client, db_file)
+    response = client.post(f"{API}/{note_id}/versions/{ids[1]}/restore")
+    assert response.status_code == 200
+    back = response.json()
+    assert (back["title"], back["body"]) == ("First", "# First\nOne")
+    assert back["doc"]["blocks"][0]["t"] == "heading"
+    titles = [v["title"] for v in versions_of(client, note_id).json()["versions"]]
+    assert titles == ["Third", "Second", "First"]
+
+
+@pytest.mark.parametrize(
+    ("path", "detail"),
+    [
+        ("{API}/999/versions", routes.NO_NOTE),
+        ("{API}/{note}/versions/999", routes.NO_VERSION),
+        ("{API}/999/versions/{version}", routes.NO_NOTE),
+    ],
+)
+def test_history_thats_gone(client: TestClient, db_file: Path, path: str, detail: str) -> None:
+    note_id, ids = with_history(client, db_file)
+    url = path.format(API=API, note=note_id, version=ids[0])
+    assert (client.get(url).status_code, client.get(url).json()["detail"]) == (404, detail)
+    if "/versions/" in url:
+        assert client.post(url + "/restore").status_code == 404
+
+
+def test_export_everything(client: TestClient) -> None:
+    made = [new(client, ELEPHANT), new(client, "# Rook endgames\n#endgame")]
+    response = client.get("/api/ext/journal/export")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    today = date.today().isoformat()
+    assert response.headers["content-disposition"] == f'attachment; filename="journal-{today}.zip"'
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zipped:
+        assert zipped.namelist() == [
+            f"{made[0]['id']}-the-elephant-trap.md",
+            f"{made[1]['id']}-rook-endgames.md",
+        ]
+        assert zipped.read(zipped.namelist()[0]).decode("utf-8") == ELEPHANT
+
+
+def test_export_with_no_notes(client: TestClient) -> None:
+    response = client.get("/api/ext/journal/export")
+    assert (response.status_code, response.json()["detail"]) == (
+        404,
+        "No notes yet: nothing to export.",
+    )

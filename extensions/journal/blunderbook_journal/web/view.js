@@ -1,5 +1,6 @@
 // The Journal tab (ROADMAP 19.3): your chess notes. `#journal` is the list, `#journal/12`
-// reads a note, `#journal/12/write` writes it and `#journal/new` starts one.
+// reads a note, `#journal/12/write` writes it, `#journal/12/history` shows its earlier
+// versions (19.5) and `#journal/new` starts one.
 // `#journal?tag=traps` (or `?q=…`) opens the list filtered.
 //
 // Reading (./read.js) draws the tree the server made from the note, with the board beside
@@ -12,16 +13,18 @@
 import { api } from "/js/api.js";
 import { fmtDate, localDay, plural } from "/js/format.js";
 import { showError, toast } from "/js/ui.js";
+import * as history from "./history.js";
 import * as read from "./read.js";
 import * as write from "./write.js";
 import { MOD } from "./write.js";
 
 const API = "/api/ext/journal/notes";
+const MODES = ["write", "history"];
 const UNTITLED = "Untitled";
 
 let root = null;
 let note = null; // the open note as the API sent it; null for the list or a new note
-let mode = "list"; // "list" | "read" | "write"
+let mode = "list"; // "list" | "read" | "write" | "history"
 let q = "";
 let tag = "";
 let listed = null; // the list's last answer
@@ -50,7 +53,7 @@ export async function show(section, rest) {
   const [first, second] = path.split("/");
   const mine = ++token;
   if (first === "new") openNew();
-  else if (/^\d+$/.test(first)) await openNote(Number(first), second === "write" ? "write" : "read", mine);
+  else if (/^\d+$/.test(first)) await openNote(Number(first), MODES.includes(second) ? second : "read", mine);
   else openList();
   refreshList();
 }
@@ -67,6 +70,7 @@ function build(section) {
       <div class="journal-tags" id="jTags" role="group" aria-label="Tags"></div>
       <p class="small journal-count" id="jCount" aria-live="polite"></p>
       <ul class="panel journal-notes" id="jNotes" aria-label="Your notes"></ul>
+      <a class="small journal-export" id="jExport" href="/api/ext/journal/export" download hidden>Export every note as a .zip of Markdown files</a>
     </aside>
     <div class="journal-bar" id="jBar" hidden></div>
     <div class="journal-body" id="jBody"></div>
@@ -155,12 +159,27 @@ async function openNote(id, wanted, mine) {
     layout("write", true);
     drawBar();
     write.open($("jBody"), $("jPanel"), note, writeHooks);
+  } else if (mode === "history") {
+    layout("history", false);
+    $("jPanel").replaceChildren();
+    drawBar();
+    history.open($("jBody"), note, historyHooks);
   } else {
     drawBar();
     const chess = read.open($("jBody"), $("jPanel"), note, { onTag: pickTag, onChanged: changedInReading });
     layout("read", chess);
   }
 }
+
+const historyHooks = {
+  status: (text) => { if (mode === "history") $("jStatus").textContent = text; },
+  restored(saved, from) {
+    note = saved;
+    refreshList();
+    toast(`The text from ${from} is back. The text before is kept in History.`);
+    location.hash = `#journal/${saved.id}`;
+  },
+};
 
 /** Reading mode changed the note (a line put into a game): keep it, and the list. */
 function changedInReading(saved) {
@@ -207,6 +226,7 @@ function drawBar() {
   $("jModes").append(
     link("Write", id === null ? null : `#journal/${id}/write`, mode === "write"),
     link("Read", id === null ? null : `#journal/${id}`, mode === "read"),
+    link("History", id === null ? null : `#journal/${id}/history`, mode === "history"),
   );
   $("jModes").title = `${MOD}E switches`;
   if (mode === "read") $("jStatus").textContent = edited(note.updated_at);
@@ -312,6 +332,7 @@ async function refreshList() {
   }
   if (mine !== listToken) return;
   listed = data;
+  $("jExport").hidden = data.total === 0;
   drawTags();
   drawList();
   drawEmpty();
@@ -504,6 +525,10 @@ document.addEventListener("keydown", (ev) => {
 });
 
 async function switchMode() {
+  if (mode === "history") {
+    location.hash = `#journal/${note.id}`;
+    return;
+  }
   if (mode === "read") {
     location.hash = `#journal/${note.id}/write`;
     return;

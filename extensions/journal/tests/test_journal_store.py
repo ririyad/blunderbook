@@ -101,6 +101,65 @@ def test_only_the_newest_30_versions_stay(db: sqlite3.Connection) -> None:
     assert kept[0].body == "v39" and kept[-1].body == "v10"
 
 
+def edited(db: sqlite3.Connection) -> tuple[int, list[store.Version]]:
+    """A note written as "v0", "v1", "v2", each saved 6 minutes after the last."""
+    note = store.create(db, "# v0", at=NOON)
+    for n in (1, 2):
+        store.update(db, note.id, f"# v{n}", at=NOON + timedelta(minutes=6 * n))
+    return note.id, store.versions(db, note.id)
+
+
+def test_one_version(db: sqlite3.Connection) -> None:
+    note_id, kept = edited(db)
+    assert store.version(db, note_id, kept[0].id) == kept[0]
+    other = store.create(db, "other")
+    assert store.version(db, other.id, kept[0].id) is None  # another note's
+    assert store.version(db, note_id, 999) is None
+
+
+def test_bring_a_version_back(db: sqlite3.Connection) -> None:
+    note_id, kept = edited(db)
+    v0 = next(v for v in kept if v.body == "# v0")
+    later = NOON + timedelta(minutes=13)
+    back = store.restore(db, note_id, v0.id, at=later)
+    assert back is not None
+    assert (back.body, back.title, back.updated_at) == ("# v0", "v0", later)
+    # The text it replaced is kept first, with the time it was written, even though the
+    # newest version is less than 5 minutes old.
+    now = store.versions(db, note_id)
+    assert [v.body for v in now] == ["# v2", "# v1", "# v0"]
+    assert now[0].saved_at == NOON + timedelta(minutes=12)
+    assert store.summaries(db, q="v0")[0].id == note_id  # search follows
+
+
+def test_bringing_back_the_same_text_changes_nothing(db: sqlite3.Connection) -> None:
+    note_id, _ = edited(db)
+    store.update(db, note_id, "# v1", at=NOON + timedelta(minutes=30))
+    v1 = next(v for v in store.versions(db, note_id) if v.body == "# v1")
+    before = store.versions(db, note_id)
+    back = store.restore(db, note_id, v1.id, at=NOON + timedelta(minutes=31))
+    assert back is not None and back.updated_at == NOON + timedelta(minutes=30)
+    assert store.versions(db, note_id) == before
+
+
+def test_bringing_back_keeps_30(db: sqlite3.Connection) -> None:
+    note = store.create(db, "v0", at=NOON)
+    for n in range(1, 41):
+        store.update(db, note.id, f"v{n}", at=NOON + timedelta(minutes=6 * n))
+    oldest = store.versions(db, note.id)[-1]
+    back = store.restore(db, note.id, oldest.id, at=NOON + timedelta(hours=5))
+    assert back is not None and back.body == oldest.body
+    kept = store.versions(db, note.id)
+    assert len(kept) == store.KEEP_VERSIONS and kept[0].body == "v40"
+
+
+def test_bring_back_nothing(db: sqlite3.Connection) -> None:
+    note_id, kept = edited(db)
+    assert store.restore(db, note_id, 999) is None
+    assert store.restore(db, 999, kept[0].id) is None
+    assert store.get(db, note_id).body == "# v2"  # type: ignore[union-attr]
+
+
 def test_pinning_isnt_an_edit(db: sqlite3.Connection) -> None:
     note = store.create(db, "A", at=NOON)
     pinned = store.set_pinned(db, note.id, True)

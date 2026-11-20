@@ -5,9 +5,9 @@ It never goes online. Your Log is only read, for ``[[log 12]]`` and ``[[game 40]
 
 The parts: the database (:mod:`blunderbook_journal.store`), what a save reads from a note's
 text (:mod:`blunderbook_journal.notes`), the tree Reading mode draws
-(:mod:`blunderbook_journal.doc`, :mod:`blunderbook_journal.moves`), the tab's routes
-(:mod:`blunderbook_journal.routes`) and page (``web/``), and four commands: ``new``,
-``list``, ``show`` and ``export``.
+(:mod:`blunderbook_journal.doc`, :mod:`blunderbook_journal.moves`), the Markdown export
+(:mod:`blunderbook_journal.archive`), the tab's routes (:mod:`blunderbook_journal.routes`)
+and page (``web/``), and four commands: ``new``, ``list``, ``show`` and ``export``.
 """
 
 import os
@@ -22,7 +22,7 @@ from typing import Annotated, NoReturn
 import typer
 
 from blunderbook import ext, host
-from blunderbook_journal import notes, routes, store
+from blunderbook_journal import archive, routes, store
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -115,7 +115,7 @@ def export(
     try:
         folder.mkdir(parents=True, exist_ok=True)
         for note in everything:
-            path = folder / f"{note.id}-{notes.slug(note.title)}.md"
+            path = folder / archive.file_name(note)
             path.write_text(note.body, encoding="utf-8", newline="")
             stamp = note.updated_at.timestamp()
             os.utime(path, (stamp, stamp))

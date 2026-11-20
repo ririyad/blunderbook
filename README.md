@@ -534,8 +534,10 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
 - `blunderbook journal show ID` prints a note as you wrote it.
 - `blunderbook journal export FOLDER` writes every note to FOLDER as a `.md` file.
 - Notes are kept in `journal.db` next to your database, backed up with it, with the
-  earlier versions of each (one every 5 minutes while you edit, the newest 30). More in
-  [extensions/journal/README.md](extensions/journal/README.md).
+  earlier versions of each (one every 5 minutes while you edit, the newest 30). A note's
+  **History** shows them, and **Bring this back** restores one, keeping the text you have
+  now. Under the list, **Export** downloads every note as a `.zip` of Markdown files. More
+  in [extensions/journal/README.md](extensions/journal/README.md).
 
 ### Print your Blunder Log
 

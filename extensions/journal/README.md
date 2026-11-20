@@ -36,6 +36,11 @@ blunderbook ext install journal
   - **Analyse** asks your Stockfish for its three best lines at your `engine_depth`, with
     a green arrow for the best move. Only when you press it, one position at a time.
 - Ctrl/Cmd+E switches between Writing and Reading; Esc goes back to the list.
+- **History** (beside Write and Read) lists a note's earlier versions, newest first. Pick
+  one to see its text; **Bring this back** makes it the note's text again, and keeps the
+  text you have now as a version first, so nothing is lost.
+- **Export every note as a .zip of Markdown files**, under the list, downloads one `.md`
+  file per note, exactly as you wrote it, like `blunderbook journal export`.
 - **Pin** keeps a note at the top of the list. **Delete** asks first, on the page.
 
 ## Commands
@@ -60,7 +65,10 @@ database and backed up with it.
   `Qxf7#` and anything inside a ```` ``` ```` block aren't tags.
 - **Versions.** Saving keeps the text it replaces when the newest kept version is over
   5 minutes old, so a long session leaves a version every few minutes. The newest 30 per
-  note are kept.
+  note are kept. Bringing one back always keeps the text it replaces.
+- **Export.** Each note is a file named by its number and title
+  (`3-the-elephant-trap.md`), with its ```` ```pgn ```` and ```` ```fen ```` blocks and its
+  tags as you typed them, and the time it was last edited.
 
 ## Chess in a note
 
@@ -80,5 +88,3 @@ Reading mode plays these on a board:
   the result and the opponent; on a line of their own they're a "From your Log" card with
   the re-test status and "Open →". A link to something that's no longer in your Log says
   so. The Journal only reads your Log, never changes it.
-
-Coming in the next slice: the history and export on the page.

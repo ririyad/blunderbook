@@ -173,3 +173,24 @@
 .journal-from{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
 .journal-from select{font:inherit;font-size:13.5px;font-weight:400;color:var(--ink);min-height:34px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--panel);padding:0 8px}
 .journal-mono{margin:0;min-height:22px;font:13.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+
+/* history (19.5): the versions kept, and one's text */
+.journal-export{display:block;margin:2px 2px 0;color:var(--muted)}
+.journal-history{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:16px;align-items:start}
+.journal-versions{padding:12px}
+.journal-historyhelp{margin:0 0 10px}
+.journal-versionlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
+.journal-version{display:flex;flex-direction:column;gap:2px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-sm);background:none;font:inherit;text-align:left;cursor:pointer}
+.journal-version:hover{background:var(--hover)}
+.journal-version[aria-pressed="true"]{background:var(--blue-bg)}
+.journal-version strong{font-size:13.5px}
+.journal-version .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.journal-preview{padding:14px 16px;min-width:0}
+.journal-previewhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.journal-preview > .small{margin:0 0 8px}
+.journal-versiontext{margin:0;padding:12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);font:13.5px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:70vh;overflow:auto}
+@media (max-width:860px){
+  .journal-history{grid-template-columns:1fr}
+  .journal-versionlist{max-height:40vh}
+  .journal-version{min-height:44px}
+}

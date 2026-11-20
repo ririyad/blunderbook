@@ -1,6 +1,7 @@
 """The Journal's routes, mounted at ``/api/ext/journal``: the notes list with search and
 tags, one note with the tree Reading mode draws, and saving, pinning and deleting (ROADMAP
-19.3); boards you play on, a line put into a game, and Analyse (19.4).
+19.3); boards you play on, a line put into a game, and Analyse (19.4); a note's history,
+and every note as a .zip of Markdown files (19.5).
 
 Every route that isn't a GET is for the Blunderbook page only (``host.same_origin``): those
 that change something, and Analyse, which starts Stockfish. Your Log is only read, for the
@@ -19,7 +20,8 @@ from blunderbook import host
 from blunderbook.core import pgn, timecontrol
 from blunderbook.core.engine import EngineError
 from blunderbook.core.models import Color, Entry, Game, Judgment, Speed, Status
-from blunderbook_journal import doc, moves, store
+from blunderbook_journal import archive, doc, moves, store
+from blunderbook_journal import notes as reading
 
 router = APIRouter()
 
@@ -323,6 +325,79 @@ def analyse(body: AnalyseIn) -> AnalyseOut:
             if line.pv
         ],
         over="",
+    )
+
+
+# ---------------------------------------------------------------- history and export (19.5)
+
+NO_VERSION: Final = "That version isn't kept any more. Open History again."
+
+
+class VersionOut(BaseModel):
+    id: int
+    saved_at: datetime  # when this was the note's text
+    title: str
+    words: int
+
+
+class HistoryOut(BaseModel):
+    versions: list[VersionOut]  # newest first
+    kept: int  # how many are kept at most
+
+
+class VersionTextOut(VersionOut):
+    body: str
+
+
+@router.get("/notes/{note_id}/versions")
+def history(note_id: int, db: host.ExtDb) -> HistoryOut:
+    """A note's earlier texts, newest first, without their text."""
+    if store.get(db, note_id) is None:
+        raise HTTPException(404, NO_NOTE)
+    return HistoryOut(
+        versions=[_version_out(v) for v in store.versions(db, note_id)],
+        kept=store.KEEP_VERSIONS,
+    )
+
+
+@router.get("/notes/{note_id}/versions/{version_id}")
+def one_version(note_id: int, version_id: int, db: host.ExtDb) -> VersionTextOut:
+    found = store.version(db, note_id, version_id)
+    if found is None:
+        raise HTTPException(404, NO_VERSION if store.get(db, note_id) else NO_NOTE)
+    return VersionTextOut(**_version_out(found).model_dump(), body=found.body)
+
+
+@router.post(
+    "/notes/{note_id}/versions/{version_id}/restore", dependencies=[Depends(host.same_origin)]
+)
+def restore(note_id: int, version_id: int, db: host.ExtDb, log: host.Log) -> NoteOut:
+    """Bring an earlier text back; the text it replaces is kept as a version first."""
+    if store.restore(db, note_id, version_id) is None:
+        raise HTTPException(404, NO_VERSION if store.get(db, note_id) else NO_NOTE)
+    return _note_out(db, log, note_id)
+
+
+def _version_out(found: store.Version) -> VersionOut:
+    return VersionOut(
+        id=found.id,
+        saved_at=found.saved_at,
+        title=reading.read(found.body).title,
+        words=len(found.body.split()),
+    )
+
+
+@router.get("/export")
+def export(db: host.ExtDb) -> Response:
+    """Every note as a Markdown file, in one .zip named for today. Changes nothing."""
+    everything = store.every_note(db)
+    if not everything:
+        raise HTTPException(404, "No notes yet: nothing to export.")
+    name = f"journal-{date.today().isoformat()}.zip"
+    return Response(
+        archive.zip_notes(everything),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
 
 

@@ -109,33 +109,67 @@ def update(
                 "SELECT max(saved_at) FROM versions WHERE note_id = ?", (note_id,)
             ).fetchone()[0]
             due = newest is None or moment - datetime.fromisoformat(newest) > VERSION_EVERY
-            if due and old_body.strip():
-                conn.execute(
-                    "INSERT INTO versions (note_id, body, saved_at) VALUES (?, ?, ?)",
-                    (note_id, old_body, old_at),
-                )
-                conn.execute(
-                    "DELETE FROM versions WHERE note_id = ? AND id NOT IN"
-                    " (SELECT id FROM versions WHERE note_id = ?"
-                    " ORDER BY saved_at DESC, id DESC LIMIT ?)",
-                    (note_id, note_id, KEEP_VERSIONS),
-                )
-            read = notes.read(body)
-            conn.execute(
-                "UPDATE notes SET title = ?, snippet = ?, body = ?, doc = ?, doc_version = ?,"
-                " updated_at = ? WHERE id = ?",
-                (
-                    read.title,
-                    read.snippet,
-                    body,
-                    _tree(body),
-                    doc.DOC_VERSION,
-                    moment.isoformat(),
-                    note_id,
-                ),
-            )
-            _index(conn, note_id, body, read)
+            if due:
+                _keep(conn, note_id, old_body, old_at)
+            _write(conn, note_id, body, moment)
     return get(conn, note_id)
+
+
+def version(conn: sqlite3.Connection, note_id: int, version_id: int) -> Version | None:
+    """One of a note's earlier texts. None when it isn't kept (or isn't that note's)."""
+    row = conn.execute(
+        "SELECT id, note_id, body, saved_at FROM versions WHERE id = ? AND note_id = ?",
+        (version_id, note_id),
+    ).fetchone()
+    if row is None:
+        return None
+    found, note, body, saved = row
+    return Version(found, note, body, datetime.fromisoformat(saved))
+
+
+def restore(
+    conn: sqlite3.Connection, note_id: int, version_id: int, *, at: datetime | None = None
+) -> Note | None:
+    """Bring an earlier text back. The text it replaces is always kept as a version first,
+    so nothing is lost (the newest 30 stay). The same text as now changes nothing. None
+    when there's no such note or version."""
+    moment = _utc(at)
+    with host.transaction(conn):
+        row = conn.execute("SELECT body, updated_at FROM notes WHERE id = ?", (note_id,)).fetchone()
+        wanted = version(conn, note_id, version_id)
+        if row is None or wanted is None:
+            return None
+        old_body, old_at = row
+        if old_body != wanted.body:
+            _keep(conn, note_id, old_body, old_at)
+            _write(conn, note_id, wanted.body, moment)
+    return get(conn, note_id)
+
+
+def _keep(conn: sqlite3.Connection, note_id: int, body: str, saved_at: str) -> None:
+    """Keep a text the note had as a version (not an empty one), and only the newest 30."""
+    if not body.strip():
+        return
+    conn.execute(
+        "INSERT INTO versions (note_id, body, saved_at) VALUES (?, ?, ?)",
+        (note_id, body, saved_at),
+    )
+    conn.execute(
+        "DELETE FROM versions WHERE note_id = ? AND id NOT IN"
+        " (SELECT id FROM versions WHERE note_id = ?"
+        " ORDER BY saved_at DESC, id DESC LIMIT ?)",
+        (note_id, note_id, KEEP_VERSIONS),
+    )
+
+
+def _write(conn: sqlite3.Connection, note_id: int, body: str, moment: datetime) -> None:
+    read = notes.read(body)
+    conn.execute(
+        "UPDATE notes SET title = ?, snippet = ?, body = ?, doc = ?, doc_version = ?,"
+        " updated_at = ? WHERE id = ?",
+        (read.title, read.snippet, body, _tree(body), doc.DOC_VERSION, moment.isoformat(), note_id),
+    )
+    _index(conn, note_id, body, read)
 
 
 def document(conn: sqlite3.Connection, note_id: int) -> dict[str, object] | None:

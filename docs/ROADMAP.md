@@ -28,24 +28,22 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
-| M19 Journal | In progress (4/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
 **Order of work** (decided 2026-11-20, see Decided):
 
-1. **M19 Journal.** Started 2026-11-20, after the prototype's feedback.
+1. **M19 Journal.** Started 2026-11-20, after the prototype's feedback; done 2026-11-20.
 2. **M20 Cost, not count.**
 3. **M18 Game commentary.**
 4. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
 
 The milestone numbers stay as they are; only the order changes.
 
-**Next up:** 19.5, history, export and docs: a note's snapshots (preview, bring one back),
-`.md` export from the CLI and a `.zip` from the page, and the docs. 19.1 to 19.4 are done:
-the `journal` extension, `journal.db` and its commands, the note parser, the tab (the list,
-Writing, Reading with the board that follows you, and the quick switcher), and boards that
-write (insert from a board, Copy FEN and PGN, Continue here with Insert as a variation, and
-Analyse). Still to check from 19.4: the reading board's tools at 390 px. M17, the Profile extension,
+**Next up:** M20, Cost, not count (next in the order of work). M19, the Journal extension,
+is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
+boards that write, Analyse, history and export. Still to check from M19: the tab on a real
+phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1646,7 +1644,7 @@ Decided for the answers it's built on.
   with the AI answer faked; 390 px, the keyboard, no console errors. Left for you: one real
   "Write the commentary" with your key and model.
 
-### M19 Journal (extension, in progress)
+### M19 Journal (extension)
 
 Planned on 2026-11-19. It's first in the order of work. A minimal, very fast chess
 journal, kept like a blog for yourself. You write in Markdown. In Reading mode, every PGN,
@@ -1837,13 +1835,25 @@ build step), and CodeMirror (a bundle built outside the app).
           cursor, a ```pgn block, or the position as a ```fen block.
         - `.btn.primary:disabled` in app.css keeps its label readable: a disabled
           primary button (Import's "Importing…" too) showed white on white.
-- [ ] **19.5** History, export and docs.
+- [x] **19.5** History, export and docs.
       - History: the snapshots, a preview, and bring one back (the current text is kept as
         a snapshot first).
       - Export: `.md` files, with PGN and FEN blocks as written and tags kept. A folder from
         the CLI, or a `.zip` from the page.
       - Docs: README, `extensions/journal/README.md`, CLAUDE.md §4 and §15 (the fifth
         extension).
+      - **As built:**
+        - History is a third mode, `#journal/12/history`, beside Write and Read (Ctrl/Cmd+E
+          goes to Read). The versions are listed without their text; a version's text is
+          asked for when you pick it, and shown as written. A version with the same text
+          as now says so and can't be brought back.
+        - `POST /notes/{id}/versions/{vid}/restore` (`same_origin`) always keeps the text
+          it replaces as a version, even under 5 minutes, then keeps the newest 30. It
+          answers with the note, and the page opens it in Read.
+        - Export: `GET /export` is `journal-YYYY-MM-DD.zip`, one `.md` per note named
+          `ID-title.md`, the bytes as typed, each file's time the note's last edit.
+          `archive.py` names the files for the CLI and the page alike. The link under the
+          list is hidden while there are no notes.
 - **Tests:**
   - the parser, as in 19.2;
   - the routes with a temp `journal.db`: create, read, update, delete, search and tags, a

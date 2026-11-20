@@ -161,13 +161,21 @@ blunderbook/
 │   │   │                            #   update.py (one update), jobs.py (the Update
 │   │   │                            #   button), routes.py, web/ (its tab)
 │   │   └── tests/
-│   └── profile/               # the Profile extension (§15): your Lichess and Chess.com
-│       ├── blunderbook_profile/     # ratings. __init__.py (the Extension, commands),
-│       │                            #   history.py (pure: your rating over time, from
-│       │                            #   your games), store.py (its SQL), labels.py,
-│       │                            #   routes.py, web/ (its tab; chart.js draws your
-│       │                            #   rating over time). No HTTP: the site adapters
-│       │                            #   ask, through host.fetch_ratings
+│   ├── profile/               # the Profile extension (§15): your Lichess and Chess.com
+│   │   ├── blunderbook_profile/     # ratings. __init__.py (the Extension, commands),
+│   │   │                            #   history.py (pure: your rating over time, from
+│   │   │                            #   your games), store.py (its SQL), labels.py,
+│   │   │                            #   routes.py, web/ (its tab; chart.js draws your
+│   │   │                            #   rating over time). No HTTP: the site adapters
+│   │   │                            #   ask, through host.fetch_ratings
+│   │   └── tests/
+│   └── journal/               # the Journal extension (§15): chess notes in Markdown
+│       ├── blunderbook_journal/     # __init__.py (the Extension, commands), notes.py
+│       │                            #   (title, tags), doc.py and moves.py (pure: the
+│       │                            #   tree Reading mode draws, boards, a line put into
+│       │                            #   a PGN), archive.py (.md export), store.py (its
+│       │                            #   SQL), routes.py, web/ (its tab: view.js,
+│       │                            #   read.js, write.js, play.js, history.js)
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -984,6 +992,8 @@ Design language (from the demo and the paper template):
     you run `blunderbook rankings update` or press its button.
 17. **Profile (extension):** your Lichess and Chess.com ratings, fetched when you ask, and
     your rating over time next to your blunders.
+19. **Journal (extension):** chess notes in Markdown, with PGN and FEN blocks and moves in
+    sentences that play on a board, Analyse with your Stockfish, history and export.
 
 Future (not v1): a side picker for web imports, FEN board editor in the browser, settings page, more opt-in AI helpers (reflection questions, cause suggestions from your notes, a monthly digest; same `[ai]` rules,
 off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
@@ -1022,7 +1032,9 @@ in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. 
 two are **Library** (openings, traps and tactics) and **Collection** (anyone's games);
 **Rankings** (the FIDE, Lichess and Chess.com top lists) is the first with network calls.
 **Profile** (your own ratings on Lichess and Chess.com) asks the sites through
-`host.fetch_ratings` and has no HTTP of its own.
+`host.fetch_ratings` and has no HTTP of its own. **Journal** (your chess notes, in
+Markdown) is the fifth: no network, and Stockfish (`host.engine()`) only when you press
+Analyse.
 `tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
 
 **Found, not imported.** An extension package declares an entry point in the
