@@ -7,7 +7,7 @@
 
 const NAME = { k: "king", q: "queen", r: "rook", b: "bishop", n: "knight", p: "pawn" };
 const SVG = "http://www.w3.org/2000/svg";
-const ARROW = { red: "rgba(184,50,39,.85)", green: "rgba(29,122,82,.9)" };
+const ARROW = { red: "rgba(184,50,39,.85)", green: "rgba(29,122,82,.9)", blue: "rgba(42,93,159,.85)", amber: "rgba(154,100,18,.85)" };
 
 /** "e4" -> 28 */
 export const sqIdx = (name) => (name.charCodeAt(0) - 97) + (Number(name[1]) - 1) * 8;
@@ -43,7 +43,7 @@ export function squareLabel(board, i) {
  * Draw `fen` into `el`, from `orient`'s side ("white" or "black").
  *
  * opts.hl      {square: "played" | "best" | "sel" | "ok" | "bad"} highlights
- * opts.arrows  [{from, to, color: "red" | "green"}]
+ * opts.arrows  [{from, to, color: "red" | "green" | "blue" | "amber"}]
  * opts.onClick (square) => ...; squares become buttons labelled like "e4 white pawn"
  * opts.targets squares the selected piece can go to: a dot, or a ring around a capture
  * opts.label   text for screen readers when the board isn't interactive

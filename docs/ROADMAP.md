@@ -28,7 +28,7 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
-| M19 Journal | In progress (2/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M19 Journal | In progress (3/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
 **Order of work** (decided 2026-11-20, see Decided):
@@ -40,10 +40,10 @@ _Last updated: 2026-11-16_
 
 The milestone numbers stay as they are; only the order changes.
 
-**Next up:** 19.3, the Journal tab: the notes list, Writing mode and Reading mode with
-the board that follows you. 19.1 and 19.2 are done: the `journal` extension, `journal.db`
-and its commands, and the note parser, which reads each note into the tree Reading mode
-draws, on every save. M17, the Profile extension,
+**Next up:** 19.4, boards that write: insert moves from a board while writing, Copy FEN,
+Copy PGN up to here, Continue here and Analyse. 19.1 to 19.3 are done: the `journal`
+extension, `journal.db` and its commands, the note parser, and the tab (the list, Writing,
+Reading with the board that follows you, and the quick switcher). M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1770,7 +1770,7 @@ build step), and CodeMirror (a bundle built outside the app).
           text.
         - Timing on a note with ten 130-ply games and 6,000 words: 72 ms the first time,
           7 ms after an edit (the games' reading is cached).
-- [ ] **19.3** The tab: the list, Writing and Reading.
+- [x] **19.3** The tab: the list, Writing and Reading.
       - Routes:
         - `GET /notes?q=&tag=`;
         - `POST /notes`;
@@ -1784,6 +1784,25 @@ build step), and CodeMirror (a bundle built outside the app).
           shortcuts;
         - Reading mode: the serif text, the pinned board, variations indented;
         - the quick switcher.
+      - **As built:**
+        - The page is `view.js` (the list, the bar over a note, the switcher, the keys),
+          `read.js` and `write.js`. Reading builds the note with DOM calls only.
+        - Routes at `/api/ext/journal/notes`. A note's answer has its tree and `refs`:
+          each Log link once, as your Log has it now (`found: false` when it's gone; a
+          FEN entry's game isn't a game). A game link carries its moves, read again from
+          its PGN.
+        - A new note (`#journal/new`) is made by its first save, so leaving it empty
+          makes nothing. A save that fails keeps you in Writing with your text.
+        - A paste gets its own block when it has PGN headers, or when it's a FEN or three
+          or more numbered moves on a line of their own. Moves pasted into a sentence stay
+          in it.
+        - The board shows a Log entry's position before your move, with your move in red
+          and not the best move, so the Journal doesn't give the re-test away.
+        - Lichess's blue and yellow arrows: `/js/board.js` gained `blue` and `amber`.
+        - Titles and snippets in the list are plain text: `**`, `_`, `` ` `` and links
+          are taken off (`notes.plain`).
+        - Three columns from 1180 px; under it an open note hides the list ("← All
+          notes"); under 860 px one column, with the board above the text when reading.
 - [ ] **19.4** Boards that write.
       - `POST /board`: a FEN and moves in; the position, the SAN and the legal moves out.
       - The insert-from-board panel in Writing mode.

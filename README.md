@@ -511,8 +511,16 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   [extensions/profile/README.md](extensions/profile/README.md).
 
 **Journal** keeps your chess notes in Markdown, like a blog for yourself
-(`blunderbook ext install journal`). It never goes online. Its tab, where PGN, FEN and
-moves in a sentence play on a board, is still being built; for now it has commands.
+(`blunderbook ext install journal`). It never goes online.
+
+- **The Journal tab** lists your notes, with search, tags and pinned notes on top. Write
+  a note in plain text; it's saved when you pause. Read it in a book typeface, with a
+  board beside it: click any move, in a ```` ```pgn ```` game, a ```` ```fen ```` diagram
+  or a sentence ("after 6. Nxd5?? Nxd5"), and the board shows it. ← → go on in that line.
+  `[[log 12]]` and `[[game 40]]` link to your Log.
+- Keys: Ctrl/Cmd+K finds a note, Ctrl/Cmd+E switches between writing and reading,
+  Ctrl/Cmd+B and Ctrl/Cmd+I make text bold or italic, Esc goes back to the list and `n`
+  starts a note. A game or position you paste goes into its own block.
 
 - `blunderbook journal new "# Title ..."` writes a note (`--file NOTE.md`, or piped in).
   Its first line is its title, and words like `#traps` are its tags.

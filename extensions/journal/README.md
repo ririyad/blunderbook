@@ -9,6 +9,20 @@ for yourself. It never goes online.
 blunderbook ext install journal
 ```
 
+## The tab
+
+- **The list:** New note at the top (or press `n`), then search, your tags and your notes,
+  pinned first. Ctrl/Cmd+K finds a note from anywhere in the tab.
+- **Writing:** a plain monospace text box. It's saved 400 ms after you pause, and the save
+  line says so. A game (PGN headers, or a line of numbered moves) or a FEN you paste on a
+  line of its own goes into its own block. Ctrl/Cmd+B and Ctrl/Cmd+I make the selection
+  bold or italic.
+- **Reading:** the note in a book typeface, with the board beside it (above it on a
+  phone). Click a move, a diagram or a Log link and the board shows it; ← → Home End step
+  through the line you're in, a variation included. "Flip the board" turns it round.
+- Ctrl/Cmd+E switches between Writing and Reading; Esc goes back to the list.
+- **Pin** keeps a note at the top of the list. **Delete** asks first, on the page.
+
 ## Commands
 
 - `blunderbook journal new "# Title ..."` writes a new note. `--file NOTE.md` takes it from
@@ -35,7 +49,7 @@ database and backed up with it.
 
 ## Chess in a note
 
-Reading mode (the Journal tab, coming in the next slice) plays these on a board:
+Reading mode plays these on a board:
 
 - A ```` ```pgn ```` block: a game, with its variations, `{comments}` and `$` marks.
   Headers may share a line.
@@ -47,7 +61,10 @@ Reading mode (the Journal tab, coming in the next slice) plays these on a board:
   moves where it follows them. A run from 1. plays from the start. One that can't be
   played stays as text.
 - A PGN or FEN that can't be read is shown as you wrote it, with the reason.
+- `[[log 12]]` and `[[game 40]]` link to your Log. In a sentence they read as the move or
+  the result and the opponent; on a line of their own they're a "From your Log" card with
+  the re-test status and "Open →". A link to something that's no longer in your Log says
+  so. The Journal only reads your Log, never changes it.
 
-Coming in the next slices: the Journal tab with Writing and Reading modes and the board
-that follows you, `[[log 12]]` / `[[game 40]]` links to your Log, Analyse, and the history
-and export on the page.
+Coming in the next slices: playing on a board to insert moves, Copy FEN, Copy PGN up to
+here, Continue here, Analyse, and the history and export on the page.

@@ -206,6 +206,11 @@ def summaries(conn: sqlite3.Connection, *, q: str = "", tag: str = "") -> list[S
     ]
 
 
+def count(conn: sqlite3.Connection) -> int:
+    """How many notes there are."""
+    return int(conn.execute("SELECT count(*) FROM notes").fetchone()[0])
+
+
 def all_tags(conn: sqlite3.Connection) -> list[tuple[str, int]]:
     """Every tag in use and how many notes have it, most used first."""
     rows = conn.execute(

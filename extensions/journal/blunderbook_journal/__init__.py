@@ -1,11 +1,13 @@
 """The Journal extension (CLAUDE.md §15, ROADMAP M19): fast chess notes in Markdown, kept in
-journal.db. In Reading mode every PGN, FEN and move in a sentence plays on a board (19.3).
+journal.db. In Reading mode every PGN, FEN and move in a sentence plays on a board.
 
 It never goes online. Your Log is only read, for ``[[log 12]]`` and ``[[game 40]]`` links.
 
-19.1 has the database (:mod:`blunderbook_journal.store`), what a save reads from a note's
-text (:mod:`blunderbook_journal.notes`) and four commands: ``new``, ``list``, ``show`` and
-``export``.
+The parts: the database (:mod:`blunderbook_journal.store`), what a save reads from a note's
+text (:mod:`blunderbook_journal.notes`), the tree Reading mode draws
+(:mod:`blunderbook_journal.doc`, :mod:`blunderbook_journal.moves`), the tab's routes
+(:mod:`blunderbook_journal.routes`) and page (``web/``), and four commands: ``new``,
+``list``, ``show`` and ``export``.
 """
 
 import os
@@ -20,7 +22,7 @@ from typing import Annotated, NoReturn
 import typer
 
 from blunderbook import ext, host
-from blunderbook_journal import notes, store
+from blunderbook_journal import notes, routes, store
 
 commands = typer.Typer(no_args_is_help=True)
 
@@ -159,6 +161,8 @@ extension = ext.Extension(
     name="journal",
     title="Journal",
     host_api=ext.HOST_API,
+    router=routes.router,
+    web=files(__name__) / "web",
     migrations=files(__name__) / "migrations",
     cli=commands,
 )

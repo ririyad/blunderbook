@@ -29,10 +29,20 @@ def test_an_empty_note() -> None:
         (f"{FENCE}pgn\n1. e4 e5\n{FENCE}\nAfter the game", "After the game"),
         (f"{FENCE}fen\n8/8/8/8/8/8/8/8 w - - 0 1\n{FENCE}", ""),  # only chess: untitled
         ("Windows line\r\nnext", "Windows line"),
+        ("# **A new** note", "A new note"),
+        ("# The _Elephant_ trap in `QGD`", "The Elephant trap in QGD"),
+        ("[Lichess](https://lichess.org) study", "Lichess study"),
+        ("snake_case_name and 2 * 3 * 4", "snake_case_name and 2 * 3 * 4"),
+        (r"\*not italic\* and __bold__", "*not italic* and bold"),
+        ("[[log 12]] again", "[[log 12]] again"),
     ],
 )
 def test_the_title(body: str, title: str) -> None:
     assert notes.read(body).title == title
+
+
+def test_the_snippet_is_plain_text_too() -> None:
+    assert notes.read("# Title\nA **bold** line with `code`").snippet == "A bold line with code"
 
 
 def test_long_titles_and_snippets_are_cut() -> None:

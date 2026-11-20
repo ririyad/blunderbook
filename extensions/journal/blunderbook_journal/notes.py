@@ -20,6 +20,12 @@ _HEADER = re.compile(r'\[\s*(\w+)\s+"((?:[^"\\]|\\.)*)"\s*\]')
 _SEARCHED = frozenset({"white", "black", "event", "site", "opening", "variation", "eco"})
 _MARKERS = re.compile(r"^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)+")
 _SLUG = re.compile(r"[^\w]+")
+# Markdown that the list shows as plain text: `code`, [a link](url), **bold**, *italic*, \*.
+_TICKS = re.compile(r"`([^`\n]*)`")
+_LINK = re.compile(r"\[([^\]\n]+)\]\([^)\s]+\)")
+_STRONG = re.compile(r"(?<!\\)(\*\*|__)(?=\S)(.+?)(?<=[^\s\\])\1")
+_EM = re.compile(r"(?<![\w*\\])([*_])(?=\S)(.+?)(?<=[^\s\\])\1(?![\w*])")
+_ESCAPE = re.compile(r"\\([\\`*_\[\]#(){}!.+\-])")
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,9 +41,17 @@ class Read:
 def read(body: str) -> Read:
     prose = [line for line, fenced in _lines(body) if not fenced]
     text = [line.strip() for line in prose if line.strip()]
-    title = _cut(_MARKERS.sub("", text[0]).strip(), TITLE_MAX) if text else ""
-    snippet = _cut(_MARKERS.sub("", text[1]).strip(), SNIPPET_MAX) if len(text) > 1 else ""
+    title = _cut(plain(text[0]), TITLE_MAX) if text else ""
+    snippet = _cut(plain(text[1]), SNIPPET_MAX) if len(text) > 1 else ""
     return Read(title=title, snippet=snippet, tags=tags(prose), players=players(body))
+
+
+def plain(line: str) -> str:
+    """A line of the note as the list shows it: "## **Bold** idea" -> "Bold idea"."""
+    text = _MARKERS.sub("", line.strip()).strip()
+    text = _LINK.sub(r"\1", _TICKS.sub(r"\1", text))
+    text = _EM.sub(r"\2", _STRONG.sub(r"\2", text))
+    return _ESCAPE.sub(r"\1", text)
 
 
 def tags(lines: list[str]) -> tuple[str, ...]:
