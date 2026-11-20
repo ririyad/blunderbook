@@ -5,7 +5,7 @@ An extension package declares an entry point in the ``blunderbook.extensions`` g
 after the extension, that points at an :class:`Extension`::
 
     [project.entry-points."blunderbook.extensions"]
-    library = "blunderbook_library:extension"
+    journal = "blunderbook_journal:extension"
 
 Core never imports an extension by name. One that is turned on but missing, broken, or made
 for another host API is reported once and left out: the app runs without it.
@@ -46,8 +46,8 @@ RESERVED: Final = frozenset(
 class Extension:
     """What an extension package hands to Blunderbook."""
 
-    name: str  # "library": [a-z]+, the same as its entry point's name
-    title: str  # the tab's label: "Library"
+    name: str  # "journal": [a-z]+, the same as its entry point's name
+    title: str  # the tab's label: "Journal"
     host_api: int  # the HOST_API it was written for
     router: APIRouter | None = None  # mounted at /api/ext/<name>
     web: Traversable | None = None  # a folder with view.js (and view.css), at /ext/<name>/
@@ -63,7 +63,7 @@ class Installed:
     """An extension package on this computer, loaded or not."""
 
     name: str
-    package: str | None  # the distribution, e.g. "blunderbook-library"
+    package: str | None  # the distribution, e.g. "blunderbook-journal"
     version: str | None
 
 

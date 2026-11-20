@@ -20,7 +20,7 @@ _Last updated: 2026-11-16_
 | M8 AI explanations | Done (4/4) | Optional "Explain this blunder" via OpenRouter, your own key |
 | M9 Extensions | Done (4/4) | Separate packages that add a tab, routes, commands and their own database |
 | M10 Your games | Done (3/3) | A Games tab: every game you imported, by import, with a game page |
-| M11 Library | Done (4/4) | Extension: openings, traps and tactics to study and practise |
+| M11 Library | Removed (2026-11-20) | Extension: openings, traps and tactics to study and practise. The Journal replaced it; its entries are Journal examples |
 | M12 Collection | Done (4/4) | Extension: a collection of anyone's games, analysed |
 | M13 Missed wins | Done (3/3) | Log a mate or a big gain you didn't take, even when you stay winning |
 | M14 Page polish | Done (4/4) | Smoother page: the shell, one board with step controls, a review flow, import and re-test feedback |
@@ -780,6 +780,9 @@ that steps through the whole game with your blunders marked. No delete in this m
         and `#import`.
 
 ### M11 Library (extension)
+
+**Removed on 2026-11-20** (see Decided): the Journal does its job, as notes you write. Its
+15 entries are `extensions/journal/examples/`. The slices below are kept as history.
 
 - [x] **11.1** Package, content format (one TOML per entry), validator, ~15 starter entries.
       _Done:_
@@ -2348,3 +2351,19 @@ None open.
     throwaway build is tried before 15.1 to 15.4 rely on it.
   - **Swaps you can make:** M18 before M19 if studying games matters more than notes. M15
     first, still opening with 15.0, if a download for others is wanted soon.
+- **2026-11-20: The Library extension is removed.** Asked for: with the Journal shipped,
+  the Library is redundant, since anyone can keep their own knowledge base as notes.
+  - **Kept:** its 15 entries (5 openings, 6 traps, 4 tactics), once, as Markdown notes in
+    `extensions/journal/examples/`: the idea, a PGN with the replies that matter (`??` on
+    the one that loses), a diagram for a tactic, and its practise positions as a "Try it"
+    list. You add them with `blunderbook journal new --file`; nothing goes into journal.db
+    by itself. A test checks every one plays.
+  - **Lost:** Library practise (spaced repetition on its positions) and "From your Log" (your
+    entries in an entry's opening).
+  - **Your data:** `library.db` and its backups stay on disk, untouched. A Library backup
+    can't be restored any more.
+  - **`update`:** an installed extension whose folder has left the repo is left out of the
+    reinstall and turned off in config.toml, so the reinstall doesn't fail and `serve` and
+    `doctor` don't look for it. A development copy runs `blunderbook ext disable library`.
+  - **Found on the way:** python-chess can wrap a variation's move number onto its own line
+    (`(4...` then `Nd7`); `moves.with_line` now keeps it with its move.

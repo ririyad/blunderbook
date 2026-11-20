@@ -7,7 +7,6 @@ members = [
     "blunderbook",
     "blunderbook-collection",
     "blunderbook-journal",
-    "blunderbook-library",
     "blunderbook-profile",
     "blunderbook-rankings",
 ]
@@ -104,7 +103,6 @@ dependencies = [
 dev = [
     { name = "blunderbook-collection" },
     { name = "blunderbook-journal" },
-    { name = "blunderbook-library" },
     { name = "blunderbook-profile" },
     { name = "blunderbook-rankings" },
     { name = "mypy" },
@@ -126,7 +124,6 @@ requires-dist = [
 dev = [
     { name = "blunderbook-collection", editable = "extensions/collection" },
     { name = "blunderbook-journal", editable = "extensions/journal" },
-    { name = "blunderbook-library", editable = "extensions/library" },
     { name = "blunderbook-profile", editable = "extensions/profile" },
     { name = "blunderbook-rankings", editable = "extensions/rankings" },
     { name = "mypy", specifier = ">=2.4.1" },
@@ -159,21 +156,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "blunderbook", editable = "." }]
-
-[[package]]
-name = "blunderbook-library"
-version = "0.1.0"
-source = { editable = "extensions/library" }
-dependencies = [
-    { name = "blunderbook" },
-    { name = "chess" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "blunderbook", editable = "." },
-    { name = "chess", specifier = ">=1.11.2" },
-]
 
 [[package]]
 name = "blunderbook-profile"

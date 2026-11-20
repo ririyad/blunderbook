@@ -105,7 +105,7 @@ lists what changed, and reinstalls Blunderbook with every extension you've insta
 (`blunderbook update --check` only lists). It won't touch a folder where you've changed
 files. On Windows the reinstall finishes in a new window, which waits for `blunderbook serve`
 to stop first. By hand, it's `git pull`, then
-`uv tool install --reinstall . --with ./extensions/library` (one `--with` per extension).
+`uv tool install --reinstall . --with ./extensions/journal` (one `--with` per extension).
 
 To run it without installing, use `uv sync` once, then `uv run blunderbook ...` from this
 folder.
@@ -399,35 +399,21 @@ Extensions are separate packages that add to Blunderbook: a tab, commands, a dat
 their own. They can read your Log but never change it. Install one and turn it on:
 
 ```sh
-blunderbook ext install library
+blunderbook ext install journal
 ```
 
 It reinstalls Blunderbook with the extension added (keeping any others), then turns it on.
 `blunderbook update` keeps it installed from then on. By hand, it's
-`uv tool install --reinstall . --with ./extensions/library` in the Blunderbook folder, then
-`blunderbook ext enable library`.
+`uv tool install --reinstall . --with ./extensions/journal` in the Blunderbook folder, then
+`blunderbook ext enable journal`.
 
 `blunderbook ext list` shows what's installed and on; `blunderbook ext disable NAME` turns
 one off and keeps its data.
 
-**Library** holds openings, traps and tactics to study and practise, 15 to
-start with:
-
-- **The Library tab** (restart `blunderbook serve` after turning it on) lists the entries
-  as openings, traps and tactics. Open one to read its idea and step through its moves on a
-  board facing the side you play. Its replies show what can come next: a sound one in
-  green, one that loses in red. Press a reply to play it out on the board.
-- **Practise** asks you for the move in each entry's positions, like Re-test: tap to move,
-  take a hint or give up, then see the answer and the idea. Positions come back on Re-test's
-  schedule (1, 3, 7, 14, 30, 60 days; tomorrow after a miss). Start from "Practise" at the
-  top of the tab, or "Practise these positions" on an entry. Your progress is kept in
-  `library.db` next to your database, and backed up with it.
-- **From your Log**, at the end of each entry, lists your own Log entries from games that
-  reached its position, marking the ones where you fell into the trap. Each opens in the Log.
-- `blunderbook library list` lists them.
-- `blunderbook library check [FOLDER]` checks every entry: its fields, and that every line
-  and every practise answer is a legal move. Each entry is a TOML file, described in
-  [extensions/library/README.md](extensions/library/README.md).
+The Library extension (openings, traps and tactics) was removed on 2026-11-20: the
+Journal does its job, as notes you write yourself. Its 15 entries are Journal notes in
+`extensions/journal/examples/` now (see the Journal below). `blunderbook update` leaves
+it out and turns it off; your `library.db` stays where it was, and you can delete it.
 
 **Collection** keeps collections of anyone's games, analysed by the same Stockfish and the
 same rules as yours (`blunderbook ext install collection`). You add games on the command
@@ -536,7 +522,10 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
 - Notes are kept in `journal.db` next to your database, backed up with it, with the
   earlier versions of each (one every 5 minutes while you edit, the newest 30). A note's
   **History** shows them, and **Bring this back** restores one, keeping the text you have
-  now. Under the list, **Export** downloads every note as a `.zip` of Markdown files. More
+  now. Under the list, **Export** downloads every note as a `.zip` of Markdown files.
+- **Starter notes:** 15 openings, traps and tactics, each a note with a game you can step
+  through, are in `extensions/journal/examples/`. Add the ones you want with
+  `blunderbook journal new --file extensions/journal/examples/traps/elephant-trap.md`. More
   in [extensions/journal/README.md](extensions/journal/README.md).
 
 ### Print your Blunder Log
@@ -576,7 +565,7 @@ blunderbook restore blunderbook-2026-11-05_081756Z.db
   It keeps a copy of your current database. Stop `blunderbook serve` first. A file name on its
   own is looked up in the backup folder.
 - **Extensions** that keep data (see `blunderbook ext list`) have their own database,
-  backed up with yours as `<name>-…db`, for example `library-2026-11-05_081756Z.db`. Each
+  backed up with yours as `<name>-…db`, for example `journal-2026-11-05_081756Z.db`. Each
   name keeps its own 14, except Rankings, which keeps only its newest (its lists can be
   downloaded again). `restore` works out from the file name which database it replaces.
 - **Settings aren't in backups.** config.toml, and your Lichess token and OpenRouter key in
@@ -737,8 +726,6 @@ back to the next one.
 | `blunderbook ext list` | Show installed extensions and which are on. |
 | `blunderbook ext install NAME` | Install an extension from the `extensions` folder and turn it on. |
 | `blunderbook ext enable NAME` / `disable NAME` | Turn an extension on or off; restart `serve` to see it. Turning one off keeps its data. |
-| `blunderbook library list` | List the Library's entries (with the Library on). |
-| `blunderbook library check [FOLDER]` | Check the Library's entries, or a folder of your own. |
 | `blunderbook collection import FILE --into NAME [--depth N]` | Analyse a PGN file's games and add them to a collection (with the Collection on). |
 | `blunderbook collection list [NAME]` | List your collections, or the games in one. |
 | `blunderbook collection stats [NAME] [--player P] [--color C] [--result R] [--opening O] [--phase P]` | A collection's stats: accuracy, ACPL and marks by side, phase, opening and game. |

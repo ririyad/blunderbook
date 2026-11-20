@@ -483,7 +483,9 @@ def san_line(fen: str, ucis: Sequence[str], limit: int = 10) -> str:
 _HEADER_LINE: Final = re.compile(r'^\s*(?:\[\s*\w+\s+"(?:[^"\\]|\\.)*"\s*\]\s*)+$')
 _NAG_OUT: Final = re.compile(r"\s+\$([1-6])(?!\d)")
 _INSIDE: Final = re.compile(r"([({])[ \t]+|[ \t]+([)}])")  # "( 6. e3" -> "(6. e3"
-_SPLIT_NUMBER: Final = re.compile(r" (\d+\.(?:\.\.)?)\n")  # "9.\nKxd2" -> "\n9. Kxd2"
+# A move number left at the end of a line goes to the next, with its "(" when it opens a
+# variation: "9.\nKxd2" -> "\n9. Kxd2", " (4...\nNd7" -> "\n(4... Nd7".
+_SPLIT_NUMBER: Final = re.compile(r" (\(?\d+\.(?:\.\.)?)\n")
 
 
 def with_line(text: str, after: int | None, ucis: Sequence[str]) -> str | None:

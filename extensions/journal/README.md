@@ -43,6 +43,34 @@ blunderbook ext install journal
   file per note, exactly as you wrote it, like `blunderbook journal export`.
 - **Pin** keeps a note at the top of the list. **Delete** asks first, on the page.
 
+## Starter notes
+
+`examples/` has 15 notes to start from: 5 openings, 6 traps and 4 tactics, each with its
+idea, a ```` ```pgn ```` game with the replies that matter (and `??` on the one that
+loses), a ```` ```fen ```` diagram for a tactic, and a "Try it" list of positions to find
+the move in. They were the Library extension's entries, before the Journal replaced it.
+
+Add one, from the Blunderbook folder:
+
+```sh
+blunderbook journal new --file extensions/journal/examples/traps/elephant-trap.md
+```
+
+Or all of them. On macOS and Linux:
+
+```sh
+for f in extensions/journal/examples/*/*.md; do blunderbook journal new --file "$f"; done
+```
+
+In PowerShell:
+
+```powershell
+Get-ChildItem extensions/journal/examples -Recurse -Filter *.md | ForEach-Object { blunderbook journal new --file $_.FullName }
+```
+
+Each one becomes your own note, to change as you like. Adding the same file twice makes
+two notes.
+
 ## Commands
 
 - `blunderbook journal new "# Title ..."` writes a new note. `--file NOTE.md` takes it from

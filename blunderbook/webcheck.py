@@ -10,7 +10,7 @@ folder with the app it's mounted in::
     assert webcheck.problems(ext.web_folder(extension), app, prefix=extension.name) == []
 
 With ``prefix``, it also checks the page's CSS classes: each one is the extension's own
-(``library``, ``library-row``) or one of the page's shared ones (:data:`SHARED_CLASSES`).
+(``journal``, ``journal-move``) or one of the page's shared ones (:data:`SHARED_CLASSES`).
 """
 
 import re

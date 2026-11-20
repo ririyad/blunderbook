@@ -90,8 +90,24 @@ def source() -> Path:
 
 def extension_specs() -> list[str]:
     """What to pass to ``--with`` to keep each installed extension: its folder, or its
-    package name when it didn't come from a folder."""
+    package name when it didn't come from a folder. One whose folder has left
+    Blunderbook's git folder is left out (:func:`gone`)."""
     specs: list[str] = []
+    for _, spec in _extensions():
+        if spec is not None and spec not in specs:
+            specs.append(spec)
+    return specs
+
+
+def gone() -> list[str]:
+    """The installed extensions whose folder isn't there any more: removed from
+    Blunderbook (the Library, after the Journal), so a reinstall leaves them out."""
+    return [name for name, spec in _extensions() if spec is None]
+
+
+def _extensions() -> list[tuple[str, str | None]]:
+    """Each installed extension's name and ``--with`` spec; None when its folder is gone."""
+    found: list[tuple[str, str | None]] = []
     for item in ext.installed():
         if item.package is None:
             continue
@@ -99,10 +115,11 @@ def extension_specs() -> list[str]:
             folder = folder_from(_direct_url(item.package))
         except UpdateError:  # an editable extension in a dev copy: keep it by name
             folder = None
-        spec = str(folder) if folder is not None else item.package
-        if spec not in specs:
-            specs.append(spec)
-    return specs
+        if folder is not None and not (folder / "pyproject.toml").is_file():
+            found.append((item.name, None))
+        else:
+            found.append((item.name, str(folder) if folder is not None else item.package))
+    return found
 
 
 def available(folder: Path) -> list[str]:

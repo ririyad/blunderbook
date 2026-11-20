@@ -39,7 +39,7 @@ Owner: Rashed (backend engineer, 10+ yrs). Single user. Runs on his own computer
 6. **No build step for the frontend.** Plain HTML, CSS and ES modules served by the
    backend. No React, no bundler, no npm toolchain for the app itself.
 7. **Extensions are separate.** Bigger features that aren't about your own mistakes (a game
-   collection, a library of openings and tactics) are extensions: separate packages, found
+   collection, a chess journal) are extensions: separate packages, found
    when installed and turned on (§15). Core never imports one. They use only the host API,
    follow these same principles, and can only read your Log, never change it.
 
@@ -144,10 +144,6 @@ blunderbook/
 │       ├── js/views/*.js
 │       └── print.html         # A4 print layout, 2 entries per page
 ├── extensions/
-│   ├── library/               # the Library extension (§15): its own package, content and tests
-│   │   ├── blunderbook_library/   # __init__.py (the Extension, commands), content.py,
-│   │   │                          #   content/{openings,traps,tactics}/*.toml
-│   │   └── tests/
 │   ├── collection/            # the Collection extension (§15): anyone's games, analysed
 │   │   ├── blunderbook_collection/  # __init__.py (the Extension, commands), games.py and
 │   │   │                            #   stats.py (pure), store.py (its SQL), collect.py
@@ -176,6 +172,8 @@ blunderbook/
 │       │                            #   a PGN), archive.py (.md export), store.py (its
 │       │                            #   SQL), routes.py, web/ (its tab: view.js,
 │       │                            #   read.js, write.js, play.js, history.js)
+│       ├── examples/                # starter notes (openings, traps, tactics), once the
+│       │                            #   removed Library extension's entries
 │       └── tests/
 ├── tests/
 │   ├── fixtures/pgn/          # sample games with known blunders (see §12)
@@ -360,7 +358,7 @@ model = ""                            # an OpenRouter model id; no default
 key = ""                              # OpenRouter API key; never commit, never log
 
 [extensions]
-enabled = []                          # extension names, e.g. ["library"]; lowercase letters
+enabled = []                          # extension names, e.g. ["journal"]; lowercase letters
 ```
 
 Never print the Lichess token or the OpenRouter key, never write them to the DB, and redact
@@ -405,7 +403,7 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
 - **Extension databases.** An extension that's on and has migrations keeps its own
   `<name>.db` next to the DB (`ext.open_db`), and everything above applies to it too: the
   daily backup, `backup`, `-pre-migrate` and restore. Its backups start with its name
-  (`library-2026-11-07_120000Z.db`), and rotation, the daily check and `keep` count each
+  (`journal-2026-11-07_120000Z.db`), and rotation, the daily check and `keep` count each
   name's files separately. An extension whose data can be downloaded again may keep fewer
   (`backups_kept`, never more than `keep`): Rankings keeps only its newest. `restore` picks the database from the file name's prefix (none =
   Blunderbook's), refuses one for an extension that's off, and checks that the file's tables
@@ -651,7 +649,7 @@ They return **PGN text only**. The importer does everything else.
 | `ext enable NAME` | Load and check an installed extension, then turn it on. Changes nothing if it can't be used. Restart `serve` to see it. |
 | `ext disable NAME` | Turn it off. Its data stays. |
 | `ext install NAME` | Install `extensions/NAME` from the folder Blunderbook was installed from, keeping every extension already installed, then `ext enable` it. Already installed: only turns it on. It doesn't pull. |
-| `update [--check]` | Bring the installed copy up to date with its git folder (found from the install's PEP 610 `direct_url.json`): refuse local changes to tracked files, a branch with no upstream or one that has diverged; `git fetch`, list the new commits (`--check` stops there), fast-forward (never a reset or a stash), then `uv tool install --reinstall FOLDER --with …` with one `--with` per installed extension. It always reinstalls, so running it again finishes a reinstall that failed. On Windows the reinstall runs in a new PowerShell window that waits for this command and any running `serve` (a running program's files are locked). A development copy (editable) is told to `git pull` and `uv sync`. |
+| `update [--check]` | Bring the installed copy up to date with its git folder (found from the install's PEP 610 `direct_url.json`): refuse local changes to tracked files, a branch with no upstream or one that has diverged; `git fetch`, list the new commits (`--check` stops there), fast-forward (never a reset or a stash), then `uv tool install --reinstall FOLDER --with …` with one `--with` per installed extension. An installed extension whose folder has left the repo (the Library) is left out and turned off in config.toml; its database stays. It always reinstalls, so running it again finishes a reinstall that failed. On Windows the reinstall runs in a new PowerShell window that waits for this command and any running `serve` (a running program's files are locked). A development copy (editable) is told to `git pull` and `uv sync`. |
 | `NAME ...` | An extension's own commands, when it's on and has some. |
 | `backup [--to FOLDER]` | Take a verified snapshot of the DB and each extension's DB now, and rotate old ones (see §6 Backups). |
 | `restore FILE [--yes]` | Replace the DB (or an extension's, by the file's name) with a backup after checking it; keeps a `-pre-restore` copy. FILE may be a bare name from the backup folder. Shows what the backup and the current DB hold (games · entries), then asks to confirm and that the web app is stopped. No answer means no. |
@@ -981,7 +979,8 @@ Design language (from the demo and the paper template):
 9. **Extensions:** the contract, discovery and `ext` commands, extension databases in the
    backups, routes, pages and the host API, one extension end to end (§15).
 10. **Your games:** remember each import, the games API, and a Games tab with a game page.
-11. **Library (extension):** openings, traps and tactics to study and practise.
+11. **Library (extension):** openings, traps and tactics to study and practise. Removed on
+    2026-11-20: the Journal does its job; its entries are `extensions/journal/examples/`.
 12. **Collection (extension):** a collection of anyone's games, analysed.
 13. **Missed wins:** log a mate or a big gain you didn't take, even when you stay winning,
     and suggest "Missed my tactic" (§7.6, §7.7).
@@ -1028,13 +1027,13 @@ off by default, key in config), Anki/Lichess-study export, mobile-friendly PWA.
 ## 15. Extensions
 
 Bigger features that aren't about your own mistakes are extensions: separate packages, kept
-in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. The first
-two are **Library** (openings, traps and tactics) and **Collection** (anyone's games);
-**Rankings** (the FIDE, Lichess and Chess.com top lists) is the first with network calls.
-**Profile** (your own ratings on Lichess and Chess.com) asks the sites through
-`host.fetch_ratings` and has no HTTP of its own. **Journal** (your chess notes, in
-Markdown) is the fifth: no network, and Stockfish (`host.engine()`) only when you press
-Analyse.
+in `extensions/<name>/` in this repo (a uv workspace), each with its own tests. There are
+four: **Collection** (anyone's games); **Rankings** (the FIDE, Lichess and Chess.com top
+lists), the first with network calls; **Profile** (your own ratings on Lichess and
+Chess.com), which asks the sites through `host.fetch_ratings` and has no HTTP of its own;
+and **Journal** (your chess notes, in Markdown): no network, and Stockfish
+(`host.engine()`) only when you press Analyse. The first one, **Library** (openings, traps
+and tactics), was removed on 2026-11-20, when the Journal made it redundant.
 `tests/fixtures/ext_demo` is a test-only one that uses every part of the contract below.
 
 **Found, not imported.** An extension package declares an entry point in the
@@ -1042,19 +1041,19 @@ Analyse.
 
 ```toml
 [project.entry-points."blunderbook.extensions"]
-library = "blunderbook_library:extension"
+journal = "blunderbook_journal:extension"
 ```
 
 ```python
 extension = ext.Extension(
-    name="library",                         # [a-z]+, the entry point's name; not a name
+    name="journal",                         # [a-z]+, the entry point's name; not a name
                                             #   Blunderbook uses (ext.RESERVED)
-    title="Library",                        # the tab's label
+    title="Journal",                        # the tab's label
     host_api=ext.HOST_API,                  # the host API it was written for
-    router=router,                          # optional: mounted at /api/ext/library
-    web=files(__name__) / "web",            # optional: view.js (+ view.css) at /ext/library/
-    migrations=files(__name__) / "migrations",  # optional: NNNN_name.sql for library.db
-    cli=commands,                           # optional: `blunderbook library ...`
+    router=router,                          # optional: mounted at /api/ext/journal
+    web=files(__name__) / "web",            # optional: view.js (+ view.css) at /ext/journal/
+    migrations=files(__name__) / "migrations",  # optional: NNNN_name.sql for journal.db
+    cli=commands,                           # optional: `blunderbook journal ...`
     backups_kept=None,                      # optional: keep fewer of its backups than
                                             #   backup.keep (1 or more); Rankings keeps 1
 )
@@ -1123,7 +1122,7 @@ extension = ext.Extension(
 - **The page:** `view.js` exports `show(root, rest)`, like the built-in views, for `#name`
   and `#name/rest`. The same CSP applies: no inline scripts or handlers, nothing from
   elsewhere, `esc()` for every text that goes into HTML. Its own CSS classes start with its
-  name (`library`, `library-row`); any other class it uses is a shared one. The design
+  name (`journal`, `journal-move`); any other class it uses is a shared one. The design
   language of §11 applies.
 - **The same principles (§1):** local-first, no telemetry, network calls only when you ask
   for them (an extension that has one documents it and keeps it off by default, as `[ai]`

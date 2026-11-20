@@ -270,13 +270,19 @@ def ext_enable(name: Annotated[str, typer.Argument(help="The extension's name.")
 @ext_app.command("disable")
 def ext_disable(name: Annotated[str, typer.Argument(help="The extension's name.")]) -> None:
     """Turn an extension off. Its data stays, and comes back if you turn it on again."""
-    cfg = _load_config()
-    if name not in cfg.extensions.enabled:
+    if not _turn_off(_load_config(), name):
         typer.echo(f"The {name} extension isn't on.")
         return
+    typer.echo(f"Turned off {name}. Its data stays; restart blunderbook serve.")
+
+
+def _turn_off(cfg: config.Config, name: str) -> bool:
+    """Take ``name`` out of ``[extensions] enabled``. False when it wasn't on."""
+    if name not in cfg.extensions.enabled:
+        return False
     enabled = tuple(n for n in cfg.extensions.enabled if n != name)
     config.save(replace(cfg, extensions=replace(cfg.extensions, enabled=enabled)))
-    typer.echo(f"Turned off {name}. Its data stays; restart blunderbook serve.")
+    return True
 
 
 @ext_app.command("install")
@@ -294,6 +300,7 @@ def ext_install(name: Annotated[str, typer.Argument(help="The extension's name."
             listed = ", ".join(here) if here else "none"
             _fail(f"There's no extensions/{name} folder. Extensions here: {listed}.")
         uv = update.program("uv")
+        _leave_out_gone()
         command = update.uv_command(
             uv, folder, [*update.extension_specs(), str(folder / "extensions" / name)]
         )
@@ -331,6 +338,7 @@ def update_(
         else:
             typer.echo("Reinstalling it as it is, in case an earlier update didn't finish.")
         head = pending.upstream if pending.new else pending.head
+        _leave_out_gone()
         command = update.uv_command(uv, folder, update.extension_specs())
         code = update.reinstall(command, done=f"Blunderbook is up to date ({head}).")
     except update.UpdateError as exc:
@@ -340,6 +348,23 @@ def update_(
     elif code != 0:
         typer.echo("The reinstall failed. Run blunderbook update again.", err=True)
     raise typer.Exit(code)
+
+
+def _leave_out_gone() -> None:
+    """An installed extension that has left Blunderbook's folder isn't reinstalled, and is
+    turned off, so serve and doctor don't look for it. Its database stays."""
+    for name in update.gone():
+        typer.echo(
+            f"The {name} extension isn't in Blunderbook any more, so it's left out. "
+            f"Its data stays in {name}.db."
+        )
+        try:
+            off = _turn_off(config.load(config.config_path()), name)
+        except config.ConfigError as exc:
+            typer.echo(f"It couldn't be turned off ({exc}). Run: blunderbook ext disable {name}")
+            continue
+        if off:
+            typer.echo(f"Turned off {name}.")
 
 
 # ---------------------------------------------------------------- init

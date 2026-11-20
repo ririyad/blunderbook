@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from blunderbook import cli, ext, update
+from blunderbook import cli, config, ext, update
 from blunderbook.ext import Installed
 
 runner = CliRunner()
@@ -43,8 +43,8 @@ def repos(tmp_path: Path) -> tuple[Path, Path]:
     git(tmp_path, "clone", "--quiet", str(remote), str(theirs))
     git(theirs, "checkout", "--quiet", "-b", "main")
     commit(theirs, "pyproject.toml", "[project]\nname = 'blunderbook'\n")
-    (theirs / "extensions" / "library").mkdir(parents=True)
-    commit(theirs, "extensions/library/pyproject.toml")
+    (theirs / "extensions" / "collection").mkdir(parents=True)
+    commit(theirs, "extensions/collection/pyproject.toml")
     git(theirs, "push", "--quiet", "-u", "origin", "main")
     yours = tmp_path / "your copy"  # a space, as in a real path
     git(tmp_path, "clone", "--quiet", str(remote), str(yours))
@@ -97,9 +97,11 @@ def test_source_says_how_to_install(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_extensions_are_kept_by_folder_or_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    library = tmp_path / "extensions" / "library"
+    journal = tmp_path / "extensions" / "journal"
+    journal.mkdir(parents=True)
+    (journal / "pyproject.toml").write_text("", "utf-8")
     urls = {
-        "blunderbook-library": f'{{"url": "{library.as_uri()}", "dir_info": {{}}}}',
+        "blunderbook-journal": f'{{"url": "{journal.as_uri()}", "dir_info": {{}}}}',
         "blunderbook-other": None,  # from an index
     }
     monkeypatch.setattr(update, "_direct_url", urls.get)
@@ -107,12 +109,37 @@ def test_extensions_are_kept_by_folder_or_name(
         ext,
         "installed",
         lambda: [
-            Installed("library", "blunderbook-library", "0.1.0"),
+            Installed("journal", "blunderbook-journal", "0.1.0"),
             Installed("other", "blunderbook-other", "1.0"),
             Installed("odd", None, None),
         ],
     )
-    assert update.extension_specs() == [str(library), "blunderbook-other"]
+    assert update.extension_specs() == [str(journal), "blunderbook-other"]
+    assert update.gone() == []
+
+
+def test_an_extension_removed_from_blunderbook_is_left_out(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The Library left the repo (the Journal does its job): its folder is gone after the
+    fast-forward, so --with it would make the reinstall fail."""
+    journal = tmp_path / "extensions" / "journal"
+    journal.mkdir(parents=True)
+    (journal / "pyproject.toml").write_text("", "utf-8")
+    library = tmp_path / "extensions" / "library"  # not there any more
+    uri = lambda folder: f'{{"url": "{folder.as_uri()}", "dir_info": {{}}}}'  # noqa: E731
+    urls = {"blunderbook-journal": uri(journal), "blunderbook-library": uri(library)}
+    monkeypatch.setattr(update, "_direct_url", urls.get)
+    monkeypatch.setattr(
+        ext,
+        "installed",
+        lambda: [
+            Installed("journal", "blunderbook-journal", "0.1.0"),
+            Installed("library", "blunderbook-library", "0.1.0"),
+        ],
+    )
+    assert update.extension_specs() == [str(journal)]
+    assert update.gone() == ["library"]
 
 
 def test_the_uv_command() -> None:
@@ -232,8 +259,11 @@ def test_posix_runs_uv_here(
     monkeypatch.setattr(update, "WINDOWS", False)
     monkeypatch.setattr(update, "_show", show)
     monkeypatch.setattr(update.shutil, "which", lambda _: "/home/me/.local/bin/blunderbook")
-    assert update.reinstall(["uv", "tool"], done="Done.", enable="library") == 0
-    assert ran == [["uv", "tool"], ["/home/me/.local/bin/blunderbook", "ext", "enable", "library"]]
+    assert update.reinstall(["uv", "tool"], done="Done.", enable="collection") == 0
+    assert ran == [
+        ["uv", "tool"],
+        ["/home/me/.local/bin/blunderbook", "ext", "enable", "collection"],
+    ]
     assert capsys.readouterr().out == "Done.\n"
 
 
@@ -243,7 +273,7 @@ def test_posix_failure_stops(
     ran: list[list[str]] = []
     monkeypatch.setattr(update, "WINDOWS", False)
     monkeypatch.setattr(update, "_show", lambda args: ran.append(list(args)) or 2)
-    assert update.reinstall(["uv"], done="Done.", enable="library") == 2
+    assert update.reinstall(["uv"], done="Done.", enable="collection") == 2
     assert ran == [["uv"]]  # not turned on
     assert capsys.readouterr().out == ""
 
@@ -263,7 +293,7 @@ def test_windows_hands_off(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_the_windows_script() -> None:
     command = ["C:\\uv.exe", "tool", "install", "--reinstall", "E:\\Rashed's apps\\blunderbook"]
     script = update.windows_script(
-        command, done="Blunderbook is up to date (abc1234).", enable="library", pid=11, parent=22
+        command, done="Blunderbook is up to date (abc1234).", enable="collection", pid=11, parent=22
     )
     assert "$wait = @(11)" in script
     assert "Get-Process -Id 22" in script and "$wait += 22" in script
@@ -273,7 +303,7 @@ def test_the_windows_script() -> None:
     assert (
         "& 'C:\\uv.exe' 'tool' 'install' '--reinstall' 'E:\\Rashed''s apps\\blunderbook'" in script
     )
-    assert "& 'blunderbook' 'ext' 'enable' 'library'" in script
+    assert "& 'blunderbook' 'ext' 'enable' 'collection'" in script
     assert "Write-Host 'Blunderbook is up to date (abc1234).'" in script
     assert "Run blunderbook update again." in script
     assert script.rstrip().endswith("Read-Host 'Press Enter to close'")
@@ -285,7 +315,11 @@ def test_the_windows_script() -> None:
 def test_the_windows_script_parses() -> None:
     """PowerShell's own parser accepts it (nothing runs)."""
     script = update.windows_script(
-        ["uv", "tool", "install", "E:\\it's here"], done="Done.", enable="library", pid=1, parent=2
+        ["uv", "tool", "install", "E:\\it's here"],
+        done="Done.",
+        enable="collection",
+        pid=1,
+        parent=2,
     )
     check = (
         "$e = $null; [System.Management.Automation.Language.Parser]::ParseInput("
@@ -306,13 +340,14 @@ def test_the_windows_script_parses() -> None:
 
 @pytest.fixture
 def installed_from(monkeypatch: pytest.MonkeyPatch, repos: tuple[Path, Path]) -> list[list[str]]:
-    """Blunderbook "installed" from your copy, with the Library; uv only recorded."""
+    """Blunderbook "installed" from your copy, with the Journal; uv only recorded."""
     yours, _ = repos
     ran: list[list[str]] = []
     monkeypatch.setattr(update, "source", lambda: yours)
     monkeypatch.setattr(
-        update, "extension_specs", lambda: ["E:/apps/blunderbook/extensions/library"]
+        update, "extension_specs", lambda: ["E:/apps/blunderbook/extensions/journal"]
     )
+    monkeypatch.setattr(update, "gone", lambda: [])
     real = shutil.which
     monkeypatch.setattr(update, "program", lambda name: "uv" if name == "uv" else real(name))
     monkeypatch.setattr(update, "WINDOWS", False)
@@ -332,8 +367,32 @@ def test_update_command(installed_from: list[list[str]], repos: tuple[Path, Path
     assert f"Blunderbook is up to date ({head})." in result.output
     assert installed_from == [
         ["uv", "tool", "install", "--reinstall", str(yours),
-         "--with", "E:/apps/blunderbook/extensions/library"],
+         "--with", "E:/apps/blunderbook/extensions/journal"],
     ]  # fmt: skip
+
+
+@needs_git
+def test_update_turns_off_an_extension_removed_from_blunderbook(
+    installed_from: list[list[str]],
+    repos: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = tmp_path / "config.toml"
+    monkeypatch.setattr(config, "config_path", lambda: cfg)
+    enabled = ("library", "journal")
+    config.save(config.Config(extensions=config.ExtensionsConfig(enabled=enabled)), cfg)
+    monkeypatch.setattr(update, "gone", lambda: ["library"])
+    _, theirs = repos
+    push(theirs, "a.txt")
+    result = runner.invoke(cli.app, ["update"])
+    assert result.exit_code == 0, result.output
+    assert (
+        "The library extension isn't in Blunderbook any more, so it's left out. "
+        "Its data stays in library.db.\nTurned off library."
+    ) in result.output
+    assert config.load(cfg).extensions.enabled == ("journal",)
+    assert installed_from[0][-2:] == ["--with", "E:/apps/blunderbook/extensions/journal"]
 
 
 @needs_git
@@ -413,23 +472,23 @@ def test_ext_install(
     yours, _ = repos
     monkeypatch.setattr(ext, "find", lambda _: None)
     monkeypatch.setattr(update.shutil, "which", lambda _: "blunderbook")
-    result = runner.invoke(cli.app, ["ext", "install", "library"])
+    result = runner.invoke(cli.app, ["ext", "install", "collection"])
     assert result.exit_code == 0, result.output
     assert installed_from == [
         ["uv", "tool", "install", "--reinstall", str(yours),
-         "--with", "E:/apps/blunderbook/extensions/library",
-         "--with", str(yours / "extensions" / "library")],
-        ["blunderbook", "ext", "enable", "library"],
+         "--with", "E:/apps/blunderbook/extensions/journal",
+         "--with", str(yours / "extensions" / "collection")],
+        ["blunderbook", "ext", "enable", "collection"],
     ]  # fmt: skip
-    assert "Installed the library extension." in result.output
+    assert "Installed the collection extension." in result.output
 
 
 @needs_git
-@pytest.mark.parametrize("name", ["nope", "../library", "Library"])
+@pytest.mark.parametrize("name", ["nope", "../collection", "Collection"])
 def test_ext_install_of_an_unknown_name(installed_from: list[list[str]], name: str) -> None:
     result = runner.invoke(cli.app, ["ext", "install", name])
     assert result.exit_code == 1
-    assert f"There's no extensions/{name} folder. Extensions here: library." in result.output
+    assert f"There's no extensions/{name} folder. Extensions here: collection." in result.output
     assert installed_from == []
 
 
@@ -438,10 +497,10 @@ def test_ext_install_of_an_installed_one_only_turns_it_on(monkeypatch: pytest.Mo
     monkeypatch.setattr(ext, "find", lambda name: object())
     monkeypatch.setattr(cli, "ext_enable", calls.append)
     monkeypatch.setattr(update, "reinstall", lambda *a, **k: pytest.fail("reinstalled"))
-    result = runner.invoke(cli.app, ["ext", "install", "library"])
+    result = runner.invoke(cli.app, ["ext", "install", "collection"])
     assert result.exit_code == 0, result.output
-    assert "The library extension is already installed." in result.output
-    assert calls == ["library"]
+    assert "The collection extension is already installed." in result.output
+    assert calls == ["collection"]
 
 
 def test_update_is_reserved() -> None:

@@ -1,5 +1,7 @@
 """The chess in a note (ROADMAP 19.2): PGN and FEN blocks, arrows, and typed moves."""
 
+import re
+
 import chess
 import pytest
 from blunderbook_journal import moves
@@ -370,3 +372,13 @@ def test_a_move_number_stays_with_its_move() -> None:
     assert text is not None
     assert not any(line.rstrip().endswith(".") for line in text.split("\n"))
     assert moves.read_pgn(text).error == ""
+
+
+def test_a_variations_move_number_stays_with_its_move() -> None:
+    # The comment's length puts "(4..." at the very end of an 80-column line.
+    text = "1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 Bf5 {The bishop comes early.} 5. Ng3 Bg6 *"
+    four = len(moves.read_pgn("1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 *").moves) - 1
+    written = moves.with_line(text, four, ["b8d7"])
+    assert written is not None
+    assert all(not re.search(r"\(?\d+\.(\.\.)?$", line) for line in written.split("\n"))
+    assert "(4... Nd7)" in written and moves.read_pgn(written).error == ""

@@ -35,7 +35,7 @@ class Store:
     """A database: the core one, or an extension's own."""
 
     name: str  # "blunderbook", or the extension's name; also its backups' prefix
-    label: str  # for messages: "Blunderbook", "the library extension"
+    label: str  # for messages: "Blunderbook", "the journal extension"
     migrations: Traversable
     keep: int | None = None  # the most backups of it kept; None: config.toml's backup.keep
 

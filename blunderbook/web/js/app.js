@@ -127,7 +127,7 @@ async function refreshBadge() {
 window.addEventListener("hashchange", route);
 onRetry(() => { route(); refreshBadge(); });
 document.addEventListener("entries-changed", refreshBadge);
-await addExtensions(); // first: #library/... must find its tab
+await addExtensions(); // first: #journal/... must find its tab
 route();
 refreshBadge();
 importView.resume(); // an import that's still running shows on its tab

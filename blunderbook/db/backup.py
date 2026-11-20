@@ -7,7 +7,7 @@ as ``….db.partial`` and renamed, so the folder (often one a cloud drive syncs)
 gets whole, checked files.
 
 Backups are named ``blunderbook-YYYY-MM-DD_HHMMSSZ[-reason].db`` (UTC). An extension's
-database (CLAUDE.md §15) is backed up the same way, named after it: ``library-…db``. Rotation
+database (CLAUDE.md §15) is backed up the same way, named after it: ``journal-…db``. Rotation
 and the daily check read only files with that name and that database's prefix. Anything
 else in the folder is never touched.
 

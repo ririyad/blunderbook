@@ -32,7 +32,6 @@ module-root = ""
 members = ["extensions/*"]
 
 [tool.uv.sources]
-blunderbook-library = { workspace = true }
 blunderbook-collection = { workspace = true }
 blunderbook-rankings = { workspace = true }
 blunderbook-profile = { workspace = true }
@@ -66,7 +65,6 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 python_version = "3.15"
 files = [
     "blunderbook",
-    "extensions/library/blunderbook_library",
     "extensions/collection/blunderbook_collection",
     "extensions/rankings/blunderbook_rankings",
     "extensions/profile/blunderbook_profile",
@@ -80,8 +78,6 @@ check_untyped_defs = true
 module = [
     "blunderbook.core",
     "blunderbook.core.*",
-    "blunderbook_library.content",
-    "blunderbook_library.yours",
     "blunderbook_collection.games",
     "blunderbook_collection.stats",
     "blunderbook_rankings.fide",
@@ -107,7 +103,6 @@ extra_checks = true
 [tool.pytest.ini_options]
 testpaths = [
     "tests",
-    "extensions/library/tests",
     "extensions/collection/tests",
     "extensions/rankings/tests",
     "extensions/profile/tests",
@@ -130,7 +125,6 @@ filterwarnings = [
 dev = [
     "blunderbook-collection",
     "blunderbook-journal",
-    "blunderbook-library",
     "blunderbook-profile",
     "blunderbook-rankings",
     "mypy>=2.4.1",
