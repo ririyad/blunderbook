@@ -33,6 +33,21 @@ database and backed up with it.
   5 minutes old, so a long session leaves a version every few minutes. The newest 30 per
   note are kept.
 
-Coming in the next slices: the Journal tab with Writing and Reading modes, ```` ```pgn ````
-and ```` ```fen ```` blocks and moves in sentences that play on a board, `[[log 12]]` /
-`[[game 40]]` links to your Log, Analyse, and the history and export on the page.
+## Chess in a note
+
+Reading mode (the Journal tab, coming in the next slice) plays these on a board:
+
+- A ```` ```pgn ```` block: a game, with its variations, `{comments}` and `$` marks.
+  Headers may share a line.
+- A ```` ```fen ```` block: a diagram. The position goes on the first line, then arrows
+  and highlights as Lichess writes them (`{[%cal Rc3d5][%csl Rd5]}`) and a caption.
+- Moves in a sentence: "after 5. cxd5 exd5 6. Nxd5?? the queen goes". A run starts with a
+  numbered move. It plays from the nearest game or diagram above it that reaches that
+  move, or from the nearest one below when there's none above, and shares that game's
+  moves where it follows them. A run from 1. plays from the start. One that can't be
+  played stays as text.
+- A PGN or FEN that can't be read is shown as you wrote it, with the reason.
+
+Coming in the next slices: the Journal tab with Writing and Reading modes and the board
+that follows you, `[[log 12]]` / `[[game 40]]` links to your Log, Analyse, and the history
+and export on the page.

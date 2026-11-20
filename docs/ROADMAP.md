@@ -28,7 +28,7 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
-| M19 Journal | In progress (1/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M19 Journal | In progress (2/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
 **Order of work** (decided 2026-11-20, see Decided):
@@ -40,10 +40,10 @@ _Last updated: 2026-11-16_
 
 The milestone numbers stay as they are; only the order changes.
 
-**Next up:** 19.2, the Journal's note parser: Markdown, PGN and FEN blocks, moves in
-sentences, tags and Log links, read once per save on the server. 19.1 is done: the
-`journal` extension, `journal.db` (notes, tags, versions, FTS5 search) and the `new`, `list`,
-`show` and `export` commands. M17, the Profile extension,
+**Next up:** 19.3, the Journal tab: the notes list, Writing mode and Reading mode with
+the board that follows you. 19.1 and 19.2 are done: the `journal` extension, `journal.db`
+and its commands, and the note parser, which reads each note into the tree Reading mode
+draws, on every save. M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1661,9 +1661,13 @@ code; its feedback is folded in here before 19.1. See Decided for the answers it
 - `[[log 12]]` / `[[game 40]]`: links to your Log entries and games.
 
 **How each part plays:**
-- **A run of moves in a sentence:** it plays from the start when it begins at move 1.
-  Otherwise it plays from the nearest block above it that reaches that move, in the main
-  line or a variation. A run that can't be played stays plain text.
+- **A run of moves in a sentence:** it starts with a numbered move ("5. cxd5",
+  "6...Nxd5"). It plays from the nearest block or run above it that reaches that move, in
+  the main line or a variation, where the whole run is legal. With none above, it plays
+  from the nearest block below, so you can write about a game before pasting it (as the
+  prototype's note does). A run from 1. with neither plays from the start. Where it follows
+  the block's moves it shares them, so the board's ← → go on in that game. A run that can't
+  be played stays plain text.
 - **Arrows and highlights:** Lichess's `[%cal …]` / `[%csl …]`, in a PGN comment or under a
   FEN.
 - **Log links:** each shows the entry's or game's position and links to it. Library lines
@@ -1737,7 +1741,7 @@ build step), and CodeMirror (a bundle built outside the app).
           The best matches come first, after the pinned notes.
         - The export writes `ID-title.md`. Exporting again replaces those files only.
         - `journal.db` is in `backup` and `restore`, a test each.
-- [ ] **19.2** The note parser (`doc.py`, `chess.py`; pure, mypy strict).
+- [x] **19.2** The note parser (`doc.py`, `moves.py`; pure, mypy strict).
       - It reads:
         - the Markdown subset;
         - PGN blocks with their variation tree, comments and arrows;
@@ -1752,6 +1756,20 @@ build step), and CodeMirror (a bundle built outside the app).
         - variations within variations;
         - Unicode;
         - a note with no chess at all.
+      - **As built:**
+        - `moves.py`, not `chess.py`: inside the package, that name reads like
+          python-chess.
+        - Runs look below too, when nothing above reaches them (see "How each part
+          plays").
+        - The tree is stored with the note on every save, with `DOC_VERSION`.
+          `store.document` makes it again when the parser's version changes.
+        - Headers written on one line (`[White "?"] [Black "?"]`) are read.
+        - A variation written inside another, `(1. d4 (1. c4))`, is a second alternative
+          to the same move, as PGN means it.
+        - Links are kept only for `http(s):`, `mailto:` and `#`. Any other link stays
+          text.
+        - Timing on a note with ten 130-ply games and 6,000 words: 72 ms the first time,
+          7 ms after an edit (the games' reading is cached).
 - [ ] **19.3** The tab: the list, Writing and Reading.
       - Routes:
         - `GET /notes?q=&tag=`;

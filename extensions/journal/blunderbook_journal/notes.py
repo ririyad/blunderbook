@@ -14,7 +14,7 @@ FENCE = "```"
 
 # A tag starts with a letter, after the start of a line or a space or bracket, so
 # "Qxf7#", "C#", "##" and "# Heading" aren't tags.
-_TAG = re.compile(r"(?:^|(?<=[\s(\[{]))#([^\W\d_][\w-]*)")
+TAG = re.compile(r"(?:^|(?<=[\s(\[{]))#([^\W\d_][\w-]*)")
 _INLINE_CODE = re.compile(r"`[^`\n]*`")
 _HEADER = re.compile(r'\[\s*(\w+)\s+"((?:[^"\\]|\\.)*)"\s*\]')
 _SEARCHED = frozenset({"white", "black", "event", "site", "opening", "variation", "eco"})
@@ -44,7 +44,7 @@ def tags(lines: list[str]) -> tuple[str, ...]:
     """The #tags in these lines, lower case, without the '#', outside `inline code`."""
     found: set[str] = set()
     for line in lines:
-        for match in _TAG.finditer(_INLINE_CODE.sub(" ", line)):
+        for match in TAG.finditer(_INLINE_CODE.sub(" ", line)):
             found.add(match.group(1).rstrip("-").casefold())
     return tuple(sorted(found))
 

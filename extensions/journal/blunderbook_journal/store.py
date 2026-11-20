@@ -2,13 +2,14 @@
 earlier versions and the search index. All of the Journal's SQL is here, with every value a
 parameter."""
 
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from blunderbook import host
-from blunderbook_journal import notes
+from blunderbook_journal import doc, notes
 
 KEEP_VERSIONS = 30
 VERSION_EVERY = timedelta(minutes=5)
@@ -50,11 +51,20 @@ class Version:
 def create(conn: sqlite3.Connection, body: str = "", *, at: datetime | None = None) -> Note:
     moment = _utc(at)
     read = notes.read(body)
+    tree = _tree(body)
     with host.transaction(conn):
         cursor = conn.execute(
-            "INSERT INTO notes (title, snippet, body, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (read.title, read.snippet, body, moment.isoformat(), moment.isoformat()),
+            "INSERT INTO notes (title, snippet, body, doc, doc_version, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                read.title,
+                read.snippet,
+                body,
+                tree,
+                doc.DOC_VERSION,
+                moment.isoformat(),
+                moment.isoformat(),
+            ),
         )
         note_id = int(cursor.lastrowid or 0)
         _index(conn, note_id, body, read)
@@ -112,12 +122,39 @@ def update(
                 )
             read = notes.read(body)
             conn.execute(
-                "UPDATE notes SET title = ?, snippet = ?, body = ?, doc = NULL,"
-                " doc_version = NULL, updated_at = ? WHERE id = ?",
-                (read.title, read.snippet, body, moment.isoformat(), note_id),
+                "UPDATE notes SET title = ?, snippet = ?, body = ?, doc = ?, doc_version = ?,"
+                " updated_at = ? WHERE id = ?",
+                (
+                    read.title,
+                    read.snippet,
+                    body,
+                    _tree(body),
+                    doc.DOC_VERSION,
+                    moment.isoformat(),
+                    note_id,
+                ),
             )
             _index(conn, note_id, body, read)
     return get(conn, note_id)
+
+
+def document(conn: sqlite3.Connection, note_id: int) -> dict[str, object] | None:
+    """The note as Reading mode draws it (:mod:`blunderbook_journal.doc`). A tree made by
+    an older parser, or none, is made again and kept. None when there's no such note."""
+    row = conn.execute("SELECT body, doc, doc_version FROM notes WHERE id = ?", (note_id,))
+    found = row.fetchone()
+    if found is None:
+        return None
+    body, kept, version = found
+    if kept is not None and version == doc.DOC_VERSION:
+        tree: dict[str, object] = json.loads(kept)
+        return tree
+    tree = doc.parse(body)
+    conn.execute(
+        "UPDATE notes SET doc = ?, doc_version = ? WHERE id = ?",
+        (json.dumps(tree, ensure_ascii=False, separators=(",", ":")), doc.DOC_VERSION, note_id),
+    )
+    return tree
 
 
 def set_pinned(conn: sqlite3.Connection, note_id: int, pinned: bool) -> Note | None:
@@ -204,6 +241,10 @@ def _index(conn: sqlite3.Connection, note_id: int, body: str, read: notes.Read) 
         "INSERT INTO search (rowid, title, body, players) VALUES (?, ?, ?, ?)",
         (note_id, read.title, body, read.players),
     )
+
+
+def _tree(body: str) -> str:
+    return json.dumps(doc.parse(body), ensure_ascii=False, separators=(",", ":"))
 
 
 def _tags(conn: sqlite3.Connection, note_id: int) -> tuple[str, ...]:
