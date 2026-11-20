@@ -28,9 +28,20 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
+| M19 Journal | Planned | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
-**Next up:** M15, the desktop app (planned below, not started), starting with 15.1 and 15.2:
-one swappable server and the Extensions page, which help `blunderbook serve` too. M17, the Profile extension,
+**Order of work** (decided 2026-11-20, see Decided):
+
+1. **M19 Journal.** It starts once you've given feedback on its prototype.
+2. **M20 Cost, not count.**
+3. **M18 Game commentary.**
+4. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
+
+The milestone numbers stay as they are; only the order changes.
+
+**Next up:** M19, the Journal extension. Its prototype (a design canvas: Reading and Writing
+mode, working boards) is waiting for your feedback; 19.1 starts after that. M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1194,6 +1205,15 @@ place of Python, uv, a git clone and a separate Stockfish.
   its own window (pywebview); Stockfish and both extensions inside (all GPL-3).
 - **Extensions page (planned 2026-11-17).** Asked for: an "Extensions" item in the app's
   menu, listing the app's extensions, with **Add** and then a red **Remove**. See Decided.
+- **Last in the order** (2026-11-20): it packages everything, so the extensions and core
+  changes made before it ship in the first build.
+- [ ] **15.0** Packaging test, before 15.1 (about half a session, nothing committed but its
+      findings here):
+      - A throwaway PyInstaller one-folder build on macOS. It holds the server, one page,
+        python-chess and Stockfish found inside the app, plus pywebview opening the page.
+      - It works: 15.1 to 15.8 go ahead as written.
+      - It fails on Python 3.15: the plan changes first (another bundler, or building
+        with an older Python), before anything is built on it.
 - [ ] **15.1** One server, swappable: `blunderbook/server.py`, the "one way to start the
       server". The server serves a thin holder that forwards each request to the current
       FastAPI app; `build()` (config, `ext.load`, databases opened and upgraded with their
@@ -1622,6 +1642,178 @@ Decided for the answers it's built on.
   with the AI answer faked; 390 px, the keyboard, no console errors. Left for you: one real
   "Write the commentary" with your key and model.
 
+### M19 Journal (extension, planned, not started)
+
+Planned on 2026-11-19. It's first in the order of work. A minimal, very fast chess
+journal, kept like a blog for yourself. You write in Markdown. In Reading mode, every PGN,
+FEN and move in a sentence plays on a board beside the text. It's an extension
+(`journal`): its own `journal.db`, in every backup, with your Log read-only and no network.
+A prototype (a design canvas with working Reading and Writing screens) was made before any
+code; its feedback is folded in here before 19.1. See Decided for the answers it's built on.
+
+**The note format.** Plain Markdown, stored as typed:
+- ```` ```pgn ```` blocks: a game with variations and `{comments}`;
+- ```` ```fen ```` blocks: a diagram;
+- moves inside a sentence ("after 5. cxd5 exd5 6. Nxd5??");
+- `#tags`;
+- `[[log 12]]` / `[[game 40]]`: links to your Log entries and games.
+
+**How each part plays:**
+- **A run of moves in a sentence:** it plays from the start when it begins at move 1.
+  Otherwise it plays from the nearest block above it that reaches that move, in the main
+  line or a variation. A run that can't be played stays plain text.
+- **Arrows and highlights:** Lichess's `[%cal …]` / `[%csl …]`, in a PGN comment or under a
+  FEN.
+- **Log links:** each shows the entry's or game's position and links to it. Library lines
+  can't be linked: extensions don't read each other.
+
+**Python only, no frontend chess.** On save, the server (python-chess) parses the note once
+into a document tree:
+- the blocks;
+- the inline spans;
+- for every playable move, its FEN, SAN and place in the variation tree.
+
+The tree is stored beside the text, so Reading mode is one read. The page builds it with DOM
+calls and `esc()`. Each block's parse is cached by its text, so switching modes on a heavy
+note re-reads only the blocks you changed.
+
+Measured on 2026-11-19:
+
+| What | Time |
+|---|---|
+| A warm local request | 1–3 ms |
+| Checking one move | 0.02 ms |
+| A 131-ply game read with a FEN per move | 3.8 ms |
+| Ten such games, uncached | about 40 ms |
+
+Rejected: a vendored chess.js (a second set of chess rules), Rust/WASM (a toolchain and
+build step), and CodeMirror (a bundle built outside the app).
+
+**Fast:**
+- Writing is a plain monospace `<textarea>`: nothing is redrawn as you type.
+- Autosave runs 400 ms after a pause, one save at a time, like the Log's notes.
+- Search uses SQLite FTS5 over the title, the text and the PGN headers. `TODO(verify)`: FTS5
+  in uv's Python; if it's missing, a `LIKE` search.
+- Reading is a book serif at about 18 px and 68 characters a line, with system fonts only.
+
+**Boards:**
+- One reading board is pinned beside the text. Under 860 px it sits above the text, smaller.
+- It's built with `/js/board.js` and `/js/steps.js`. ← → follow the line you're in, a
+  variation included.
+- Insert-from-board and "Continue here" check each move with `POST /board`.
+
+**Keyboard:**
+- Ctrl/Cmd+K: the quick switcher.
+- Ctrl/Cmd+E: switch between Writing and Reading.
+- Ctrl/Cmd+B / Ctrl/Cmd+I: bold / italic.
+- Esc: back to the list.
+- `n` in the list: a new note. Browsers keep Ctrl+N.
+
+- [ ] **19.1** The package and storage.
+      - `extensions/journal/`: the entry point and `Extension(name="journal",
+        title="Journal")`.
+      - `migrations/0001_journal.sql`:
+        - `notes`: the title from the first line, the text, pinned, the parsed tree and
+          its version, created, updated;
+        - `tags`;
+        - `versions`: a snapshot when the last one is over 5 minutes old; the newest 30
+          kept;
+        - an FTS5 table.
+      - `store.py` holds all its SQL.
+      - CLI: `journal new`, `journal list`, `journal show ID`, `journal export FOLDER`.
+      - The root `pyproject.toml` and `uv.lock`.
+- [ ] **19.2** The note parser (`doc.py`, `chess.py`; pure, mypy strict).
+      - It reads:
+        - the Markdown subset;
+        - PGN blocks with their variation tree, comments and arrows;
+        - FEN blocks;
+        - moves inside sentences, with where they play from;
+        - tags;
+        - `[[log N]]` / `[[game N]]`.
+      - The heaviest tests are here:
+        - every kind of block;
+        - a broken PGN, shown as code with the reason;
+        - an illegal run in a sentence, left as text;
+        - variations within variations;
+        - Unicode;
+        - a note with no chess at all.
+- [ ] **19.3** The tab: the list, Writing and Reading.
+      - Routes:
+        - `GET /notes?q=&tag=`;
+        - `POST /notes`;
+        - `GET /notes/{id}`;
+        - `PATCH /notes/{id}` (text, pinned), which answers with the parsed tree;
+        - `DELETE /notes/{id}`, asked in the page first.
+      - `same_origin` on every route that changes something.
+      - `web/view.js` and `view.css` (`journal-*` classes plus the shared ones):
+        - the list, with search, tags and pins;
+        - Writing mode: the save line, a pasted PGN or FEN wrapped in its own block, the
+          shortcuts;
+        - Reading mode: the serif text, the pinned board, variations indented;
+        - the quick switcher.
+- [ ] **19.4** Boards that write.
+      - `POST /board`: a FEN and moves in; the position, the SAN and the legal moves out.
+      - The insert-from-board panel in Writing mode.
+      - On the reading board:
+        - Copy FEN;
+        - Copy PGN up to here;
+        - Continue here: play on, then copy it or insert it as a variation.
+      - `POST /analyse`: `host.engine()`, one at a time, the depth from settings, only when
+        you press Analyse.
+- [ ] **19.5** History, export and docs.
+      - History: the snapshots, a preview, and bring one back (the current text is kept as
+        a snapshot first).
+      - Export: `.md` files, with PGN and FEN blocks as written and tags kept. A folder from
+        the CLI, or a `.zip` from the page.
+      - Docs: README, `extensions/journal/README.md`, CLAUDE.md §4 and §15 (the fifth
+        extension).
+- **Tests:**
+  - the parser, as in 19.2;
+  - the routes with a temp `journal.db`: create, read, update, delete, search and tags, a
+    403 for another `Origin`, and a `[[log N]]` that no longer exists ("entry not found");
+  - when snapshots are taken, and that only 30 are kept;
+  - export gives back the text as written;
+  - `/board` legality, and `/analyse` with a stub engine;
+  - `webcheck.problems` and `ext.boundary_problems`.
+
+  No test touches the network.
+- **By hand, in Chrome against scratch data:**
+  - a long note: autosave, switching modes, smooth typing at 5,000 words;
+  - a pasted Lichess PGN, played through its variations with ← →;
+  - a move in a sentence, clicked;
+  - a FEN with arrows;
+  - insert from the board, Continue here, Analyse;
+  - search, tags, pins, the quick switcher, a history restore, an export;
+  - 390 px, the keyboard only, no console errors.
+
+### M20 Cost, not count (planned, not started)
+
+Planned on 2026-11-20 from an idea you picked earlier ("Cost, not count", recommended). It's
+second in the order of work. Patterns counts blunders per cause. Each entry already
+stores its swing: the share of the game's result it cost you (0..1, §2). So adding the
+swings up gives what each cause cost, in game points. "Points per 10 games" puts every
+cause on the same scale, so a rare but expensive cause stands out.
+
+- [ ] **20.1** The sums (`core/patterns.py`, pure).
+      - Cost per cause: confirmed, plus suggested for entries with no confirmed cause,
+        kept apart as today.
+      - Cost per time control and per opening (ECO and name).
+      - The games behind each figure, so a cost can be shown per 10 games.
+      - The biggest leak by cost, next to the one by count.
+      - Missed wins count with their own swing, which is small by design.
+      - Tests with hand-made entries.
+- [ ] **20.2** The page.
+      - A "Count | Cost" switch on the Patterns view. The bars stay solid for confirmed and
+        striped for suggested.
+      - A top-openings list by cost.
+      - The insight line names the most expensive cause when it isn't the most common one.
+      - The links to the Log keep working.
+      - `/api/patterns` fields, the schemas, `tests/test_web.py`, README, CLAUDE.md §7.9
+        and §11.
+- **To settle when it starts:** what "games" means for a cost per 10 games, either every
+  game you imported or only the games of that speed or opening. Also, whether FEN entries
+  (no game) count.
+
 ## Development notes
 
 ```sh
@@ -2036,3 +2228,36 @@ None open.
   - **Mine, for you to overrule:** the facts move from `core/explain.py` into a shared
     `core/facts.py` so the Log and the Collection say the same things the same way; AI
     reaches the extension through two new host functions, never `ai.py` itself.
+- **2026-11-19: Journal, an extension for chess notes (M19, planned).** Asked for: a minimal,
+  very fast chess journal, like a blog for yourself, with smooth writing and PGN and FEN
+  that play in reading mode. Your answers:
+  - **Writing:** Markdown in a plain, fast editor, with Writing and Reading modes and one key
+    to switch.
+  - **Chess in notes:** PGN blocks, FEN diagrams, moves in sentences, arrows and highlights.
+  - **The board:** one board that follows you, pinned beside the text.
+  - **Organising:** tags, fast search and pinned notes. There's no dated-journal list.
+  - **Type:** mono to write, serif to read.
+  - **Getting moves in:** paste PGN or FEN, play on a board to insert, copy from the reading
+    board, and link to your Log.
+  - **Engine:** only when you press Analyse.
+  - **Storage:** `journal.db`, plus a Markdown export.
+  - **Variations:** playable, indented.
+  - **History:** autosave, plus the last 30 versions.
+  - **Keyboard:** the full keyboard and a quick switcher.
+  - **A working prototype first**, before any code.
+  - **Speed over the stack.** You allowed another language as long as it's well integrated
+    and blocks neither packaging (M15) nor other extensions. After measuring, you chose
+    Python only, with each block's parse cached, and a plain textarea with no syntax
+    colours.
+- **2026-11-20: The order of work for the planned milestones.** Asked for: an order for
+  the plans written so far. My proposal, accepted:
+  - **M19 Journal first:** no core change, used daily, prototype fresh.
+  - **M20 Cost, not count next:** a small core change, useful at once, a break between two
+    big milestones.
+  - **M18 Game commentary third:** its core changes (`core/facts.py`, `host.ask_ai`) land
+    before the desktop build, so the first build ships the final host API.
+  - **M15 Desktop app last:** it packages everything, and it's the biggest and riskiest.
+  - **A packaging test first (15.0):** the plan's own risk is a frozen Python 3.15 app, so a
+    throwaway build is tried before 15.1 to 15.4 rely on it.
+  - **Swaps you can make:** M18 before M19 if studying games matters more than notes. M15
+    first, still opening with 15.0, if a download for others is wanted soon.
