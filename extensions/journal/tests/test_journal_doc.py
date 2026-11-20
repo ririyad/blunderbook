@@ -465,3 +465,10 @@ def test_a_tree_from_an_older_parser_is_made_again(db: sqlite3.Connection) -> No
     assert store.document(db, note.id) == doc.parse("1. e4 e5")
     kept = db.execute("SELECT doc_version FROM notes WHERE id = ?", (note.id,)).fetchone()[0]
     assert kept == doc.DOC_VERSION
+
+
+def test_where_each_block_is() -> None:
+    game = f"{FENCE}pgn\n1. e4\n{FENCE}"
+    body = f"# Title\n\n{game}\n\nText\n\n{FENCE}fen\n8/8/8/8/8/8/8/K6k w\n\n{FENCE}"
+    assert doc.sources(body) == {1: (3, 4), 3: (9, 11)}
+    assert doc.sources("No blocks") == {}

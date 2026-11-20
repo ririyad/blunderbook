@@ -5,9 +5,15 @@
 // A pasted game (PGN headers, or moves on a line of their own) or position (a FEN on a line
 // of its own) goes into its own ```pgn / ```fen block. Ctrl/Cmd+B and Ctrl/Cmd+I make the
 // selection bold or italic.
+//
+// "Insert from a board" (19.4): play moves on a board, from the usual start, a diagram in
+// the note or the end of one of its games, and put them in the text at the cursor: as moves
+// in a sentence, as a ```pgn block, or the position as a ```fen block.
 
 import { api } from "/js/api.js";
 import { plural } from "/js/format.js";
+import { toast } from "/js/ui.js";
+import { player } from "./play.js";
 
 const API = "/api/ext/journal/notes";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -28,6 +34,9 @@ let unsaved = null; // text not sent yet, or null
 let saving = Promise.resolve();
 let timer = 0;
 let failure = ""; // why the last save didn't work, or ""
+let tree = null; // the note's tree as last saved, for the board's starting positions
+let board = null; // the insert-from-board player, once it's opened
+const STANDARD = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,11 +58,45 @@ export function open(body, panel, note, opts) {
       <span>\`\`\`pgn … \`\`\`</span><span>\`\`\`fen … \`\`\`</span><span>#tag</span>
       <span>[[log 12]] · [[game 40]]</span><span>${MOD}E reads</span>
     </p>`;
-  panel.innerHTML = `<div class="panel journal-hint">
+  tree = note ? note.doc : null;
+  board = null;
+  panel.innerHTML = `<div class="journal-insert">
+      <button class="journal-toggle" type="button" id="jwToggle" aria-expanded="false" aria-controls="jwBox">
+        <span>Insert from a board</span><span aria-hidden="true" id="jwChevron">+</span>
+      </button>
+      <div class="panel journal-insertbox" id="jwBox" hidden>
+        <label class="journal-from">Start from <select id="jwFrom"></select></label>
+        <div class="board" id="jwBoard"></div>
+        <p class="journal-mono" id="jwLine" aria-live="polite"></p>
+        <div class="journal-tools">
+          <button class="btn primary" type="button" id="jwMoves">Insert moves</button>
+          <button class="btn ghost" type="button" id="jwPgn">As a PGN block</button>
+          <button class="btn ghost" type="button" id="jwFen">This position</button>
+        </div>
+        <div class="journal-tools">
+          <button class="btn ghost" type="button" id="jwUndo">Take back</button>
+          <button class="btn ghost" type="button" id="jwReset">Start again</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel journal-hint">
       <strong>Writing is plain text, on purpose</strong>
       <p>Nothing is drawn while you type, so a long note stays smooth. It's saved when you pause.</p>
       <p>Read (${MOD}E) turns the blocks into boards. Moves in a sentence, like 6. Nxd5??, play from the game or diagram nearest them.</p>
     </div>`;
+  $("jwToggle").addEventListener("click", toggleBoard);
+  $("jwFrom").addEventListener("change", () => board.reset($("jwFrom").value));
+  $("jwUndo").addEventListener("click", () => board.takeBack());
+  $("jwReset").addEventListener("click", () => board.reset($("jwFrom").value));
+  $("jwMoves").addEventListener("click", () => insertMoves(board.state.line));
+  $("jwPgn").addEventListener("click", () => {
+    insertBlock("pgn", board.state.pgn);
+    toast("The moves are in your note, as a PGN block.");
+  });
+  $("jwFen").addEventListener("click", () => {
+    insertBlock("fen", board.fen);
+    toast("The position is in your note, as a FEN block.");
+  });
   area = $("jwText");
   area.value = note ? note.body : "";
   area.addEventListener("input", changed);
@@ -103,6 +146,7 @@ function flush() {
       id = note.id;
       failure = "";
       if (created) hooks.created(note);
+      tree = note.doc;
       hooks.saved(note);
       if (unsaved === null) status("Saved · " + words(body));
     } catch (err) {
@@ -187,6 +231,82 @@ export function blockFor(pasted, before) {
 
 const insideBlock = (before) => ((before.match(/^\s{0,3}```/gm) || []).length % 2) === 1;
 
+// ---------------------------------------------------------------- insert from a board
+
+const short = (text) => (text.length > 40 ? text.slice(0, 40).replace(/\s+\S*$/, "") + "\u2026" : text);
+
+/** The positions the board can start from: the usual start, each diagram, and the end of
+ *  each game's main line, from the note as last saved. */
+function starts() {
+  const found = [{ label: "The starting position", fen: STANDARD }];
+  if (!tree) return found;
+  let diagrams = 0, games = 0;
+  for (const block of tree.blocks) {
+    if (block.t === "fen" && block.playable) {
+      diagrams += 1;
+      found.push({ label: `Diagram ${diagrams}` + (block.caption ? `: ${short(block.caption)}` : ""), fen: tree.starts[block.start] });
+    } else if (block.t === "pgn") {
+      games += 1;
+      const main = block.items.filter((item) => "move" in item);
+      const last = main.length ? tree.moves.find((m) => m.id === main[main.length - 1].move) : null;
+      found.push({ label: `The end of game ${games}`, fen: last ? last.fen : tree.starts[block.start] });
+    }
+  }
+  return found;
+}
+
+async function toggleBoard() {
+  const open = $("jwBox").hidden;
+  $("jwBox").hidden = !open;
+  $("jwToggle").setAttribute("aria-expanded", String(open));
+  $("jwChevron").textContent = open ? "\u2212" : "+";
+  if (!open) return;
+  const select = $("jwFrom");
+  const kept = select.value;
+  select.replaceChildren();
+  for (const start of starts()) {
+    const option = document.createElement("option");
+    option.value = start.fen;
+    option.textContent = start.label;
+    select.append(option);
+  }
+  if ([...select.options].some((o) => o.value === kept)) select.value = kept;
+  if (!board) {
+    board = player({
+      board: $("jwBoard"),
+      orient: () => (board && board.state && board.state.start.split(" ")[1] === "b" ? "black" : "white"),
+      changed: boardChanged,
+      failed: (message) => toast("That move can't be played: " + message),
+    });
+    await board.reset(select.value);
+  } else if (board.state && board.state.start !== select.value && !board.state.moves.length) {
+    await board.reset(select.value);
+  }
+}
+
+function boardChanged() {
+  const { state } = board;
+  const side = state.fen.split(" ")[1] === "w" ? "White" : "Black";
+  $("jwLine").textContent = state.moves.length
+    ? state.line + (state.over ? ` (${state.over.toLowerCase()})` : "")
+    : `${side} to move. Tap a piece, then a square.`;
+  $("jwMoves").disabled = $("jwPgn").disabled = $("jwUndo").disabled = !state.moves.length;
+}
+
+/** Moves at the cursor, in the sentence you're writing. */
+function insertMoves(text) {
+  const before = area.value.slice(0, area.selectionStart);
+  insert((before && !/\s$/.test(before) ? " " : "") + text);
+  toast("The moves are in your note.");
+}
+
+/** A ``` block at the cursor, on lines of its own. */
+function insertBlock(kind, text) {
+  const before = area.value.slice(0, area.selectionStart);
+  const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  insert(`${lead}${FENCE}${kind}\n${text.trim()}\n${FENCE}\n`);
+}
+
 function pasted(ev) {
   const text = ev.clipboardData && ev.clipboardData.getData("text/plain");
   if (!text) return;
@@ -194,8 +314,7 @@ function pasted(ev) {
   const kind = blockFor(text, before);
   if (!kind) return;
   ev.preventDefault();
-  const lead = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-  insert(`${lead}${FENCE}${kind}\n${text.trim()}\n${FENCE}\n`);
+  insertBlock(kind, text);
   $("jwPasted").textContent = kind === "pgn"
     ? `The pasted game is in a \`\`\`pgn block. Read (${MOD}E) plays it.`
     : `The pasted position is in a \`\`\`fen block. Read (${MOD}E) shows it.`;

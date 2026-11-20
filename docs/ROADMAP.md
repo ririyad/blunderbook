@@ -28,7 +28,7 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
-| M19 Journal | In progress (3/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M19 Journal | In progress (4/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
 **Order of work** (decided 2026-11-20, see Decided):
@@ -40,10 +40,12 @@ _Last updated: 2026-11-16_
 
 The milestone numbers stay as they are; only the order changes.
 
-**Next up:** 19.4, boards that write: insert moves from a board while writing, Copy FEN,
-Copy PGN up to here, Continue here and Analyse. 19.1 to 19.3 are done: the `journal`
-extension, `journal.db` and its commands, the note parser, and the tab (the list, Writing,
-Reading with the board that follows you, and the quick switcher). M17, the Profile extension,
+**Next up:** 19.5, history, export and docs: a note's snapshots (preview, bring one back),
+`.md` export from the CLI and a `.zip` from the page, and the docs. 19.1 to 19.4 are done:
+the `journal` extension, `journal.db` and its commands, the note parser, the tab (the list,
+Writing, Reading with the board that follows you, and the quick switcher), and boards that
+write (insert from a board, Copy FEN and PGN, Continue here with Insert as a variation, and
+Analyse). Still to check from 19.4: the reading board's tools at 390 px. M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1803,7 +1805,7 @@ build step), and CodeMirror (a bundle built outside the app).
           are taken off (`notes.plain`).
         - Three columns from 1180 px; under it an open note hides the list ("← All
           notes"); under 860 px one column, with the board above the text when reading.
-- [ ] **19.4** Boards that write.
+- [x] **19.4** Boards that write.
       - `POST /board`: a FEN and moves in; the position, the SAN and the legal moves out.
       - The insert-from-board panel in Writing mode.
       - On the reading board:
@@ -1812,6 +1814,29 @@ build step), and CodeMirror (a bundle built outside the app).
         - Continue here: play on, then copy it or insert it as a variation.
       - `POST /analyse`: `host.engine()`, one at a time, the depth from settings, only when
         you press Analyse.
+      - **As built:**
+        - `web/play.js` is the board you play on, shared by Writing and Reading: tap a
+          piece, then a square; the server checks each move. A pawn on the last rank
+          becomes a queen, as in Re-test.
+        - `POST /board` changes nothing but is `same_origin` like every route that isn't
+          a GET; at most 600 moves.
+        - Insert as a variation: `POST /notes/{id}/lines` with the PGN block, the move
+          the line goes on from (or its start) and the moves. The server writes the line
+          into that block's PGN (python-chess's exporter, `??` and `!` kept as typed,
+          headers kept as written) and saves the note like an edit, so the text before
+          is a version. It follows the game's own moves where the line agrees with them,
+          and a line from the game's last move continues the game. A line the game has
+          already is a 409, and nothing changes. Offered only when the board shows a
+          move written in a PGN block, or a block's start.
+        - Analyse: `POST /analyse`, three lines at your `engine_depth`, a green arrow for
+          the best move, kept while that position is shown. One at a time (a 409 says
+          Stockfish is busy); no Stockfish is a 503 with the reason. A finished game
+          isn't sent to the engine.
+        - Insert from a board starts from the usual position, a diagram in the note or
+          the end of one of its games (as last saved). It inserts the moves at the
+          cursor, a ```pgn block, or the position as a ```fen block.
+        - `.btn.primary:disabled` in app.css keeps its label readable: a disabled
+          primary button (Import's "Importing…" too) showed white on white.
 - [ ] **19.5** History, export and docs.
       - History: the snapshots, a preview, and bring one back (the current text is kept as
         a snapshot first).

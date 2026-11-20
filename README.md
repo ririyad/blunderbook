@@ -518,6 +518,10 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   board beside it: click any move, in a ```` ```pgn ```` game, a ```` ```fen ```` diagram
   or a sentence ("after 6. Nxd5?? Nxd5"), and the board shows it. ← → go on in that line.
   `[[log 12]]` and `[[game 40]]` link to your Log.
+- Under the reading board: Copy FEN, Copy PGN up to here, **Continue here** (play on, then
+  copy your line or insert it into the game as a variation) and **Analyse** (your
+  Stockfish's three best lines, only when you press it). While writing, **Insert from a
+  board** puts moves you play at the cursor, or a PGN or FEN block.
 - Keys: Ctrl/Cmd+K finds a note, Ctrl/Cmd+E switches between writing and reading,
   Ctrl/Cmd+B and Ctrl/Cmd+I make text bold or italic, Esc goes back to the list and `n`
   starts a note. A game or position you paste goes into its own block.

@@ -1,6 +1,6 @@
 """The chess in a note (ROADMAP 19.2), read with python-chess: ```pgn and ```fen blocks, the
 arrows and highlights in them, and runs of moves typed in a sentence ("after 5. cxd5 exd5
-6. Nxd5??"). Pure: text in, positions out.
+6. Nxd5??"), and the boards you play on (ROADMAP 19.4). Pure: text in, positions out.
 
 A block's reading is cached by its text, so saving a long note again re-reads only the
 blocks that changed. Named ``moves`` rather than ``chess``, which would read like
@@ -283,6 +283,7 @@ class _Walk:
 
     def __init__(self) -> None:
         self.moves: list[Move] = []
+        self.nodes: list[chess.pgn.ChildNode] = []  # each move's node, by its index
 
     def line(
         self, parent: chess.pgn.GameNode, board: chess.Board, prev: int | None
@@ -336,6 +337,7 @@ class _Walk:
         nag = next((NAGS[n] for n in sorted(node.nags) if n in NAGS), "")
         index = len(self.moves)
         self.moves.append(Move(san, move.uci(), fen, no, white, prev, None, nag, found))
+        self.nodes.append(node)
         if prev is not None and node.parent.variations[0] is node:
             self.moves[prev] = replace(self.moves[prev], next=index)
         return index
@@ -373,3 +375,163 @@ def legal_line(fen: str, typed: Sequence[Typed]) -> list[Played] | None:
         played.append(move)
         fen = move.fen
     return played
+
+
+# ---------------------------------------------------------------- boards you play on (19.4)
+
+
+class BoardError(ValueError):
+    """A position or a move that can't be played, with a plain message."""
+
+
+@dataclass(frozen=True, slots=True)
+class Position:
+    """Moves played from a FEN: each one, where they end, and what can be played next."""
+
+    start: str
+    moves: tuple[Played, ...]
+    fen: str
+    legal: tuple[str, ...]  # UCI, every promotion spelled out ("e7e8q", "e7e8n", ...)
+    line: str  # "6. e3 Be7 7. Bd3", "6... Be7"; "" with no moves
+    pgn: str  # the line as a PGN game, with the start position when it isn't the usual one
+    over: str  # "Checkmate", "Stalemate", "Insufficient material" or ""
+
+
+def board_at(fen: str) -> chess.Board:
+    """The position of a FEN, if it can be played. Raises BoardError."""
+    try:
+        board = chess.Board(fen)
+    except ValueError:
+        raise BoardError(f"Couldn't read the FEN '{_short(fen.strip())}'.") from None
+    if not board.is_valid():
+        raise BoardError("This isn't a legal position, so it can't be played.")
+    return board
+
+
+def position(fen: str, ucis: Sequence[str]) -> Position:
+    """Play ``ucis`` from ``fen``. Raises BoardError for a FEN that can't be played or a
+    move that isn't legal, naming it."""
+    board = board_at(fen)
+    start = board.fen()
+    played: list[Played] = []
+    for uci in ucis:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            raise BoardError(f"Couldn't read the move '{_short(uci, 12)}'.") from None
+        if move not in board.legal_moves:
+            raise BoardError(f"{uci} isn't legal there{_after(played)}.")
+        no, white = board.fullmove_number, board.turn == chess.WHITE
+        san = board.san(move)
+        board.push(move)
+        played.append(Played(san=san, uci=uci, fen=board.fen(), no=no, white=white))
+    line = written(played)
+    headers = "" if start == chess.STARTING_FEN else f'[SetUp "1"]\n[FEN "{start}"]\n\n'
+    outcome = board.outcome(claim_draw=False)
+    over = "" if outcome is None else outcome.termination.name.replace("_", " ").capitalize()
+    result = outcome.result() if outcome is not None else "*"
+    return Position(
+        start=start,
+        moves=tuple(played),
+        fen=board.fen(),
+        legal=tuple(sorted(m.uci() for m in board.legal_moves)),
+        line=line,
+        pgn=f"{headers}{line} {result}".lstrip(),
+        over=over,
+    )
+
+
+def written(played: Sequence[Played]) -> str:
+    """Moves as you'd write them: "6. e3 Be7 7. Bd3", or "6... Be7 7. Bd3"."""
+    parts: list[str] = []
+    for i, move in enumerate(played):
+        if move.white:
+            parts.append(f"{move.no}. {move.san}")
+        elif i == 0:
+            parts.append(f"{move.no}... {move.san}")
+        else:
+            parts.append(move.san)
+    return " ".join(parts)
+
+
+def _after(played: Sequence[Played]) -> str:
+    if not played:
+        return ""
+    last = played[-1]
+    return f" (after {last.no}{'.' if last.white else '...'} {last.san})"
+
+
+def san_line(fen: str, ucis: Sequence[str], limit: int = 10) -> str:
+    """An engine line as you'd write it, up to ``limit`` moves; it stops at a move that
+    isn't legal."""
+    board = chess.Board(fen)
+    played: list[Played] = []
+    for uci in ucis[:limit]:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if move not in board.legal_moves:
+            break
+        no, white = board.fullmove_number, board.turn == chess.WHITE
+        san = board.san(move)
+        board.push(move)
+        played.append(Played(san=san, uci=uci, fen=board.fen(), no=no, white=white))
+    return written(played)
+
+
+_HEADER_LINE: Final = re.compile(r'^\s*(?:\[\s*\w+\s+"(?:[^"\\]|\\.)*"\s*\]\s*)+$')
+_NAG_OUT: Final = re.compile(r"\s+\$([1-6])(?!\d)")
+_INSIDE: Final = re.compile(r"([({])[ \t]+|[ \t]+([)}])")  # "( 6. e3" -> "(6. e3"
+_SPLIT_NUMBER: Final = re.compile(r" (\d+\.(?:\.\.)?)\n")  # "9.\nKxd2" -> "\n9. Kxd2"
+
+
+def with_line(text: str, after: int | None, ucis: Sequence[str]) -> str | None:
+    """A ```pgn block's text with a line added: played after move ``after`` (the block's
+    own numbering, as :func:`read_pgn` gives it), or from the start with None. Where the
+    game already has those moves, the line follows them; the rest becomes a variation (or
+    the line's continuation, at its end). None when nothing is new.
+
+    The headers stay as written; the moves are written out again by python-chess, with
+    your comments, arrows and marks. Raises BoardError when the block can't be read, has
+    more than one game, or a move isn't legal there."""
+    read = read_pgn(text)
+    if read.error:
+        raise BoardError(read.error)
+    if read.note:
+        raise BoardError("This block has more than one game, so the line can't go into it.")
+    handle = io.StringIO(_HEADERS_ON_ONE_LINE.sub('"]\n[', text))
+    game = chess.pgn.read_game(handle, Visitor=_Builder)
+    assert game is not None
+    walk = _Walk()
+    walk.line(game, game.board(), None)
+    if after is not None and not 0 <= after < len(walk.nodes):
+        raise BoardError("That move isn't in this game any more.")
+    node: chess.pgn.GameNode = game if after is None else walk.nodes[after]
+    board = node.board()
+    added = False
+    for uci in ucis:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            raise BoardError(f"Couldn't read the move '{_short(uci, 12)}'.") from None
+        if move not in board.legal_moves:
+            raise BoardError(f"{uci} isn't legal there.")
+        child = next((v for v in node.variations if v.move == move), None)
+        if child is None:
+            child = node.add_variation(move)
+            added = True
+        node = child
+        board.push(move)
+    if not added:
+        return None
+    lines = text.replace("\r\n", "\n").split("\n")
+    head = 0
+    while head < len(lines) and (not lines[head].strip() or _HEADER_LINE.match(lines[head])):
+        head += 1
+    headers = "\n".join(line for line in lines[:head] if line.strip())
+    exporter = chess.pgn.StringExporter(headers=False, variations=True, comments=True, columns=80)
+    movetext = _NAG_OUT.sub(lambda m: NAGS[int(m.group(1))], game.accept(exporter))
+    movetext = _INSIDE.sub(lambda m: m.group(1) or m.group(2), movetext)
+    movetext = _SPLIT_NUMBER.sub(lambda m: f"\n{m.group(1)} ", movetext)
+    return f"{headers}\n{movetext}" if headers else movetext

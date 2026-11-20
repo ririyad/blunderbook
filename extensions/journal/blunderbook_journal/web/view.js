@@ -157,9 +157,16 @@ async function openNote(id, wanted, mine) {
     write.open($("jBody"), $("jPanel"), note, writeHooks);
   } else {
     drawBar();
-    const chess = read.open($("jBody"), $("jPanel"), note, { onTag: pickTag });
+    const chess = read.open($("jBody"), $("jPanel"), note, { onTag: pickTag, onChanged: changedInReading });
     layout("read", chess);
   }
+}
+
+/** Reading mode changed the note (a line put into a game): keep it, and the list. */
+function changedInReading(saved) {
+  note = saved;
+  drawBar();
+  refreshList();
 }
 
 const writeHooks = {

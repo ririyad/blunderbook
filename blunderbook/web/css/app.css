@@ -57,6 +57,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:
 .btn.ghost{border-color:var(--line-strong)}
 .btn.ghost:hover{border-color:#a8a193}
 .btn:disabled,.btn:disabled:hover{opacity:.5;cursor:default;background:var(--panel)}
+.btn.primary:disabled,.btn.primary:disabled:hover{color:var(--ink)} /* white text on the panel would vanish */
 .btn.danger{color:var(--red)}
 .btn.danger:hover{background:var(--red-bg);border-color:#e3b4b0}
 select,textarea,input.text,.field input{font:inherit;color:var(--ink);border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#fff;transition:border-color .12s}

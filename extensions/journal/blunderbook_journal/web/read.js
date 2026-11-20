@@ -3,11 +3,22 @@
 // a game or in a sentence, and the board shows it; ← → go on in the line you're in, a
 // variation included. A diagram or a Log link puts its own position on the board.
 //
+// Under the board (19.4): Copy FEN, Copy PGN up to here, Continue here (play on from the
+// position shown, then copy your line or put it into the game as a variation) and Analyse
+// (Stockfish, only when you press it).
+//
 // The server worked out every position (blunderbook_journal/doc.py): no chess logic here.
 
+import { api } from "/js/api.js";
 import { renderBoard, sqIdx, uciSquares } from "/js/board.js";
-import { fmtDate, markPill, markText, outcome, statusPill, timeControl } from "/js/format.js";
+import { fmtDate, fmtEval, markPill, markText, outcome, statusPill, timeControl } from "/js/format.js";
 import { bindSteps, stepsHtml } from "/js/steps.js";
+import { toast } from "/js/ui.js";
+import { player } from "./play.js";
+
+const BOARD = "/api/ext/journal/board";
+const ANALYSE = "/api/ext/journal/analyse";
+const NOTES = "/api/ext/journal/notes";
 
 // Lichess's colour letters ([%cal Gc3d5]) as the board's arrows and highlights.
 const ARROWS = { R: "red", G: "green", B: "blue", Y: "amber" };
@@ -19,8 +30,12 @@ let refs = new Map(); // "log:12" -> the Log's answer
 let startInfo = new Map(); // start -> {where, orient, arrows, squares}
 let firstFrom = new Map(); // start -> the first move played from it
 let gameOf = new Map(); // move id -> the name of the PGN block it's written in
+let blockOf = new Map(); // move id -> the index of the PGN block it's written in
+let startBlock = new Map(); // a PGN block's start -> its block index
 let text = null; // the element the note is drawn in
 let onTag = () => {};
+let onChanged = () => {};
+let noteId = null;
 
 let line = []; // the positions the board steps through: [{fen, label, key, arrows, hl}]
 let at = 0;
@@ -28,6 +43,13 @@ let natural = "white"; // the side the board faces for what's on it
 let flipped = false;
 let steps = null;
 let lit = []; // the elements marked as on the board
+let explorer = null; // "Continue here": {base, play} while you play on from a position
+let analysis = null; // the last answer from Analyse, for the position it was asked about
+let analysing = false;
+let analysisError = null; // {fen, message} when Analyse didn't work
+let bodyEl = null;
+let panelEl = null;
+let hooksRef = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -50,20 +72,35 @@ function button(cls, content, act) {
 export function open(body, panel, note, hooks) {
   tree = note.doc;
   onTag = hooks.onTag;
+  onChanged = hooks.onChanged;
+  [bodyEl, panelEl, hooksRef] = [body, panel, hooks];
+  noteId = note.id;
+  explorer = null;
+  analysis = null;
+  analysisError = null;
   byId = new Map(tree.moves.map((m) => [m.id, m]));
   refs = new Map(note.refs.map((r) => [`${r.kind}:${r.id}`, r]));
   firstFrom = new Map();
   for (const m of tree.moves) if (m.prev === null && !firstFrom.has(m.start)) firstFrom.set(m.start, m.id);
   startInfo = new Map();
   gameOf = new Map();
-  const written = (list, name) => {
+  blockOf = new Map();
+  startBlock = new Map();
+  const written = (list, name, index) => {
     for (const item of list) {
-      if ("move" in item) gameOf.set(item.move, name);
-      else if ("line" in item) written(item.line, name);
+      if ("move" in item) {
+        gameOf.set(item.move, name);
+        blockOf.set(item.move, index);
+      } else if ("line" in item) written(item.line, name, index);
     }
   };
+  tree.blocks.forEach((block, index) => {
+    if (block.t === "pgn") {
+      written(block.items, gameName(block.headers), index);
+      startBlock.set(block.start, index);
+    }
+  });
   for (const block of tree.blocks) {
-    if (block.t === "pgn") written(block.items, gameName(block.headers));
     if (block.t === "pgn") startInfo.set(block.start, { where: gameName(block.headers), orient: "white", arrows: [], squares: [] });
     if (block.t === "fen") startInfo.set(block.start, { where: "Diagram", orient: toMove(tree.starts[block.start]), arrows: block.arrows, squares: block.squares });
   }
@@ -86,10 +123,45 @@ export function open(body, panel, note, hooks) {
       ${stepsHtml("jr", { first: "Start of the line", last: "End of the line" })}
       <p class="small journal-where" id="jrWhere"></p>
       <div class="journal-refinfo" id="jrRef" hidden></div>
-      <div class="journal-tools"><button class="btn ghost" type="button" id="jrFlip">Flip the board</button></div>
+      <div class="journal-explore" id="jrExplore" hidden>
+        <p class="journal-exploreline" id="jrLine" aria-live="polite"></p>
+        <div class="journal-tools">
+          <button class="btn ghost" type="button" id="jrBack">Take back</button>
+          <button class="btn ghost" type="button" id="jrCopyLine">Copy line</button>
+          <button class="btn primary" type="button" id="jrInsert">Insert as a variation</button>
+          <button class="btn ghost" type="button" id="jrDone">Back to the note</button>
+        </div>
+      </div>
+      <div class="journal-tools">
+        <button class="btn ghost" type="button" id="jrFen">Copy FEN</button>
+        <button class="btn ghost" type="button" id="jrPgn">Copy PGN up to here</button>
+        <button class="btn ghost" type="button" id="jrContinue">Continue here</button>
+        <button class="btn ghost" type="button" id="jrAnalyse">Analyse</button>
+        <button class="btn ghost" type="button" id="jrFlip">Flip the board</button>
+      </div>
+      <div class="journal-analysis" id="jrAnalysis" aria-live="polite" hidden></div>
     </div>`;
-  steps = bindSteps("jr", { last: () => line.length - 1, get: () => at, set: (to) => { at = to; draw(); } });
-  $("jrFlip").addEventListener("click", () => { flipped = !flipped; draw(); });
+  steps = bindSteps("jr", {
+    last: () => (explorer ? explorer.play.state.moves.length : line.length - 1),
+    get: () => (explorer ? explorer.play.at : at),
+    set: (to) => {
+      if (explorer) explorer.play.go(to);
+      else { at = to; draw(); }
+    },
+  });
+  $("jrFlip").addEventListener("click", () => {
+    flipped = !flipped;
+    if (explorer) explorer.play.draw();
+    else draw();
+  });
+  $("jrFen").addEventListener("click", () => copy(shownFen(), "FEN"));
+  $("jrPgn").addEventListener("click", copyPgn);
+  $("jrContinue").addEventListener("click", explore);
+  $("jrAnalyse").addEventListener("click", analyse);
+  $("jrBack").addEventListener("click", () => explorer && explorer.play.takeBack());
+  $("jrCopyLine").addEventListener("click", () => explorer && copy(explorer.play.state.line, "Line"));
+  $("jrInsert").addEventListener("click", insertLine);
+  $("jrDone").addEventListener("click", () => stopExploring(true));
   if (tree.starts.length) pickStart(0, false);
   else pickRef(found[0], false);
   return true;
@@ -104,7 +176,7 @@ function position(m) {
   const hl = {};
   for (const sq of uciSquares(m.uci)) hl[sq] = "sel";
   for (const [sq, colour] of m.squares) hl[sqIdx(sq)] = SQUARES[colour] || "sel";
-  return { fen: m.fen, label: "After " + moveName(m), key: "m" + m.id, arrows: arrows(m.arrows), hl };
+  return { fen: m.fen, label: "After " + moveName(m), key: "m" + m.id, arrows: arrows(m.arrows), hl, uci: m.uci, move: m.id };
 }
 
 const arrows = (list) => list.map(([from, to, colour]) => ({ from: sqIdx(from), to: sqIdx(to), color: ARROWS[colour] || "red" }));
@@ -120,6 +192,7 @@ function startPosition(start) {
     key: isDiagram ? "s" + start : null,
     arrows: arrows(info ? info.arrows : []),
     hl,
+    start,
   };
 }
 
@@ -166,7 +239,7 @@ function pickRef(r, focus = true) {
       const name = `${number}${side === "white" ? "." : "..."} ${m.san}`;
       const hl = {};
       for (const sq of uciSquares(m.uci)) hl[sq] = "sel";
-      positions.push({ fen: m.fen, label: "After " + name, key, arrows: [], hl });
+      positions.push({ fen: m.fen, label: "After " + name, key, arrows: [], hl, uci: m.uci });
       if (side === "black") number += 1;
       side = side === "white" ? "black" : "white";
     }
@@ -182,6 +255,7 @@ function pickRef(r, focus = true) {
 }
 
 function setLine(positions, index, where, side) {
+  if (explorer) stopExploring(false);
   line = positions;
   at = index;
   natural = side;
@@ -192,13 +266,166 @@ function setLine(positions, index, where, side) {
   draw();
 }
 
+const orientNow = () => (flipped ? (natural === "white" ? "black" : "white") : natural);
+const shownFen = () => (explorer ? explorer.play.fen : line[at].fen);
+
 function draw() {
   const p = line[at];
-  const orient = flipped ? (natural === "white" ? "black" : "white") : natural;
-  renderBoard($("jrBoard"), p.fen, orient, { arrows: p.arrows, hl: p.hl, label: "Board: " + p.label });
+  const best = analysis && analysis.fen === p.fen && analysis.lines[0];
+  const shown = best ? [...p.arrows, { from: sqIdx(best.uci.slice(0, 2)), to: sqIdx(best.uci.slice(2, 4)), color: "green" }] : p.arrows;
+  renderBoard($("jrBoard"), p.fen, orientNow(), { arrows: shown, hl: p.hl, label: "Board: " + p.label });
   $("jrLabel").textContent = p.label;
   steps.sync();
   light(p.key);
+  drawAnalysis();
+}
+
+// ---------------------------------------------------------------- under the board (19.4)
+
+function copy(value, what) {
+  navigator.clipboard.writeText(value).then(
+    () => toast(`${what} copied.`),
+    (err) => toast(`Couldn't copy the ${what}: ${err.message}`),
+  );
+}
+
+/** The game up to the position shown, from the line's start, as PGN. */
+async function copyPgn() {
+  const upTo = explorer ? explorer.base : at;
+  const played = line.slice(1, upTo + 1).map((p) => p.uci).filter(Boolean);
+  const more = explorer ? explorer.play.played : [];
+  try {
+    const answer = await api(BOARD, { method: "POST", body: { fen: line[0].fen, moves: [...played, ...more] } });
+    copy(answer.pgn, "PGN");
+  } catch (err) {
+    toast("Couldn't make the PGN: " + err.message);
+  }
+}
+
+/** Where a line played from this position can go in the note: after a move written in a
+ *  PGN block, or from a PGN block's start. null anywhere else (a diagram, a sentence that
+ *  goes past its game, a Log link). */
+function target(p) {
+  if (p.move !== undefined && blockOf.has(p.move)) return { block: blockOf.get(p.move), after: p.move };
+  if (p.start !== undefined && startBlock.has(p.start)) return { block: startBlock.get(p.start), after: null };
+  return null;
+}
+
+/** "Continue here": play on from the position shown, on the same board. */
+async function explore() {
+  if (explorer) return;
+  const play = player({
+    board: $("jrBoard"),
+    orient: orientNow,
+    changed: explored,
+    failed: (message) => toast("That move can't be played: " + message),
+  });
+  explorer = { base: at, play, to: target(line[at]) };
+  $("jrExplore").hidden = false;
+  $("jrContinue").disabled = true;
+  $("jrInsert").hidden = !explorer.to;
+  await play.reset(line[at].fen);
+  $("jrBoard").querySelector("button")?.focus();
+}
+
+function explored() {
+  if (!explorer) return;
+  const { state, at: shown } = explorer.play;
+  const last = state.moves[shown - 1];
+  $("jrLine").textContent = state.moves.length
+    ? "Your line: " + state.line + (state.over ? ` (${state.over.toLowerCase()})` : "")
+    : "Play on from here: tap a piece, then a square.";
+  $("jrLabel").textContent = last ? `After ${last.no}${last.white ? "." : "..."} ${last.san}` : line[explorer.base].label;
+  $("jrBack").disabled = shown === 0;
+  $("jrCopyLine").disabled = $("jrInsert").disabled = !state.moves.length;
+  steps.sync();
+  drawAnalysis();
+}
+
+function stopExploring(redraw) {
+  explorer = null;
+  $("jrExplore").hidden = true;
+  $("jrContinue").disabled = false;
+  if (redraw) {
+    draw();
+    $("jrContinue").focus();
+  }
+}
+
+/** Put the line you played into its game, as a variation, and show it. */
+async function insertLine() {
+  const { to, play } = explorer;
+  const moves = play.state.moves.map((m) => m.uci);
+  const lastFen = play.state.fen;
+  $("jrInsert").disabled = true;
+  let note;
+  try {
+    note = await api(`${NOTES}/${noteId}/lines`, { method: "POST", body: { block: to.block, after: to.after, moves } });
+  } catch (err) {
+    toast("Not inserted: " + err.message);
+    $("jrInsert").disabled = false;
+    return;
+  }
+  onChanged(note);
+  open(bodyEl, panelEl, note, hooksRef);
+  const end = note.doc.moves.find((m) => m.fen === lastFen && blockOf.get(m.id) === to.block);
+  if (end) pickMove(end.id);
+  toast("Your line is in the game now.");
+}
+
+async function analyse() {
+  if (analysing) return;
+  const fen = shownFen();
+  const button = $("jrAnalyse");
+  analysing = true;
+  button.disabled = true;
+  button.textContent = "Analysing\u2026";
+  const box = $("jrAnalysis");
+  box.hidden = false;
+  box.replaceChildren(el("p", "small", "Stockfish is looking at this position\u2026"));
+  analysisError = null;
+  try {
+    analysis = await api(ANALYSE, { method: "POST", body: { fen } });
+  } catch (err) {
+    analysis = null;
+    analysisError = { fen, message: err.message };
+  } finally {
+    analysing = false;
+    button.disabled = false;
+    button.textContent = "Analyse";
+  }
+  if (explorer) drawAnalysis();
+  else draw();
+}
+
+/** Stockfish's lines, under the board while the position they're for is shown. */
+function drawAnalysis() {
+  if (analysing) return;
+  const box = $("jrAnalysis");
+  const fen = shownFen();
+  box.replaceChildren();
+  if (analysisError && analysisError.fen === fen) {
+    box.hidden = false;
+    box.append(el("p", "journal-error", analysisError.message));
+    return;
+  }
+  if (!analysis || analysis.fen !== fen) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  if (analysis.over) {
+    box.append(el("p", "small", `${analysis.over}: there's nothing to analyse.`));
+    return;
+  }
+  box.append(el("p", "small", `${analysis.engine} \u00b7 depth ${analysis.depth} \u00b7 the green arrow is its best move`));
+  const list = el("ol", "journal-lines");
+  for (const engineLine of analysis.lines) {
+    const li = el("li");
+    li.append(el("strong", "journal-eval", fmtEval(engineLine.eval)), " " + engineLine.line);
+    list.append(li);
+  }
+  box.append(list);
 }
 
 /** Mark what's on the board in the text: the move (in a game and in each sentence that

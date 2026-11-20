@@ -156,3 +156,20 @@
   .journal-find,.journal-tagchip,.journal-modes a,.journal-modes span,.journal-option{min-height:44px;display:inline-flex;align-items:center}
   .journal-find{display:flex}
 }
+
+/* under the reading board (19.4): play on from here, and Stockfish's lines */
+.journal-explore{display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--blue-bg);border-radius:10px;font-size:13px}
+.journal-exploreline{margin:0;font:13.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.journal-analysis{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:13px}
+.journal-analysis p{margin:0}
+.journal-lines{margin:6px 0 0;padding-left:1.3em;font:13px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.journal-eval{display:inline-block;min-width:4.2em;font-variant-numeric:tabular-nums}
+
+/* insert from a board, beside the text box */
+.journal-insert{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
+.journal-toggle{display:flex;justify-content:space-between;align-items:center;min-height:40px;padding:0 14px;border:1px solid var(--line-strong);border-radius:10px;background:var(--panel);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.journal-toggle:hover{background:var(--hover)}
+.journal-insertbox{display:flex;flex-direction:column;gap:10px;padding:14px}
+.journal-from{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.journal-from select{font:inherit;font-size:13.5px;font-weight:400;color:var(--ink);min-height:34px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--panel);padding:0 8px}
+.journal-mono{margin:0;min-height:22px;font:13.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace}

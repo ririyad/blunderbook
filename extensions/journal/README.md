@@ -1,7 +1,7 @@
 # Blunderbook Journal
 
 A [Blunderbook](../../README.md) extension: fast chess notes in Markdown, kept like a blog
-for yourself. It never goes online.
+for yourself. It never goes online. Analyse uses your own Stockfish, only when you press it.
 
 ## Turn it on
 
@@ -17,9 +17,24 @@ blunderbook ext install journal
   line says so. A game (PGN headers, or a line of numbered moves) or a FEN you paste on a
   line of its own goes into its own block. Ctrl/Cmd+B and Ctrl/Cmd+I make the selection
   bold or italic.
+- **Insert from a board** (beside the text box while writing): play moves on a board, from
+  the usual start, a diagram in the note or the end of one of its games. **Insert moves**
+  puts them at the cursor, for a sentence; **As a PGN block** and **This position** (a
+  ```` ```fen ```` block) put them on lines of their own. Tap a piece, then a square; a
+  pawn on the last rank becomes a queen.
 - **Reading:** the note in a book typeface, with the board beside it (above it on a
   phone). Click a move, a diagram or a Log link and the board shows it; ← → Home End step
   through the line you're in, a variation included. "Flip the board" turns it round.
+- **Under the reading board:**
+  - **Copy FEN** copies the position shown; **Copy PGN up to here**, the moves from the
+    line's start to it.
+  - **Continue here** lets you play on from the position shown. Then **Copy line**, or
+    **Insert as a variation**, which writes your line into the game's PGN block (when the
+    board shows a game's move or its start) and saves the note, keeping the text before
+    as a version. A line from the game's last move continues the game. **Back to the
+    note** leaves it.
+  - **Analyse** asks your Stockfish for its three best lines at your `engine_depth`, with
+    a green arrow for the best move. Only when you press it, one position at a time.
 - Ctrl/Cmd+E switches between Writing and Reading; Esc goes back to the list.
 - **Pin** keeps a note at the top of the list. **Delete** asks first, on the page.
 
@@ -66,5 +81,4 @@ Reading mode plays these on a board:
   the re-test status and "Open →". A link to something that's no longer in your Log says
   so. The Journal only reads your Log, never changes it.
 
-Coming in the next slices: playing on a board to insert moves, Copy FEN, Copy PGN up to
-here, Continue here, Analyse, and the history and export on the page.
+Coming in the next slice: the history and export on the page.

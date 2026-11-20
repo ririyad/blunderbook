@@ -1,12 +1,14 @@
-"""The Journal's routes, mounted at ``/api/ext/journal`` (ROADMAP 19.3): the notes list with
-search and tags, one note with the tree Reading mode draws, and saving, pinning and
-deleting.
+"""The Journal's routes, mounted at ``/api/ext/journal``: the notes list with search and
+tags, one note with the tree Reading mode draws, and saving, pinning and deleting (ROADMAP
+19.3); boards you play on, a line put into a game, and Analyse (19.4).
 
-Every route that changes something is for the Blunderbook page only (``host.same_origin``).
-Your Log is only read, for the ``[[log 12]]`` and ``[[game 40]]`` links in a note.
+Every route that isn't a GET is for the Blunderbook page only (``host.same_origin``): those
+that change something, and Analyse, which starts Stockfish. Your Log is only read, for the
+``[[log 12]]`` and ``[[game 40]]`` links in a note. Nothing here goes online.
 """
 
 import sqlite3
+import threading
 from datetime import date, datetime
 from typing import Annotated, Any, Final, Literal
 
@@ -15,15 +17,25 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from blunderbook import host
 from blunderbook.core import pgn, timecontrol
+from blunderbook.core.engine import EngineError
 from blunderbook.core.models import Color, Entry, Game, Judgment, Speed, Status
-from blunderbook_journal import store
+from blunderbook_journal import doc, moves, store
 
 router = APIRouter()
 
 NO_NOTE: Final = "There's no such note. It may have been deleted."
 MAX_BODY: Final = 1_000_000  # characters: a long book chapter is a tenth of this
 
+MAX_MOVES: Final = 600  # half-moves played on a board at once
+ANALYSE_LINES: Final = 3
+BUSY: Final = "Stockfish is busy with another position. Try again when it's done."
+
 Body = Annotated[str, Field(max_length=MAX_BODY)]
+Fen = Annotated[str, Field(min_length=1, max_length=120)]
+Ucis = Annotated[list[Annotated[str, Field(max_length=5)]], Field(max_length=MAX_MOVES)]
+
+# One analysis at a time: a second press, or another window, is told to wait.
+_analysing: Final = threading.Lock()
 
 
 class SummaryOut(BaseModel):
@@ -149,6 +161,169 @@ def delete(note_id: int, db: host.ExtDb) -> Response:
     if not store.delete(db, note_id):
         raise HTTPException(404, NO_NOTE)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- boards (19.4)
+
+
+class BoardIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fen: Fen
+    moves: Ucis = []
+
+
+class PlayedOut(BaseModel):
+    san: str
+    uci: str
+    fen: str  # after the move
+    no: int
+    white: bool
+
+
+class BoardOut(BaseModel):
+    start: str
+    moves: list[PlayedOut]
+    fen: str  # after the last move
+    turn: Color
+    legal: list[str]  # UCI, each promotion spelled out
+    line: str  # "6. e3 Be7 7. Bd3"
+    pgn: str  # the moves as a PGN game, with the start position when it isn't the usual
+    over: str  # "Checkmate", "Stalemate", ... or ""
+
+
+@router.post("/board", dependencies=[Depends(host.same_origin)])
+def board(body: BoardIn) -> BoardOut:
+    """Play moves from a FEN: each move's SAN and position, and what can be played next.
+    Changes nothing. A FEN or move that can't be played is a 422 with the reason."""
+    try:
+        found = moves.position(body.fen, body.moves)
+    except moves.BoardError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return BoardOut(
+        start=found.start,
+        moves=[
+            PlayedOut(san=m.san, uci=m.uci, fen=m.fen, no=m.no, white=m.white) for m in found.moves
+        ],
+        fen=found.fen,
+        turn="white" if found.fen.split()[1] == "w" else "black",
+        legal=list(found.legal),
+        line=found.line,
+        pgn=found.pgn,
+        over=found.over,
+    )
+
+
+class LineIn(BaseModel):
+    """A line played on the reading board, to put into a PGN block of the note."""
+
+    model_config = ConfigDict(extra="forbid")
+    block: int  # the PGN block's index in the note's tree
+    after: int | None  # the move (its id in the tree) the line goes on from; None: the start
+    moves: Annotated[
+        list[Annotated[str, Field(max_length=5)]], Field(min_length=1, max_length=MAX_MOVES)
+    ]
+
+
+@router.post("/notes/{note_id}/lines", dependencies=[Depends(host.same_origin)])
+def add_line(note_id: int, body: LineIn, db: host.ExtDb, log: host.Log) -> NoteOut:
+    """Put a line into one of the note's games, as a variation (or as the game's own
+    continuation when it goes on from its last move). The note is saved like an edit, so
+    the text before is kept as a version. 409 when the game has that line already."""
+    found = store.get(db, note_id)
+    if found is None:
+        raise HTTPException(404, NO_NOTE)
+    tree = doc.parse(found.body)
+    blocks: list[dict[str, Any]] = tree["blocks"]  # type: ignore[assignment]
+    where = doc.sources(found.body).get(body.block)
+    if not 0 <= body.block < len(blocks) or blocks[body.block]["t"] != "pgn" or where is None:
+        raise HTTPException(422, "That game isn't in the note any more. Read the note again.")
+    ids = _ids(blocks[body.block]["items"])
+    if body.after is not None and body.after not in ids:
+        raise HTTPException(422, "That move isn't in this game. Read the note again.")
+    first, end = where
+    lines = found.body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    after = None if body.after is None else body.after - min(ids)
+    try:
+        text = moves.with_line("\n".join(lines[first:end]), after, body.moves)
+    except moves.BoardError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if text is None:
+        raise HTTPException(409, "The game has that line already.")
+    store.update(db, note_id, "\n".join([*lines[:first], text, *lines[end:]]))
+    return _note_out(db, log, note_id)
+
+
+def _ids(items: list[dict[str, Any]]) -> set[int]:
+    """The move ids written in a PGN block, its variations included."""
+    found: set[int] = set()
+    for item in items:
+        if "move" in item:
+            found.add(item["move"])
+        elif "line" in item:
+            found |= _ids(item["line"])
+    return found
+
+
+class AnalyseIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fen: Fen
+
+
+class EngineLineOut(BaseModel):
+    eval: dict[str, int]  # {"cp": 36} or {"mate": -2}, White's point of view
+    uci: str  # the line's first move
+    line: str  # "6. e3 Be7 7. Bd3 ...", up to 10 moves
+
+
+class AnalyseOut(BaseModel):
+    fen: str
+    engine: str  # "Stockfish 17.1"; "" when the game is over and nothing was asked
+    depth: int
+    lines: list[EngineLineOut]  # best first
+    over: str  # "Checkmate", "Stalemate", ... or ""
+
+
+@router.post("/analyse", dependencies=[Depends(host.same_origin)])
+def analyse(body: AnalyseIn) -> AnalyseOut:
+    """Stockfish's best lines for a position, at your engine depth. Only when you press
+    Analyse, and one at a time (409 while another runs). No Stockfish is a 503."""
+    try:
+        board = moves.board_at(body.fen)
+    except moves.BoardError as exc:
+        raise HTTPException(422, str(exc)) from None
+    fen = board.fen()
+    outcome = board.outcome(claim_draw=False)
+    if outcome is not None:
+        over = outcome.termination.name.replace("_", " ").capitalize()
+        return AnalyseOut(fen=fen, engine="", depth=0, lines=[], over=over)
+    if not _analysing.acquire(blocking=False):
+        raise HTTPException(409, BUSY)
+    try:
+        depth = host.settings().engine_depth
+        with host.engine() as engine:
+            found = engine.lines(board, depth, multipv=ANALYSE_LINES)
+            name = engine.name
+    except (host.HostError, EngineError) as exc:
+        raise HTTPException(503, str(exc)) from None
+    finally:
+        _analysing.release()
+    return AnalyseOut(
+        fen=fen,
+        engine=name,
+        depth=depth,
+        lines=[
+            EngineLineOut(
+                eval={"mate": line.score.mate}
+                if line.score.mate is not None
+                else {"cp": line.score.cp or 0},
+                uci=line.pv[0].uci(),
+                line=moves.san_line(fen, [m.uci() for m in line.pv]),
+            )
+            for line in found
+            if line.pv
+        ],
+        over="",
+    )
 
 
 # ---------------------------------------------------------------- building the answer

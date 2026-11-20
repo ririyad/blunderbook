@@ -242,3 +242,131 @@ def test_step_checks_the_number() -> None:
     assert moves.step(chess.STARTING_FEN, late) is None
     assert moves.step(chess.STARTING_FEN, black) is None
     assert moves.legal_line(chess.STARTING_FEN, [e4, black]) is None
+
+
+# ---------------------------------------------------------------- boards you play on (19.4)
+
+ELEPHANT_BLOCK = (
+    '[White "?"] [Black "?"]\n'
+    "1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Nbd7 5. cxd5 exd5\n"
+    "6. Nxd5?? (6. e3 {The quiet move.} 6... Be7) 6... Nxd5! 7. Bxd8 {[%cal Rd8e7] check} Bb4+ *"
+)
+
+
+def test_a_position_from_moves() -> None:
+    found = moves.position(chess.STARTING_FEN, ["e2e4", "e7e5", "g1f3"])
+    assert [m.san for m in found.moves] == ["e4", "e5", "Nf3"]
+    assert found.line == "1. e4 e5 2. Nf3"
+    assert found.pgn == "1. e4 e5 2. Nf3 *"
+    assert found.fen == found.moves[-1].fen
+    assert "b8c6" in found.legal and len(found.legal) == 29
+    assert found.over == ""
+
+
+def test_a_position_from_a_diagram() -> None:
+    fen = "3r2k1/4qppp/8/8/8/1Q6/5PPP/2R3K1 w - - 0 32"
+    found = moves.position(fen, ["c1c7", "e7e1"])
+    assert found.line == "32. Rc7 Qe1#"
+    assert found.pgn == f'[SetUp "1"]\n[FEN "{fen}"]\n\n32. Rc7 Qe1# 0-1'
+    assert (found.over, found.legal) == ("Checkmate", ())
+
+
+def test_a_line_that_starts_with_black() -> None:
+    fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    assert moves.position(fen, ["c7c5", "g1f3"]).line == "1... c5 2. Nf3"
+    assert moves.position(fen, []).line == ""
+
+
+def test_promotions_are_spelled_out() -> None:
+    found = moves.position("8/4P3/8/8/8/8/k7/7K w - - 0 1", [])
+    assert {"e7e8q", "e7e8r", "e7e8b", "e7e8n"} <= set(found.legal)
+    assert moves.position("8/4P3/8/8/8/8/k7/7K w - - 0 1", ["e7e8n"]).line == "1. e8=N"
+
+
+@pytest.mark.parametrize(
+    ("fen", "ucis", "error"),
+    [
+        ("nonsense", [], "Couldn't read the FEN 'nonsense'."),
+        ("8/8/8/8/8/8/8/8 w - - 0 1", [], "This isn't a legal position, so it can't be played."),
+        (chess.STARTING_FEN, ["e2e5"], "e2e5 isn't legal there."),
+        (chess.STARTING_FEN, ["e2e4", "e2e4"], "e2e4 isn't legal there (after 1. e4)."),
+        (chess.STARTING_FEN, ["zz"], "Couldn't read the move 'zz'."),
+    ],
+)
+def test_a_board_that_cant_be_played(fen: str, ucis: list[str], error: str) -> None:
+    with pytest.raises(moves.BoardError) as raised:
+        moves.position(fen, ucis)
+    assert str(raised.value) == error
+
+
+def test_an_engine_line_in_san() -> None:
+    assert moves.san_line(chess.STARTING_FEN, ["e2e4", "e7e5", "zz9z"]) == "1. e4 e5"
+    long = ["g1f3", "g8f6", "f3g1", "f6g8"] * 5
+    assert moves.san_line(chess.STARTING_FEN, long).count(".") == 5  # 10 moves at most
+
+
+def test_a_line_as_a_variation() -> None:
+    read = moves.read_pgn(ELEPHANT_BLOCK)
+    nxd5 = next(i for i, m in enumerate(read.moves) if m.san == "Nxd5" and m.white)
+    text = moves.with_line(ELEPHANT_BLOCK, nxd5 - 1, ["g1f3"])  # 6. Nf3 instead of 6. Nxd5
+    assert text is not None
+    assert text.startswith('[White "?"] [Black "?"]\n1. d4')
+    again = moves.read_pgn(text)
+    assert again.error == ""
+    assert [m.san for m in again.moves].count("Nf3") == 1
+    flat = " ".join(text.split())
+    assert "6. Nxd5??" in flat and "{The quiet move.}" in flat and "[%cal Rd8e7]" in flat
+    assert "(6. Nf3)" in text
+
+
+def test_a_line_that_follows_the_game_then_leaves_it() -> None:
+    read = moves.read_pgn(ELEPHANT_BLOCK)
+    e3 = next(i for i, m in enumerate(read.moves) if m.san == "e3")
+    text = moves.with_line(ELEPHANT_BLOCK, e3, ["f8e7", "f1d3"])  # 6... Be7 is there already
+    assert text is not None
+    assert "(6. e3 {The quiet move.} 6... Be7 7. Bd3)" in " ".join(text.split())
+
+
+def test_a_line_from_the_start() -> None:
+    text = moves.with_line("1. d4 d5 *", None, ["e2e4"])
+    assert text == "1. d4 (1. e4) 1... d5 *"
+
+
+def test_a_line_at_the_end_of_the_game_goes_on_with_it() -> None:
+    read = moves.read_pgn("1. e4 e5 *")
+    assert moves.with_line("1. e4 e5 *", len(read.moves) - 1, ["g1f3"]) == "1. e4 e5 2. Nf3 *"
+
+
+def test_a_line_thats_there_already() -> None:
+    assert moves.with_line(ELEPHANT_BLOCK, None, ["d2d4", "d7d5"]) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "after", "ucis", "error"),
+    [
+        ("1. e4 e5 *", 0, ["e2e4"], "e2e4 isn't legal there."),
+        ("1. e4 e5 *", 7, ["g1f3"], "That move isn't in this game any more."),
+        ("1. e4 Ke3", None, ["d2d4"], "Couldn't play Ke3: it isn't legal there."),
+        (
+            "1. e4 *\n\n1. d4 *",
+            None,
+            ["c2c4"],
+            "This block has more than one game, so the line can't go into it.",
+        ),
+    ],
+)
+def test_a_line_that_cant_go_in(text: str, after: int | None, ucis: list[str], error: str) -> None:
+    with pytest.raises(moves.BoardError) as raised:
+        moves.with_line(text, after, ucis)
+    assert str(raised.value) == error
+
+
+def test_a_move_number_stays_with_its_move() -> None:
+    long = (
+        "1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Nbd7 5. cxd5 exd5 6. Nxd5 Nxd5 7. Bxd8 Bb4+"
+        " 8. Qd2 Bxd2+ 9. Kxd2 Kxd8 *"
+    )
+    text = moves.with_line(long, None, ["e2e4"])
+    assert text is not None
+    assert not any(line.rstrip().endswith(".") for line in text.split("\n"))
+    assert moves.read_pgn(text).error == ""

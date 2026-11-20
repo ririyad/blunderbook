@@ -69,6 +69,14 @@ def parse(body: str) -> Json:
     return _Doc().read(body)
 
 
+def sources(body: str) -> dict[int, tuple[int, int]]:
+    """Where each ``` block's text is in the note: the tree's block index -> its first line
+    and the line after its last (0-based, in the text split at its line breaks)."""
+    reader = _Doc()
+    reader.read(body)
+    return reader.sources
+
+
 # ---------------------------------------------------------------- the builder
 
 
@@ -122,6 +130,7 @@ class _Doc:
         self.blocks: list[Json] = []
         # Runs found in text, played once every block is read: (spans, index, block).
         self.pending: list[tuple[list[Json], int, int]] = []
+        self.sources: dict[int, tuple[int, int]] = {}  # a ``` block's lines, by block index
 
     def read(self, body: str) -> Json:
         lines = body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -150,6 +159,7 @@ class _Doc:
             j = i + 1
             while j < len(lines) and not lines[j].strip().startswith(_FENCE):
                 j += 1
+            self.sources[len(self.blocks)] = (i + 1, j)
             self._fenced(lang, "\n".join(lines[i + 1 : j]))
             return j + 1
         if heading := _HEADING.match(line):
