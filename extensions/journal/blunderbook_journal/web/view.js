@@ -13,7 +13,7 @@
 import { api } from "/js/api.js";
 import { fmtDate, localDay, plural } from "/js/format.js";
 import { showError, toast } from "/js/ui.js";
-import * as history from "./history.js";
+import * as versions from "./history.js";
 import * as read from "./read.js";
 import * as write from "./write.js";
 import { MOD } from "./write.js";
@@ -163,7 +163,7 @@ async function openNote(id, wanted, mine) {
     layout("history", false);
     $("jPanel").replaceChildren();
     drawBar();
-    history.open($("jBody"), note, historyHooks);
+    versions.open($("jBody"), note, historyHooks);
   } else {
     drawBar();
     const chess = read.open($("jBody"), $("jPanel"), note, { onTag: pickTag, onChanged: changedInReading });

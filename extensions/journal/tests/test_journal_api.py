@@ -350,6 +350,20 @@ def test_the_tab(client: TestClient) -> None:
         assert page.headers["content-type"].startswith("text/javascript")
 
 
+def test_no_module_hides_a_browser_name() -> None:
+    """`import * as history` hid window.history in view.js, so a new note's first save
+    failed at history.replaceState and its bar kept Read and History off."""
+    folder = ext.web_folder(extension)
+    assert folder is not None
+    names = r"history|location|document|window|navigator|screen|top|parent|name|status"
+    for page in folder.glob("*.js"):
+        text = page.read_text("utf-8")
+        hidden = re.findall(
+            rf"import \* as ({names})\b|import \{{[^}}]*\b({names})\b[^}}]*\}}", text
+        )
+        assert not hidden, (page.name, hidden)
+
+
 def test_the_page_passes_the_checks(tmp_path: Path) -> None:
     folder = ext.web_folder(extension)
     assert folder is not None
