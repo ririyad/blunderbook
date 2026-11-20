@@ -1665,7 +1665,9 @@ code; its feedback is folded in here before 19.1. See Decided for the answers it
 - **Arrows and highlights:** Lichess's `[%cal …]` / `[%csl …]`, in a PGN comment or under a
   FEN.
 - **Log links:** each shows the entry's or game's position and links to it. Library lines
-  can't be linked: extensions don't read each other.
+  can't be linked: extensions don't read each other. Inside a sentence a link is inline
+  text; on a line of its own it's a "From your Log" card (the move, opponent, time control,
+  date and re-test status, with "Open →").
 
 **Python only, no frontend chess.** On save, the server (python-chess) parses the note once
 into a document tree:
@@ -1746,7 +1748,7 @@ build step), and CodeMirror (a bundle built outside the app).
         - `DELETE /notes/{id}`, asked in the page first.
       - `same_origin` on every route that changes something.
       - `web/view.js` and `view.css` (`journal-*` classes plus the shared ones):
-        - the list, with search, tags and pins;
+        - the list, with "New note" at its top, then search, tags and pins;
         - Writing mode: the save line, a pasted PGN or FEN wrapped in its own block, the
           shortcuts;
         - Reading mode: the serif text, the pinned board, variations indented;
