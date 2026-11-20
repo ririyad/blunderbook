@@ -510,6 +510,21 @@ Chess.com leaderboards (`blunderbook ext install rankings`).
   asked, backed up with it. More in
   [extensions/profile/README.md](extensions/profile/README.md).
 
+**Journal** keeps your chess notes in Markdown, like a blog for yourself
+(`blunderbook ext install journal`). It never goes online. Its tab, where PGN, FEN and
+moves in a sentence play on a board, is still being built; for now it has commands.
+
+- `blunderbook journal new "# Title ..."` writes a note (`--file NOTE.md`, or piped in).
+  Its first line is its title, and words like `#traps` are its tags.
+- `blunderbook journal list` lists your notes, pinned first, then the latest edited.
+  `--search WORDS` finds them by title, text, or a PGN's players, event, opening and ECO;
+  `--tag NAME` keeps one tag's notes.
+- `blunderbook journal show ID` prints a note as you wrote it.
+- `blunderbook journal export FOLDER` writes every note to FOLDER as a `.md` file.
+- Notes are kept in `journal.db` next to your database, backed up with it, with the
+  earlier versions of each (one every 5 minutes while you edit, the newest 30). More in
+  [extensions/journal/README.md](extensions/journal/README.md).
+
 ### Print your Blunder Log
 
 ```sh
@@ -718,6 +733,10 @@ back to the next one.
 | `blunderbook rankings status` | When each list was downloaded, and whether a newer one is probably out. |
 | `blunderbook profile refresh [lichess\|chesscom\|all]` | Ask the sites for your ratings now and keep them (with the Profile on). |
 | `blunderbook profile show` | Your ratings as last fetched, and your rating in your newest games. Asks no site. |
+| `blunderbook journal new [TEXT] [--file NOTE.md]` | Write a note in Markdown (with the Journal on). |
+| `blunderbook journal list [--search WORDS] [--tag NAME]` | List your notes, pinned first. |
+| `blunderbook journal show ID` | Print a note as you wrote it. |
+| `blunderbook journal export FOLDER` | Write every note to FOLDER as a Markdown file. |
 
 Run `blunderbook COMMAND --help` for details. Every command ends with a one-line summary.
 `import` and `sync` exit with 1 only when they can't run at all, not because some games

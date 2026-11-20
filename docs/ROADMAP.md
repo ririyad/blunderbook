@@ -28,20 +28,22 @@ _Last updated: 2026-11-16_
 | M16 Rankings | Done (4/4) | Extension: the FIDE, Lichess and Chess.com top lists, updated when you ask |
 | M17 Profile | Done (4/4) | Extension: your Lichess and Chess.com ratings, and your rating over time next to your blunders |
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
-| M19 Journal | Planned | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
+| M19 Journal | In progress (1/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 
 **Order of work** (decided 2026-11-20, see Decided):
 
-1. **M19 Journal.** It starts once you've given feedback on its prototype.
+1. **M19 Journal.** Started 2026-11-20, after the prototype's feedback.
 2. **M20 Cost, not count.**
 3. **M18 Game commentary.**
 4. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
 
 The milestone numbers stay as they are; only the order changes.
 
-**Next up:** M19, the Journal extension. Its prototype (a design canvas: Reading and Writing
-mode, working boards) is waiting for your feedback; 19.1 starts after that. M17, the Profile extension,
+**Next up:** 19.2, the Journal's note parser: Markdown, PGN and FEN blocks, moves in
+sentences, tags and Log links, read once per save on the server. 19.1 is done: the
+`journal` extension, `journal.db` (notes, tags, versions, FTS5 search) and the `new`, `list`,
+`show` and `export` commands. M17, the Profile extension,
 is done. Still to check from M17: one real `blunderbook profile refresh` or press of Refresh
 ratings (the rating fixtures are hand-built, `TODO(verify)`), and its tab on a touch screen. M15, the desktop app, is planned
 below and not started. M16, the Rankings extension, is done; check its tab at 390 px on a real phone once. Still to check from M8: one real explanation with your key, and Re-test at 390 px wide (the Log was
@@ -1642,7 +1644,7 @@ Decided for the answers it's built on.
   with the AI answer faked; 390 px, the keyboard, no console errors. Left for you: one real
   "Write the commentary" with your key and model.
 
-### M19 Journal (extension, planned, not started)
+### M19 Journal (extension, in progress)
 
 Planned on 2026-11-19. It's first in the order of work. A minimal, very fast chess
 journal, kept like a blog for yourself. You write in Markdown. In Reading mode, every PGN,
@@ -1694,8 +1696,8 @@ build step), and CodeMirror (a bundle built outside the app).
 **Fast:**
 - Writing is a plain monospace `<textarea>`: nothing is redrawn as you type.
 - Autosave runs 400 ms after a pause, one save at a time, like the Log's notes.
-- Search uses SQLite FTS5 over the title, the text and the PGN headers. `TODO(verify)`: FTS5
-  in uv's Python; if it's missing, a `LIKE` search.
+- Search uses SQLite FTS5 over the title, the text and the PGN headers. Checked in 19.1:
+  uv's Python has SQLite 3.53.1 with FTS5, so no `LIKE` fallback is needed.
 - Reading is a book serif at about 18 px and 68 characters a line, with system fonts only.
 
 **Boards:**
@@ -1711,7 +1713,7 @@ build step), and CodeMirror (a bundle built outside the app).
 - Esc: back to the list.
 - `n` in the list: a new note. Browsers keep Ctrl+N.
 
-- [ ] **19.1** The package and storage.
+- [x] **19.1** The package and storage.
       - `extensions/journal/`: the entry point and `Extension(name="journal",
         title="Journal")`.
       - `migrations/0001_journal.sql`:
@@ -1724,6 +1726,17 @@ build step), and CodeMirror (a bundle built outside the app).
       - `store.py` holds all its SQL.
       - CLI: `journal new`, `journal list`, `journal show ID`, `journal export FOLDER`.
       - The root `pyproject.toml` and `uv.lock`.
+      - **As built:**
+        - `notes.py` (pure, mypy strict) reads the title, the list's snippet, the tags and
+          the PGN headers to search on every save. The parser (19.2) isn't needed for them.
+        - A tag is `#` and a letter after a space or the line's start, outside ```` ``` ````
+          blocks and `inline code`. So `Qxf7#`, `# Heading` and `#1` aren't tags.
+        - A version is the text a save replaces, with the time it was written. Pinning
+          isn't an edit.
+        - Search matches every word, also as the start of a longer word, ignoring accents.
+          The best matches come first, after the pinned notes.
+        - The export writes `ID-title.md`. Exporting again replaces those files only.
+        - `journal.db` is in `backup` and `restore`, a test each.
 - [ ] **19.2** The note parser (`doc.py`, `chess.py`; pure, mypy strict).
       - It reads:
         - the Markdown subset;

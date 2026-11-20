@@ -36,6 +36,7 @@ blunderbook-library = { workspace = true }
 blunderbook-collection = { workspace = true }
 blunderbook-rankings = { workspace = true }
 blunderbook-profile = { workspace = true }
+blunderbook-journal = { workspace = true }
 
 # ---------------------------------------------------------------- ruff
 
@@ -49,12 +50,13 @@ extend-exclude = ["*.md"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-# The Collection's, the Rankings' and the Profile's tests import their fixtures from
-# collection_fakes, rankings_fakes and profile_fakes (they can't be a conftest.py, see
-# there), so each fixture parameter "redefines" an import.
+# The Collection's, the Rankings', the Profile's and the Journal's tests import their
+# fixtures from collection_fakes, rankings_fakes, profile_fakes and journal_fakes (they
+# can't be a conftest.py, see there), so each fixture parameter "redefines" an import.
 "extensions/collection/tests/test_*.py" = ["F811"]
 "extensions/rankings/tests/test_*.py" = ["F811"]
 "extensions/profile/tests/test_*.py" = ["F811"]
+"extensions/journal/tests/test_*.py" = ["F811"]
 
 # ---------------------------------------------------------------- mypy
 # Whole package is type-checked; blunderbook/core is strict (CLAUDE.md §3).
@@ -68,6 +70,7 @@ files = [
     "extensions/collection/blunderbook_collection",
     "extensions/rankings/blunderbook_rankings",
     "extensions/profile/blunderbook_profile",
+    "extensions/journal/blunderbook_journal",
 ]
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -83,6 +86,7 @@ module = [
     "blunderbook_collection.stats",
     "blunderbook_rankings.fide",
     "blunderbook_profile.history",
+    "blunderbook_journal.notes",
 ]
 disallow_any_generics = true
 disallow_subclassing_any = true
@@ -105,6 +109,7 @@ testpaths = [
     "extensions/collection/tests",
     "extensions/rankings/tests",
     "extensions/profile/tests",
+    "extensions/journal/tests",
 ]
 addopts = "-ra --strict-markers"
 markers = [
@@ -122,6 +127,7 @@ filterwarnings = [
 [dependency-groups]
 dev = [
     "blunderbook-collection",
+    "blunderbook-journal",
     "blunderbook-library",
     "blunderbook-profile",
     "blunderbook-rankings",
