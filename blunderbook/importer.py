@@ -522,6 +522,12 @@ def log_fen(
     assert queued.game is not None and queued.side is not None
     label = queued.game.plies[0].label
     analysed = analyse(queued, analyser, depth=depth, thresholds=thresholds, flag_at="inaccuracy")
+    if not analysed.blunders and analysed.analysis.checked_out:  # cleared by the 21.3 check
+        return FenOutcome(
+            "not_a_mistake",
+            f"Stockfish took a closer look at {label} from this position, and it isn't a "
+            "mistake by its measure. Nothing was logged.",
+        )
     if not analysed.blunders:
         evals = analysed.analysis.evals
         swing = detect.swing(evals[0], evals[1], queued.side)

@@ -3,7 +3,7 @@ TestClient, against a temp config and database, with a scripted engine (no Stock
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -39,12 +39,18 @@ class GatedEngine(StubEngine):
         self.reached = threading.Event()
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         if self.gate_at is not None and self.positions + 1 == self.gate_at:
             self.reached.set()
             assert self.gate.wait(10), "the test never opened the gate"
-        return super().lines(board, depth, multipv, game=game)
+        return super().lines(board, depth, multipv, game=game, root_moves=root_moves)
 
 
 @pytest.fixture

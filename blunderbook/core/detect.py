@@ -127,6 +127,30 @@ def is_flagged(
     return best_uci is not None and played_uci != best_uci and swing >= line
 
 
+def holds_up(
+    top: Eval,
+    top_uci: str,
+    played: Eval,
+    played_uci: str,
+    mover: Color,
+    thresholds: Thresholds,
+    flag_at: Judgment = "blunder",
+) -> bool:
+    """Whether a flagged move is still flagged when it's checked (ROADMAP 21.3).
+
+    ``top`` is the engine's top line and ``played`` the move played, both scored (White
+    POV) from the position before the move in the same pass-2 search depth, so depth
+    noise between two separate positions can't make a flag. The same rule applies again:
+    the swing between them reaches the ``flag_at`` line and the move isn't the top line's,
+    or it's a missed win (so a move that still mates is no missed win).
+    """
+    if played_uci == top_uci:
+        return False
+    if missed_win(top, played, mover, thresholds):
+        return True
+    return is_flagged(swing(top, played, mover), played_uci, top_uci, thresholds, flag_at)
+
+
 def accepted_moves(
     lines: Sequence[tuple[str, Eval]],
     mover: Color,

@@ -2,7 +2,7 @@
 the CLI's filters, its players, and one game with every move judged, from evals made up for
 the test (Légal's 5... Bxd1 lets White mate)."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
@@ -46,8 +46,19 @@ class Scripted(FakeEngine):
         }
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
+        if root_moves:  # one move alone (21.3): the position after it, as pass 1 scores it
+            after = board.copy()
+            after.push(root_moves[0])
+            line = self.lines(after, depth, game=game)[0]
+            return [Line(line.score, (root_moves[0], *line.pv))]
         found = self.table.get(board.fen())
         if found is not None:
             self.calls.append(board.fen())

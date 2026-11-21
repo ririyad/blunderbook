@@ -3,7 +3,7 @@ scripted engine, saving, and the summary line."""
 
 import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -35,9 +35,20 @@ class Scripted:
         self.positions = 0
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         self.positions += 1
+        if root_moves:  # one move alone: the position after it, as pass 1 scores it
+            after = board.copy()
+            after.push(root_moves[0])
+            line = self.table.get(after.fen(), Line(Eval(cp=20)))
+            return [Line(line.score, (root_moves[0], *line.pv))]
         return [self.table.get(board.fen(), Line(Eval(cp=20)))]
 
 
@@ -141,9 +152,8 @@ def test_analyse_adds_hints_to_each_blunder() -> None:
     assert found.finding.best_san == "dxe5"
     assert found.hints.causes == ("Missed their threat", "Moved too fast")
     assert found.hints.time_spent_s == pytest.approx(2.6)
-    assert (
-        engine.positions == len(queued.game.plies) + 1
-    )  # the last one is checkmate: +1 for pass 2
+    # every position but the last (checkmate), then pass 2: its MultiPV and Bxd1 alone (21.3)
+    assert engine.positions == len(queued.game.plies) + 2
 
 
 def test_analyse_refuses_games_that_arent_ready() -> None:
@@ -396,11 +406,17 @@ class Failing(Scripted):
         self.at = at
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         if self.positions + 1 >= self.at:
             raise EngineError("Stockfish stopped unexpectedly.")
-        return super().lines(board, depth, multipv, game=game)
+        return super().lines(board, depth, multipv, game=game, root_moves=root_moves)
 
 
 class Slow(Scripted):
@@ -411,12 +427,18 @@ class Slow(Scripted):
         self.at = at
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         if self.positions + 1 == self.at:
             self.positions += 1
             raise EngineTimeout(120)
-        return super().lines(board, depth, multipv, game=game)
+        return super().lines(board, depth, multipv, game=game, root_moves=root_moves)
 
 
 def run(conn: sqlite3.Connection, analyser: Scripted, **options: Any) -> importer.RunResult:
@@ -561,6 +583,36 @@ def test_log_fen_skips_stockfishs_own_choice(conn: sqlite3.Connection) -> None:
     )
     assert outcome == importer.FenOutcome(
         "best_move", "32. Rc7 is Stockfish's own choice here. Nothing was logged."
+    )
+    assert importer.find_logged(conn, queued) is None
+
+
+class Close(Scripted):
+    """Pass 1 sees a drop, but the move searched alone is only 5 cp below the best (21.3)."""
+
+    def lines(
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
+    ) -> list[Line]:
+        if root_moves:
+            self.positions += 1
+            return [Line(Eval(cp=25), (root_moves[0],))]
+        return super().lines(board, depth, multipv, game=game)
+
+
+def test_log_fen_skips_a_move_the_check_clears(conn: sqlite3.Connection) -> None:
+    queued = importer.prepare_fen(BACK_RANK, "c1c7", played_on=date(2026, 11, 1))
+    engine = Close(fen_engine("b3c4", 30, -100).table)
+    outcome = importer.log_fen(conn, queued, engine, depth=8, thresholds=Thresholds())
+    assert outcome == importer.FenOutcome(
+        "not_a_mistake",
+        "Stockfish took a closer look at 32. Rc7 from this position, and it isn't a mistake "
+        "by its measure. Nothing was logged.",
     )
     assert importer.find_logged(conn, queued) is None
 

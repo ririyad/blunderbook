@@ -5,6 +5,7 @@ doctor's Backups row, the daily backup and the backup before an upgrade."""
 import re
 import sqlite3
 import sys
+from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
@@ -298,12 +299,23 @@ class StubEngine:
         self.closed = False
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         self.positions += 1
         if self.fail or (self.fail_after is not None and self.positions > self.fail_after):
             raise EngineError("Stockfish stopped unexpectedly.")
         self.depths.add(depth)
+        if root_moves:  # one move alone: the position after it, as pass 1 scores it
+            after = board.copy()
+            after.push(root_moves[0])
+            line = self.table.get(after.fen(), Line(Eval(cp=20)))
+            return [Line(line.score, (root_moves[0], *line.pv))]
         return [self.table.get(board.fen(), Line(Eval(cp=20)))]
 
     def __enter__(self) -> StubEngine:

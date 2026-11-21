@@ -10,6 +10,7 @@ from blunderbook.core.detect import (
     best_line_san,
     chances,
     game_accuracy,
+    holds_up,
     is_flagged,
     judgment,
     line_san,
@@ -346,6 +347,29 @@ def test_mover_mates(score: Eval, mover: Color, mates: bool) -> None:
 )
 def test_missed_win(before: Eval, after: Eval, mover: Color, missed: bool) -> None:
     assert missed_win(before, after, mover, TH) is missed
+
+
+@pytest.mark.parametrize(
+    ("top", "played", "played_uci", "flag_at", "stands"),
+    [
+        (Eval(cp=40), Eval(cp=-200), "c3d5", "blunder", True),  # swing 0.21: still a blunder
+        (Eval(cp=40), Eval(cp=-60), "c3d5", "blunder", False),  # swing 0.09: depth noise
+        (Eval(cp=40), Eval(cp=-60), "c3d5", "inaccuracy", True),  # a FEN entry's line
+        (Eval(cp=40), Eval(cp=-200), "e2e3", "blunder", False),  # it was the top line's move
+        (Eval(mate=3), Eval(mate=4), "c3d5", "blunder", False),  # still mates: no missed win
+        (Eval(mate=3), Eval(cp=900), "c3d5", "blunder", True),  # the mate is gone
+        (Eval(cp=800), Eval(cp=400), "c3d5", "blunder", True),  # a missed win by 4 pawns
+    ],
+)
+def test_a_flag_holds_up(
+    top: Eval, played: Eval, played_uci: str, flag_at: Judgment, stands: bool
+) -> None:
+    assert holds_up(top, "e2e3", played, played_uci, "white", TH, flag_at) is stands
+
+
+def test_a_flag_holds_up_for_black() -> None:
+    assert holds_up(Eval(cp=-40), "e7e5", Eval(cp=200), "g8f6", "black", TH)
+    assert not holds_up(Eval(cp=-40), "e7e5", Eval(cp=60), "g8f6", "black", TH)
 
 
 def test_missed_wins_can_be_turned_off() -> None:

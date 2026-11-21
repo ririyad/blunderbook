@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | In progress (3/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (4/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,9 +73,9 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.3, check each flag with the move you played (next in the order of work;
-its rule still needs your yes). Stage 1 is done: 21.2, the clean-game fixture; 21.1, keep
-the evals; 21.10, the engine's safety limit. M19, the Journal extension,
+**Next up:** 21.6, fairer re-test answers (next in the order of work; its rule still
+needs your yes). Done in M21 so far: 21.2, the clean-game fixture; 21.1, keep the evals;
+21.10, the engine's safety limit; 21.3, check each flag with the move you played. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -1994,15 +1994,22 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
         from the inaccuracy line. When chosen, no move's swing passed 0.02 for either side
         (depth 12 with one thread, and depth 16 with two; Stockfish 19), so it doesn't sit
         near a line. It found no false entries in today's rules. CLAUDE.md §12 lists it.
-- [ ] **21.3** Check each flag with the move you played (§7.6 change).
+- [x] **21.3** Check each flag with the move you played (§7.6 change, accepted 2026-11-21).
       - Today a move is flagged from two separate searches, before and after it. At depth
         16 that's noisy, and it makes false missed wins: "mate in 7" before, "+12" after,
         because the mate moved past the engine's horizon.
-      - **Proposed rule:** pass 2 also searches the played move alone from the position
-        before it (`root_moves=[played]`, same depth). The flag is dropped when that score
-        is within `accept_margin_cp` of the top line, or, for a missed win, when it still
-        mates. One extra search per flagged move.
+      - **The rule (accepted):** pass 2 scores the played move from the position before
+        it at the same depth (its own MultiPV line, or a search of it alone,
+        `root_moves=[played]`), and the same flag rule runs again on the top line and the
+        played move. It stays only if the swing still reaches the line it was flagged at,
+        or it's still a missed win; a move that still mates isn't one. The entry keeps
+        pass 1's evals and swing. At most one extra search per flagged move.
       - The §12 fixtures still flag their move; 21.2's flags nothing.
+      - Done 2026-11-21: `detect.holds_up` (pure, tested), the check in
+        `engine.analyse_game` (`GameAnalysis.checked_out` lists the plies it cleared),
+        `root_moves` on `Engine.lines` and the `Analyser` protocol (test engines and the
+        fake UCI engine's `searchmoves` too), and a FEN entry the check clears says so.
+        CLAUDE.md §7.6 and the README explain it.
 - [ ] **21.4** `blunderbook reanalyse [--depth N] [--game ID]` (§9 change).
       - Games imported before missed wins were never re-analysed, and the desktop app will
         ship a newer Stockfish.
@@ -2103,10 +2110,17 @@ dependency, still works, so that warning is filtered too.
 ## Open decisions
 
 - **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
-  no on its proposed rule (21.3 to 21.9).
+  no on its proposed rule (21.4 to 21.9).
 
 ### Decided
 
+- **2026-11-21: How a flag is checked (21.3).**
+  - **The same test again**, not "within `accept_margin_cp`": the flag rule runs on the
+    top line and the played move, both from the position before the move at the same
+    depth. One rule everywhere, and it fits 21.6's answers by swing. A move 100 cp worse
+    near level (a mistake by swing) is no longer logged as a blunder from an import.
+  - **The entry keeps pass 1's evals and swing**, so they match the game's saved
+    positions and its eval bar. The check only decides whether it's logged.
 - **2026-11-21: Keeping the evals, and the engine's safety limit (21.1, 21.10).**
   - **A `positions` table**, not a JSON column: the same shape as the Collection's, easy
     to query across games for 21.9, and the best move is kept for re-judging.

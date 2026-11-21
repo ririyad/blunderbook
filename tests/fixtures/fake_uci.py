@@ -14,9 +14,10 @@
 --hang-on-go N   on the Nth "go", stops answering for good (a stuck engine)
 --log FILE       appends every command it receives to FILE
 
-"go" answers one line per MultiPV slot: line k plays the k-th legal move in UCI order,
-with a one-move PV, and "bestmove" is the first. Positions are read with python-chess,
-which the test interpreter has. It declares Threads, Hash and MultiPV like Stockfish.
+"go" answers one line per MultiPV slot: line k plays the k-th legal move in UCI order
+(only the "searchmoves" ones when given), with a one-move PV, and "bestmove" is the
+first. Positions are read with python-chess, which the test interpreter has. It declares
+Threads, Hash and MultiPV like Stockfish.
 """
 
 import sys
@@ -88,6 +89,9 @@ def main(argv: list[str]) -> None:
                 time.sleep(int(tokens[tokens.index("movetime") + 1]) / 1000)
                 depth = "1"
             moves = sorted(board.legal_moves, key=lambda m: m.uci())
+            if "searchmoves" in tokens:  # python-chess sends them last
+                allowed = set(tokens[tokens.index("searchmoves") + 1 :])
+                moves = [m for m in moves if m.uci() in allowed]
             for k, move in enumerate(moves[:multipv], start=1):
                 score = scores[min(k, len(scores)) - 1]
                 print(f"info depth {depth} multipv {k} score {score} nodes 1 pv {move.uci()}")

@@ -112,13 +112,23 @@ class Line:
 
 
 class Analyser(Protocol):
-    """What :func:`analyse_game` needs from an engine. :class:`Engine` is the real one."""
+    """What :func:`analyse_game` needs from an engine. :class:`Engine` is the real one.
+
+    ``root_moves`` limits the search to those moves (UCI ``searchmoves``): pass 2 uses it
+    to score the move you played from the position before it.
+    """
 
     @property
     def name(self) -> str: ...
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]: ...
 
 
@@ -193,12 +203,19 @@ class Engine:
         return self.info.name
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
         """Analyse ``board`` (with its move history) to ``depth``; best line first.
 
         ``game`` is any object identifying the game: the engine starts a new game
-        (``ucinewgame``) whenever it changes.
+        (``ucinewgame``) whenever it changes. ``root_moves`` limits the search to those
+        moves.
 
         Raises :class:`EngineTimeout` when the safety limit ends the search before
         ``depth``. An engine that stopped answering is restarted first, so the next search
@@ -208,7 +225,13 @@ class Engine:
         watchdog = _Watchdog(self._simple, self.search_limit_s + self.grace_s)
         started = time.monotonic()
         try:
-            infos = self._simple.analyse(board, limit, multipv=multipv, game=game)
+            infos = self._simple.analyse(
+                board,
+                limit,
+                multipv=multipv,
+                game=game,
+                root_moves=None if root_moves is None else list(root_moves),
+            )
         except (chess.engine.EngineTerminatedError, TimeoutError) as exc:
             if not watchdog.fired and not isinstance(exc, TimeoutError):
                 raise EngineError("Stockfish stopped unexpectedly.") from None
@@ -443,7 +466,11 @@ def analyse_game(
     engine). My moves that aren't the engine's best move are flagged when their swing
     reaches the ``flag_at`` line (the blunder line for imports), or when they're a missed
     win (``detect.missed_win``). Pass 2 asks for the top 3 moves in each flagged position,
-    to know which re-test answers to accept.
+    to know which re-test answers to accept, and checks the flag (ROADMAP 21.3): the move
+    played is scored from the same position at the same depth (its own MultiPV line, or a
+    search of that move alone), and the flag stands only if the same rule flags it again
+    against the top line (``detect.holds_up``). A flag that doesn't is dropped and listed
+    in ``GameAnalysis.checked_out``. The entry keeps pass 1's evals and swing.
 
     ``progress(done, total)`` is called after each position. ``total`` starts as N + 1 and
     grows by the number of flagged moves once pass 1 is over.
@@ -473,10 +500,15 @@ def analyse_game(
 
     total += len(flagged)
     findings: list[Finding] = []
+    checked_out: list[int] = []
     for k, (ply, swing, judgment) in enumerate(flagged, start=1):
-        multi = _search(analyser, _board_at(game, ply.index), depth, MULTIPV, key, game)
-        before, after = pass1[ply.index], pass1[ply.index + 1]
-        findings.append(_finding(ply, swing, judgment, before, after, multi, me, thresholds))
+        board = _board_at(game, ply.index)
+        multi = _search(analyser, board, depth, MULTIPV, key, game)
+        if _holds_up(analyser, board, ply, multi, me, depth, key, game, thresholds, flag_at):
+            before, after = pass1[ply.index], pass1[ply.index + 1]
+            findings.append(_finding(ply, swing, judgment, before, after, multi, me, thresholds))
+        else:
+            checked_out.append(ply.index)
         if progress is not None:
             progress(n + 1 + k, total)
 
@@ -489,6 +521,38 @@ def analyse_game(
         best_uci=tuple(None if line.move is None else line.move.uci() for line in pass1),
         threads=None if real is None else real.threads,
         hash_mb=None if real is None else real.hash_mb,
+        checked_out=tuple(checked_out),
+    )
+
+
+def _holds_up(
+    analyser: Analyser,
+    board: chess.Board,
+    ply: Ply,
+    multi: list[Line],
+    me: Color,
+    depth: int,
+    key: object,
+    game: ParsedGame,
+    thresholds: Thresholds,
+    flag_at: Judgment,
+) -> bool:
+    """The 21.3 check of one flagged move: its score from the position before it, at the
+    same depth as the top line, judged by the same rule. Without a top line there's
+    nothing to check against, so the flag stands."""
+    if not multi or multi[0].move is None:
+        return True
+    played = next((line for line in multi if line.move and line.move.uci() == ply.uci), None)
+    if played is None:
+        move = chess.Move.from_uci(ply.uci)
+        alone = _search(analyser, board, depth, 1, key, game, root_moves=[move])
+        if not alone:
+            return True
+        played = alone[0]
+    top = multi[0]
+    assert top.move is not None
+    return detect.holds_up(
+        top.score, top.move.uci(), played.score, ply.uci, me, thresholds, flag_at
     )
 
 
@@ -554,9 +618,13 @@ def _search(
     multipv: int,
     key: object,
     game: ParsedGame,
+    *,
+    root_moves: Sequence[chess.Move] | None = None,
 ) -> list[Line]:
     """``analyser.lines``, naming the position when the safety limit stops the search."""
     try:
+        if root_moves is not None:
+            return analyser.lines(board, depth, multipv, game=key, root_moves=root_moves)
         return analyser.lines(board, depth, multipv, game=key)
     except EngineTimeout as exc:
         raise EngineTimeout(exc.limit_s, position_name(game, len(board.move_stack))) from None

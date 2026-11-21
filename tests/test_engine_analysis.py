@@ -7,7 +7,7 @@ end use the real one.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import chess
@@ -58,10 +58,24 @@ class Scripted:
         self.default = default or Line(Eval(cp=20))
         self.fail_on = fail_on
         self.calls: list[tuple[str, int, int, object]] = []
+        self.alone: list[tuple[str, int, str, object]] = []  # searches of one move (21.3)
 
     def lines(
-        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+        self,
+        board: chess.Board,
+        depth: int,
+        multipv: int = 1,
+        *,
+        game: object = None,
+        root_moves: Sequence[chess.Move] | None = None,
     ) -> list[Line]:
+        if root_moves:  # one move alone: the position after it, as pass 1 scores it
+            move = root_moves[0]
+            self.alone.append((board.fen(), depth, move.uci(), game))
+            after = board.copy()
+            after.push(move)
+            line = self.pass1.get(after.fen(), self.default)
+            return [Line(line.score, (move, *line.pv))]
         self.calls.append((board.fen(), depth, multipv, game))
         if len(self.calls) == self.fail_on:
             raise EngineError("Stockfish stopped unexpectedly.")
@@ -85,7 +99,7 @@ def qgd_script() -> tuple[ParsedGame, Scripted]:
         multi={
             nxd5.fen_before: [
                 Line(Eval(cp=36), mv("e2e3")),
-                Line(Eval(cp=20), mv("c3d5")),  # the played move, rated close by pass 2
+                Line(Eval(cp=20), mv("g1f3")),  # 16 below the best: accepted
                 Line(Eval(cp=-30), mv("a2a3")),  # 66 below the best: not accepted
             ]
         },
@@ -108,7 +122,8 @@ def test_flags_the_blunder_with_everything_filled_in() -> None:
     assert finding.best_line_san == "6. e3 Be7 7. Bd3 c6 8. h3 Nf8"
     assert finding.refutation_san == "6... Nxd5 7. Bxd8 Bb4+ 8. Qd2 Bxd2+"
     assert finding.refutation_uci == ("f6d5", "g5d8", "f8b4", "d1d2", "b4d2", "e1d2")
-    assert finding.accept_uci == ("e2e3",)
+    assert finding.accept_uci == ("e2e3", "g1f3")
+    assert result.checked_out == ()
 
 
 def test_pass_one_sees_every_position_once_and_pass_two_only_the_flagged_one() -> None:
@@ -119,9 +134,54 @@ def test_pass_one_sees_every_position_once_and_pass_two_only_the_flagged_one() -
     pass2 = [c for c in script.calls if c[2] > 1]
     assert [c[0] for c in pass1] == [game.plies[0].fen_before] + [p.fen_after for p in game.plies]
     assert [(c[0], c[2]) for c in pass2] == [(game.plies[10].fen_before, MULTIPV)]
-    assert {c[1] for c in script.calls} == {12}  # same depth for both passes
-    keys = {c[3] for c in script.calls}
+    # Nxd5 isn't among pass 2's lines, so it's searched alone from the same position (21.3)
+    assert [(a[0], a[2]) for a in script.alone] == [(game.plies[10].fen_before, "c3d5")]
+    assert {c[1] for c in script.calls} | {a[1] for a in script.alone} == {12}  # one depth
+    keys = {c[3] for c in script.calls} | {a[3] for a in script.alone}
     assert len(keys) == 1 and None not in keys  # one game, one ucinewgame
+
+
+def test_a_flag_the_check_clears_is_dropped() -> None:
+    """Pass 1 drops 4 pawns after Nxd5, but pass 2, from the position before it, rates Nxd5
+    16 cp below the best: depth noise, not a blunder. No entry, and no extra search."""
+    game, script = qgd_script()
+    nxd5 = game.plies[10]
+    script.multi[nxd5.fen_before] = [
+        Line(Eval(cp=36), mv("e2e3")),
+        Line(Eval(cp=20), mv("c3d5")),  # the played move
+        Line(Eval(cp=-30), mv("a2a3")),
+    ]
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH)
+    assert result.findings == ()
+    assert result.checked_out == (10,)
+    assert script.alone == []  # its score came with the MultiPV lines
+
+
+def test_a_flag_the_check_confirms_from_the_multipv_lines() -> None:
+    game, script = qgd_script()
+    nxd5 = game.plies[10]
+    script.multi[nxd5.fen_before] = [
+        Line(Eval(cp=36), mv("e2e3")),
+        Line(Eval(cp=-30), mv("a2a3")),
+        Line(Eval(cp=-380), mv("c3d5")),  # the played move, still a blunder
+    ]
+    (finding,) = analyse_game(game, "white", script, depth=12, thresholds=TH).findings
+    assert (finding.eval_before, finding.eval_after) == (Eval(cp=36), Eval(cp=-409))  # pass 1's
+    assert finding.accept_uci == ("e2e3",)
+    assert script.alone == []
+
+
+def test_the_check_uses_the_lines_flag_at() -> None:
+    """A FEN entry logs from the inaccuracy line, and its check does too."""
+    game, script = qgd_script()
+    nxd5 = game.plies[10]
+    script.multi[nxd5.fen_before] = [
+        Line(Eval(cp=36), mv("e2e3")),
+        Line(Eval(cp=-40), mv("c3d5")),  # swing 0.07: an inaccuracy, not a blunder
+    ]
+    assert analyse_game(game, "white", script, depth=12, thresholds=TH).findings == ()
+    result = analyse_game(game, "white", script, depth=12, thresholds=TH, flag_at="inaccuracy")
+    assert [f.ply.label for f in result.findings] == ["6. Nxd5"]
 
 
 def test_only_my_moves_are_flagged() -> None:
@@ -319,6 +379,7 @@ class StubSimple:
         *,
         multipv: int | None = None,
         game: object = None,
+        root_moves: list[chess.Move] | None = None,
     ) -> list[chess.engine.InfoDict]:
         self.calls += 1
         if self.calls == self.fail_on:
@@ -414,6 +475,15 @@ def test_settings_and_new_games_reach_the_engine(fake_engine: FakeEngine, tmp_pa
     assert sent.count("ucinewgame") == 2
     assert sent.count("go depth 7 movetime 120000") == 3  # depth decides; the limit is a guard
     assert (engine.threads, engine.hash_mb) == (3, 64)  # kept, to store with each game
+
+
+def test_one_move_alone_reaches_the_engine(fake_engine: FakeEngine, tmp_path: Path) -> None:
+    """Pass 2's check of the move played (21.3) is a UCI ``searchmoves`` search."""
+    log = tmp_path / "uci.log"
+    with Engine.open(fake_engine("--log", str(log))) as engine:
+        (line,) = engine.lines(chess.Board(), 7, root_moves=mv("g1f3"))
+    assert line.move == chess.Move.from_uci("g1f3")  # not a2a3, the fake's first choice
+    assert "go depth 7 movetime 120000 searchmoves g1f3" in log.read_text("utf-8").splitlines()
 
 
 def test_settings_not_given_are_unknown(fake_engine: FakeEngine) -> None:

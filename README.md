@@ -609,8 +609,12 @@ position.
    A missed win that also reaches the blunder line stays a blunder (`??`). Otherwise it's
    shown as "Missed win", with no mark. `missed_win_cp = 0` turns missed wins off. Games
    imported before missed wins existed aren't analysed again, so they have none.
-6. For each logged position, Stockfish looks at its top three moves. Any move within
-   `accept_margin_cp` (60 cp) of the best counts as a correct answer in the re-test.
+6. For each flagged position, Stockfish looks at its top three moves, and at your move from
+   the same position. Your move stays logged only if the same rule still flags it there:
+   two separate searches can disagree, and this keeps out entries that are only engine
+   noise. A FEN entry that this check clears says so, and nothing is logged.
+7. Any move within `accept_margin_cp` (60 cp) of the best counts as a correct answer in the
+   re-test.
 
 The engine's version, depth, threads and hash are saved with every game, and so is
 its score and best move for every position. Evals already in a PGN (`[%eval]`)

@@ -227,6 +227,7 @@ class GameAnalysis:
     best_uci: tuple[str | None, ...] = ()  # the engine's move in each position, as evals
     threads: int | None = None  # the engine's Threads and Hash as applied; None if unknown
     hash_mb: int | None = None
+    checked_out: tuple[int, ...] = ()  # plies flagged by pass 1 that the 21.3 check dropped
 
     @property
     def positions(self) -> tuple[ScoredPosition, ...]:

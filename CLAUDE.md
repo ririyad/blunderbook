@@ -526,10 +526,18 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   (shown as "Missed win", no mark). `missed_win_cp = 0` turns them off. Games imported before
   this rule aren't re-analysed.
 - "Best was" (`best_uci`, `best_line_san`) comes from pass 1: the move that triggered the flag.
-- **Pass 2** (flagged positions only): MultiPV 3 at the same depth. It only decides
-  `accept_uci`: moves whose mover-POV cp is within `accept_margin_cp` of the top line
-  (inclusive; mates count as ±10000 here too). Always include the best move. Never include the
-  move I played.
+- **Pass 2** (flagged positions only): MultiPV 3 at the same depth. It checks the flag and
+  decides `accept_uci`.
+  - **The check:** my move is scored from the position before it at the same depth: its own
+    MultiPV line, or else a search of that move alone (UCI `searchmoves`). The flag rule above
+    runs again on the top line and my move (`detect.holds_up`): it stays only if the swing
+    still reaches the line it was flagged at (blunder, or inaccuracy for a FEN entry) and my
+    move isn't the top line's, or it's still a missed win (so a move that still mates isn't
+    one). Otherwise it's dropped: two separate searches at depth 16 can disagree by more than
+    a move costs. A kept entry stores pass 1's evals and swing, as before.
+  - **`accept_uci`:** moves whose mover-POV cp is within `accept_margin_cp` of the top line
+    (inclusive; mates count as ±10000 here too). Always include the best move. Never include
+    the move I played.
 - `best_line_san`: first 6 plies of the best PV with move numbers
   (`"6. e3 Be7 7. Bd3"`, Black start `"5... Nxe5 6. Be2"`).
   `refutation_san`: first 5 plies of the PV from the position after my move. Both stop at an
