@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | In progress (4/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (5/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,9 +73,10 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.6, fairer re-test answers (next in the order of work; its rule still
-needs your yes). Done in M21 so far: 21.2, the clean-game fixture; 21.1, keep the evals;
-21.10, the engine's safety limit; 21.3, check each flag with the move you played. M19, the Journal extension,
+**Next up:** 21.5, more suggested causes (next in the order of work; its exact lines
+still need your yes). Done in M21 so far: 21.2, the clean-game fixture; 21.1, keep the
+evals; 21.10, the engine's safety limit; 21.3, check each flag with the move you played;
+21.6, fairer re-test answers. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -2033,12 +2034,20 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
       - All pure, in `core/hints.py`, from data an entry already has. "Wrong plan",
         "Skipped blunder check" and "Other" stay yours.
       - **To settle when it starts:** the exact lines (move 12, 10%, 3 pawns).
-- [ ] **21.6** Fairer re-test answers (§7.6 change).
+- [x] **21.6** Fairer re-test answers (§7.6 and §6 change, accepted 2026-11-21).
       - `detect.accepted_moves` accepts moves within 60 cp of the best. At +9, a move
         that keeps +7 is refused; at 0.00, 60 cp is generous.
-      - **Proposed rule:** accept a MultiPV move whose swing against the top line is under
-        the inaccuracy line, the same maths as the blunders. MultiPV 5 instead of 3.
-        `accept_margin_cp` goes.
+      - **The rule (accepted):** a MultiPV move is accepted when the flag rule wouldn't
+        flag it against the top line even from the inaccuracy line: its swing is under
+        `inaccuracy` and it isn't a missed win (so a missed-mate re-test still wants a
+        mate). MultiPV 5 instead of 3. `accept_margin_cp` goes.
+      - Done 2026-11-21: `detect.accepted_moves` takes the thresholds, `MULTIPV = 5`,
+        `accept_margin_cp` left `Thresholds`, config.toml's template, CLAUDE.md §6 and
+        §7.6 and the README. An old config.toml that has it still loads, and the next save
+        drops it. No extension reads it, so `HOST_API` stays 1. On the §12 fixtures at
+        depth 12: 5. Nxf7 now accepts O-O (§12's best, refused at 60 cp), 6. Nxd5 accepts
+        five moves, and 30. h3 still only Rd8#. Entries already saved keep their answers
+        until `reanalyse` (21.4).
 - [ ] **21.7** Re-test scheduling (§7.8 and §6 change).
       - **Proposed rules:** solved with the hint keeps the streak and comes back
         tomorrow (today the hint is recorded and ignored). At most `retest.new_per_day`
@@ -2110,10 +2119,19 @@ dependency, still works, so that warning is filtered too.
 ## Open decisions
 
 - **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
-  no on its proposed rule (21.4 to 21.9).
+  no on its proposed rule (21.4, 21.5, 21.7, 21.8 and 21.9).
 
 ### Decided
 
+- **2026-11-21: Which re-test answers count (21.6).**
+  - **"Not a flag"**, not the swing alone: a move counts when the same rule wouldn't flag
+    it against the best line from the inaccuracy line, missed wins included. With the
+    swing alone, a missed-mate re-test would pass a move that stays +9 and misses the
+    mate again.
+  - **MultiPV 5:** quiet positions often have four or five equal moves; it costs one
+    search per flagged move.
+  - **`accept_margin_cp` removed:** the inaccuracy line is the one setting. Kept as a cap,
+    it would bring back the +9 problem.
 - **2026-11-21: How a flag is checked (21.3).**
   - **The same test again**, not "within `accept_margin_cp`": the flag rule runs on the
     top line and the played move, both from the position before the move at the same

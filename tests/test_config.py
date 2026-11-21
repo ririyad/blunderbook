@@ -19,7 +19,18 @@ def test_missing_file_gives_defaults(tmp_path: Path) -> None:
     cfg = config.load(tmp_path / "config.toml")
     assert cfg == Config()
     assert cfg.engine_depth == 16
-    assert cfg.thresholds == Thresholds(0.05, 0.10, 0.15, 60)
+    assert cfg.thresholds == Thresholds(0.05, 0.10, 0.15, missed_win_cp=300)
+
+
+def test_an_old_accept_margin_is_ignored_and_dropped(tmp_path: Path) -> None:
+    """accept_margin_cp went in 21.6: an old file still loads, and the next save drops it."""
+    path = tmp_path / "config.toml"
+    path.write_text("[thresholds]\naccept_margin_cp = 80\nblunder = 0.2\n", "utf-8")
+    cfg = config.load(path)
+    assert cfg.thresholds.blunder == 0.2
+    config.save(cfg, path)
+    assert "accept_margin_cp" not in path.read_text("utf-8")
+    assert config.load(path) == cfg
 
 
 def test_partial_file_keeps_other_defaults(tmp_path: Path) -> None:
@@ -48,7 +59,6 @@ def test_unknown_keys_are_ignored(tmp_path: Path) -> None:
         ("my_names = [1, 2]", "my_names"),
         ("stockfish_path = 3", "stockfish_path"),
         ("[thresholds]\nblunder = 1.5", "thresholds.blunder"),
-        ("[thresholds]\naccept_margin_cp = -1", "thresholds.accept_margin_cp"),
         ("[thresholds]\nmissed_win_cp = -1", "thresholds.missed_win_cp"),
         ("[thresholds]\nmissed_win_cp = 2.5", "thresholds.missed_win_cp"),
         ("[thresholds]\nmistake = 0.2", "inaccuracy <= mistake <= blunder"),
@@ -101,7 +111,7 @@ def test_save_then_load_round_trip(tmp_path: Path, stockfish_path: str) -> None:
         engine_depth=20,
         engine_threads=4,
         engine_hash_mb=256,
-        thresholds=Thresholds(0.04, 0.09, 0.2, 50, missed_win_cp=250),
+        thresholds=Thresholds(0.04, 0.09, 0.2, missed_win_cp=250),
         lichess=LichessConfig(username="rashed", token="lip_secret"),
         chesscom=ChesscomConfig(username="rashed_blitz", contact="me@example.com"),
         backup=BackupConfig(dir=r"%OneDrive%\Blunderbook", keep=30, auto=False),

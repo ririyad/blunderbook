@@ -609,12 +609,15 @@ position.
    A missed win that also reaches the blunder line stays a blunder (`??`). Otherwise it's
    shown as "Missed win", with no mark. `missed_win_cp = 0` turns missed wins off. Games
    imported before missed wins existed aren't analysed again, so they have none.
-6. For each flagged position, Stockfish looks at its top three moves, and at your move from
+6. For each flagged position, Stockfish looks at its top five moves, and at your move from
    the same position. Your move stays logged only if the same rule still flags it there:
    two separate searches can disagree, and this keeps out entries that are only engine
    noise. A FEN entry that this check clears says so, and nothing is logged.
-7. Any move within `accept_margin_cp` (60 cp) of the best counts as a correct answer in the
-   re-test.
+7. A move among those five counts as a correct answer in the re-test when the same rule
+   wouldn't flag it even from the inaccuracy line: its swing against the best move is under
+   `inaccuracy`, and it isn't a missed win. That's about 55 cp when the game is level and
+   more when you're far ahead (keeping +7 from +9 counts), and when the best move mates,
+   only a mate counts.
 
 The engine's version, depth, threads and hash are saved with every game, and so is
 its score and best move for every position. Evals already in a PGN (`[%eval]`)
@@ -667,12 +670,11 @@ engine_hash_mb = 128
 # Swing thresholds, 0 to 1. Imports only log moves at or above `blunder`, and
 # missed wins: a mate you missed, or a drop of missed_win_cp centipawns or more
 # while you stay ahead (0 turns missed wins off).
-# Re-tests accept moves within accept_margin_cp centipawns of the best move.
+# Re-tests accept any move Stockfish rates under the inaccuracy line.
 [thresholds]
 inaccuracy = 0.05
 mistake = 0.1
 blunder = 0.15
-accept_margin_cp = 60
 missed_win_cp = 300
 
 [lichess]

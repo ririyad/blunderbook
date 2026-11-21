@@ -155,24 +155,31 @@ def accepted_moves(
     lines: Sequence[tuple[str, Eval]],
     mover: Color,
     best_uci: str,
-    margin_cp: int,
+    thresholds: Thresholds,
     *,
     played_uci: str | None = None,
 ) -> tuple[str, ...]:
-    """Moves a re-test accepts: the best move, then every MultiPV move whose score for the
-    mover is within ``margin_cp`` of the best line's, in engine order.
+    """Moves a re-test accepts (ROADMAP 21.6): the best move, then, in engine order, every
+    MultiPV move the flag rule wouldn't flag against the best line even from the inaccuracy
+    line: its swing is under ``thresholds.inaccuracy`` and it isn't a missed win.
 
     ``lines`` are ``(first move UCI, White-POV score)`` pairs for the position before the
-    mover's move. Mates count as +-10000, so when the best line mates, every mating move is
-    accepted. ``played_uci`` (the move that was flagged) is never accepted, even if a
-    deeper look rates it close: the re-test shouldn't pass the move you blundered with.
+    mover's move. The swing scales with the position: about 55 cp when level, 255 cp at +9.
+    When the best line mates, every mating move is accepted and a move that only stays far
+    ahead isn't (it's a missed win). ``played_uci`` (the move that was flagged) is never
+    accepted, even if a deeper look rates it close: the re-test shouldn't pass the move you
+    blundered with.
     """
-    sign = _sign(mover)
-    scores = [sign * maths_cp(score, mover) for _, score in lines]
-    top = max(scores, default=0)
     accepted = [best_uci]
-    for (uci, _), cp in zip(lines, scores, strict=True):
-        if top - cp <= margin_cp and uci not in accepted and uci != played_uci:
+    if not lines:
+        return tuple(accepted)
+    sign = _sign(mover)
+    top = max((score for _, score in lines), key=lambda score: sign * maths_cp(score, mover))
+    for uci, score in lines:
+        if uci in accepted or uci == played_uci:
+            continue
+        close = swing(top, score, mover) < thresholds.inaccuracy
+        if close and not missed_win(top, score, mover, thresholds):
             accepted.append(uci)
     return tuple(accepted)
 

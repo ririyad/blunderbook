@@ -95,13 +95,12 @@ def _as_int(value: object) -> int:
 
 @dataclass(frozen=True, slots=True)
 class Thresholds:
-    """Swing thresholds (0..1), the missed-win line and the re-test margin, from
-    ``[thresholds]`` in config.toml."""
+    """Swing thresholds (0..1) and the missed-win line, from ``[thresholds]`` in
+    config.toml. Re-tests accept moves under the inaccuracy line (``detect.accepted_moves``)."""
 
     inaccuracy: float = 0.05
     mistake: float = 0.10
     blunder: float = 0.15  # only >= blunder (and missed wins) are logged from imports
-    accept_margin_cp: int = 60  # re-tests accept moves within this of the best
     missed_win_cp: int = 300  # an eval drop this big is a missed win; 0 turns them off
 
 

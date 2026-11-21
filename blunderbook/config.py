@@ -197,7 +197,6 @@ def _from_dict(data: Mapping[str, Any]) -> Config:
         inaccuracy=th.fraction("inaccuracy", dt.inaccuracy),
         mistake=th.fraction("mistake", dt.mistake),
         blunder=th.fraction("blunder", dt.blunder),
-        accept_margin_cp=th.whole("accept_margin_cp", dt.accept_margin_cp, minimum=0),
         missed_win_cp=th.whole("missed_win_cp", dt.missed_win_cp, minimum=0),
     )
     if not thresholds.inaccuracy <= thresholds.mistake <= thresholds.blunder:
@@ -320,12 +319,11 @@ def render(config: Config) -> str:
         "# Swing thresholds, 0 to 1. Imports only log moves at or above `blunder`, and",
         "# missed wins: a mate you missed, or a drop of missed_win_cp centipawns or more",
         "# while you stay ahead (0 turns missed wins off).",
-        "# Re-tests accept moves within accept_margin_cp centipawns of the best move.",
+        "# Re-tests accept any move Stockfish rates under the inaccuracy line.",
         "[thresholds]",
         f"inaccuracy = {t.inaccuracy!r}",
         f"mistake = {t.mistake!r}",
         f"blunder = {t.blunder!r}",
-        f"accept_margin_cp = {t.accept_margin_cp}",
         f"missed_win_cp = {t.missed_win_cp}",
         "",
         "[lichess]",

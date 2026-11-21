@@ -4,7 +4,7 @@
 - :class:`Engine` is one running Stockfish process. Always use it as a context manager,
   so the process is closed even when analysis fails.
 - :func:`score_positions` is pass 1: every position of a game, scored once.
-- :func:`analyse_game` runs pass 1 and pass 2 (MultiPV 3 on flagged positions only) and
+- :func:`analyse_game` runs pass 1 and pass 2 (MultiPV 5 on flagged positions only) and
   returns the findings for one side.
 
 Scores leave this module as :class:`Eval` from White's point of view.
@@ -43,7 +43,7 @@ from blunderbook.core.models import (
 )
 
 MIN_STOCKFISH_MAJOR: Final = 17
-MULTIPV: Final = 3  # pass 2 asks for the top 3 moves
+MULTIPV: Final = 5  # pass 2 asks for the top 5 moves (ROADMAP 21.6)
 SEARCH_LIMIT_S: Final = 120.0  # a safety limit per search; depth 16 takes well under 1 s
 
 _VERSION: Final = re.compile(r"Stockfish (\d+)(?:\.(\d+))?\b")
@@ -465,7 +465,7 @@ def analyse_game(
     Pass 1 scores every position once (positions 0..N, finished positions without the
     engine). My moves that aren't the engine's best move are flagged when their swing
     reaches the ``flag_at`` line (the blunder line for imports), or when they're a missed
-    win (``detect.missed_win``). Pass 2 asks for the top 3 moves in each flagged position,
+    win (``detect.missed_win``). Pass 2 asks for the top 5 moves in each flagged position,
     to know which re-test answers to accept, and checks the flag (ROADMAP 21.3): the move
     played is scored from the same position at the same depth (its own MultiPV line, or a
     search of that move alone), and the flag stands only if the same rule flags it again
@@ -669,7 +669,7 @@ def _finding(
         refutation_san=detect.refutation_san(ply.fen_after, after.pv),
         refutation_uci=tuple(move.uci() for move in after.pv),
         accept_uci=detect.accepted_moves(
-            candidates, me, best.uci(), thresholds.accept_margin_cp, played_uci=ply.uci
+            candidates, me, best.uci(), thresholds, played_uci=ply.uci
         ),
         best_pv_uci=tuple(move.uci() for move in before.pv),
     )

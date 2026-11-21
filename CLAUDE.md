@@ -343,10 +343,9 @@ engine_threads = 2
 engine_hash_mb = 128
 
 [thresholds]                          # swing values, 0..1
-inaccuracy = 0.05
+inaccuracy = 0.05                     # also the re-test's line (§7.6 accept_uci)
 mistake = 0.10
 blunder = 0.15                        # only >= blunder is logged from imports
-accept_margin_cp = 60                 # re-test accepts moves within this of best
 missed_win_cp = 300                   # a missed win's eval drop (§7.6); 0 = off
 
 [lichess]
@@ -526,7 +525,7 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   (shown as "Missed win", no mark). `missed_win_cp = 0` turns them off. Games imported before
   this rule aren't re-analysed.
 - "Best was" (`best_uci`, `best_line_san`) comes from pass 1: the move that triggered the flag.
-- **Pass 2** (flagged positions only): MultiPV 3 at the same depth. It checks the flag and
+- **Pass 2** (flagged positions only): MultiPV 5 at the same depth. It checks the flag and
   decides `accept_uci`.
   - **The check:** my move is scored from the position before it at the same depth: its own
     MultiPV line, or else a search of that move alone (UCI `searchmoves`). The flag rule above
@@ -535,9 +534,12 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
     move isn't the top line's, or it's still a missed win (so a move that still mates isn't
     one). Otherwise it's dropped: two separate searches at depth 16 can disagree by more than
     a move costs. A kept entry stores pass 1's evals and swing, as before.
-  - **`accept_uci`:** moves whose mover-POV cp is within `accept_margin_cp` of the top line
-    (inclusive; mates count as ±10000 here too). Always include the best move. Never include
-    the move I played.
+  - **`accept_uci`** (`detect.accepted_moves`): the MultiPV moves the flag rule wouldn't flag
+    against the top line even from the inaccuracy line: swing `< inaccuracy` and not a missed
+    win. So the margin grows with the position (about 55 cp level, 255 cp at +9), and when
+    the top line mates only mating moves count. Always include the best move. Never include
+    the move I played. Entries saved before this keep their answers until they're analysed
+    again.
 - `best_line_san`: first 6 plies of the best PV with move numbers
   (`"6. e3 Be7 7. Bd3"`, Black start `"5... Nxe5 6. Be2"`).
   `refutation_san`: first 5 plies of the PV from the position after my move. Both stop at an

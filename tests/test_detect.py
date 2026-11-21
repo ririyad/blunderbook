@@ -225,36 +225,56 @@ def test_flag_at_a_lower_line(value: float, flag_at: Judgment, flagged: bool) ->
 # ---------------------------------------------------------------- accepted moves (pass 2)
 
 
-def test_accepted_moves_within_the_margin() -> None:
-    lines = [("e2e3", cp(36)), ("d1c2", cp(-24)), ("a2a3", cp(-25))]
-    assert accepted_moves(lines, "white", "e2e3", 60) == ("e2e3", "d1c2")  # 60 in, 61 out
+def test_accepted_moves_under_the_inaccuracy_line() -> None:
+    """Level: about 55 cp. 36 to -18 is a swing of 0.0497, 36 to -19 is 0.0506."""
+    lines = [("e2e3", cp(36)), ("d1c2", cp(-18)), ("a2a3", cp(-19))]
+    assert accepted_moves(lines, "white", "e2e3", TH) == ("e2e3", "d1c2")
+
+
+def test_accepted_moves_scale_with_the_position() -> None:
+    """At +9 a move that keeps +7 is fine; 60 cp used to refuse it. At +1, 70 cp is too
+    much."""
+    ahead = [("d1h5", cp(900)), ("a1e1", cp(700)), ("h2h3", cp(600))]
+    assert accepted_moves(ahead, "white", "d1h5", TH) == ("d1h5", "a1e1")
+    level = [("e2e3", cp(100)), ("d1c2", cp(30))]
+    assert accepted_moves(level, "white", "e2e3", TH) == ("e2e3",)
 
 
 def test_accepted_moves_for_black_use_black_scores() -> None:
-    lines = [("d6e5", cp(-208)), ("g4e6", cp(-170)), ("g4h5", cp(-100))]
-    assert accepted_moves(lines, "black", "d6e5", 60) == ("d6e5", "g4e6")
+    lines = [("d6e5", cp(-208)), ("g4e6", cp(-150)), ("g4h5", cp(-100))]
+    assert accepted_moves(lines, "black", "d6e5", TH) == ("d6e5", "g4e6")
 
 
 def test_best_move_is_always_first_and_never_repeated() -> None:
     lines = [("d1c2", cp(40)), ("e2e3", cp(36))]
-    assert accepted_moves(lines, "white", "e2e3", 60) == ("e2e3", "d1c2")
-    assert accepted_moves([], "white", "e2e3", 60) == ("e2e3",)
+    assert accepted_moves(lines, "white", "e2e3", TH) == ("e2e3", "d1c2")
+    assert accepted_moves([], "white", "e2e3", TH) == ("e2e3",)
 
 
-def test_every_mating_move_is_accepted() -> None:
+def test_every_mating_move_is_accepted_and_only_those() -> None:
+    """+9 is a tiny swing from a mate, but it's a missed win, so a missed-mate re-test
+    still wants the mate."""
     lines = [("h5f7", mate(1)), ("c4f7", mate(4)), ("h5e5", cp(900))]
-    assert accepted_moves(lines, "white", "h5f7", 60) == ("h5f7", "c4f7")
+    assert accepted_moves(lines, "white", "h5f7", TH) == ("h5f7", "c4f7")
+
+
+def test_a_missed_win_by_eval_isnt_accepted() -> None:
+    lines = [("d1h5", cp(1000)), ("a1e1", cp(700))]  # swing 0.047, but 300 cp while far ahead
+    assert accepted_moves(lines, "white", "d1h5", TH) == ("d1h5",)
+    off = Thresholds(missed_win_cp=0)  # missed wins off: only the swing counts
+    assert accepted_moves(lines, "white", "d1h5", off) == ("d1h5", "a1e1")
 
 
 def test_the_flagged_move_is_never_accepted() -> None:
     lines = [("e2e3", cp(36)), ("c3d5", cp(20)), ("d1c2", cp(10))]
-    accepted = accepted_moves(lines, "white", "e2e3", 60, played_uci="c3d5")
+    accepted = accepted_moves(lines, "white", "e2e3", TH, played_uci="c3d5")
     assert accepted == ("e2e3", "d1c2")
 
 
-def test_zero_margin_accepts_only_equal_scores() -> None:
-    lines = [("e2e3", cp(36)), ("d1c2", cp(36)), ("a2a3", cp(35))]
-    assert accepted_moves(lines, "white", "e2e3", 0) == ("e2e3", "d1c2")
+def test_a_lower_inaccuracy_line_accepts_less() -> None:
+    lines = [("e2e3", cp(36)), ("d1c2", cp(36)), ("a2a3", cp(30))]
+    strict = Thresholds(inaccuracy=0.001, mistake=0.1, blunder=0.15)
+    assert accepted_moves(lines, "white", "e2e3", strict) == ("e2e3", "d1c2")
 
 
 # ---------------------------------------------------------------- lines (best, refutation)
