@@ -412,7 +412,9 @@ def run(
 
     Each game is saved as soon as it's analysed. If the engine fails, or ``should_stop()``
     turns true (checked after each position), the games before it stay saved, the game being
-    analysed isn't, and importing the same text again finishes the rest.
+    analysed isn't, and importing the same text again finishes the rest. A search that hits
+    the safety limit (``engine.EngineTimeout``) only skips its game: it's reported as an
+    error, isn't saved, and the import goes on (ROADMAP 21.10).
     """
     games = list(queue)
     where = {q.number: i for i, q in enumerate(games)}
@@ -438,6 +440,9 @@ def run(
                 )
         except Stopped:
             return result(stopped=True)
+        except engine.EngineTimeout as exc:
+            games[where[queued.number]] = replace(queued, status="error", reason=timed_out(exc))
+            continue
         except engine.EngineError as exc:
             return result(error=str(exc))
         if batch is not None and import_id is None:
@@ -450,6 +455,14 @@ def run(
         else:
             saved[queued.number] = done
     return result()
+
+
+def timed_out(exc: engine.EngineTimeout) -> str:
+    """The report's line for a game skipped because a search hit the safety limit."""
+    return (
+        f"Stockfish took over {exc.limit_s:g} s {exc.where}, so this game was skipped. "
+        "Importing the file again tries it once more."
+    )
 
 
 def _no_progress(queued: QueuedGame, k: int, n: int) -> AbstractContextManager[None]:

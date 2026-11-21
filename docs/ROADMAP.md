@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | In progress (2/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (3/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,8 +73,9 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.10, the engine's safety limit (next in the order of work). 21.2, the
-clean-game fixture, and 21.1, keep the evals, are done. M19, the Journal extension,
+**Next up:** 21.3, check each flag with the move you played (next in the order of work;
+its rule still needs your yes). Stage 1 is done: 21.2, the clean-game fixture; 21.1, keep
+the evals; 21.10, the engine's safety limit. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -2044,7 +2045,7 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
 - [ ] **21.9** When you blunder (§7.9 change).
       - Patterns by game phase, by how the game stood before the move (winning, level,
         losing, from your evals), and by clock left. Needs 21.1.
-- [ ] **21.10** A safety limit on the engine (§7.6 and §9 change, accepted 2026-11-21).
+- [x] **21.10** A safety limit on the engine (§7.6 and §9 change, accepted 2026-11-21).
       - Depth is the only limit, so one stuck search (a broken binary, a rare position)
         hangs an import for good.
       - Each search gets `Limit(depth=d, time=SEARCH_LIMIT_S)`, a fixed 120 s in
@@ -2057,6 +2058,17 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
         game isn't saved, so importing again retries it. Any other `EngineError` still
         stops the import.
       - §9: the import exits 0 with a skipped game, like other per-game errors.
+      - Done 2026-11-21: `SEARCH_LIMIT_S`, `EngineTimeout` (with the position it names) and
+        the restart in `core/engine.py`; `importer.run` skips the game with
+        `importer.timed_out()`'s line. A search is cut short only when it took the whole
+        limit and reported less than the depth, so a quick search is never one. A stuck
+        process is ended by a watchdog half the command timeout after the limit, while
+        python-chess is still waiting: ended after python-chess's own wait, its background
+        thread never finishes (1.11) and Python hangs on exit, which a test now checks.
+        The fake UCI engine gained `--slow-on-go` and `--hang-on-go`. A real-Stockfish
+        test checks that it honours the limit. The CLI,
+        the page's import job, sync, the Collection and the Journal all use the same
+        `Engine`, so they all get the limit; only an import skips and goes on.
 - **Later, not in M21:** a "spot the threat" re-test for missed threats (name the
   opponent's move), and playing out the best line for tactics longer than one move.
 

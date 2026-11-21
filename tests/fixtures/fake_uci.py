@@ -2,12 +2,16 @@
 
     python fake_uci.py [--name "Stockfish 17.1"] [--silent] [--exit]
                        [--score "cp 30,cp 10"] [--crash-on-go N] [--log FILE]
+                       [--slow-on-go N] [--hang-on-go N]
 
 --silent         reads commands but never answers (to test timeouts); exits on end of input
 --exit           quits at once without saying anything (not a UCI engine)
 --score LIST     scores for MultiPV lines 1, 2, ... from the side to move ("cp 30",
                  "mate -2"); the last one repeats. Default "cp 0".
 --crash-on-go N  exits without a word on the Nth "go" (counting from 1)
+--slow-on-go N   on the Nth "go", searches until its movetime runs out and reaches only
+                 depth 1, like a search cut short by the time limit
+--hang-on-go N   on the Nth "go", stops answering for good (a stuck engine)
 --log FILE       appends every command it receives to FILE
 
 "go" answers one line per MultiPV slot: line k plays the k-th legal move in UCI order,
@@ -16,6 +20,7 @@ which the test interpreter has. It declares Threads, Hash and MultiPV like Stock
 """
 
 import sys
+import time
 
 import chess
 
@@ -41,6 +46,8 @@ def main(argv: list[str]) -> None:
     silent = "--silent" in argv
     scores = [s.strip() for s in arg("--score", "cp 0").split(",")]
     crash_on = int(arg("--crash-on-go", "0"))
+    slow_on = int(arg("--slow-on-go", "0"))
+    hang_on = int(arg("--hang-on-go", "0"))
     log = arg("--log", "")
 
     board = chess.Board()
@@ -73,7 +80,13 @@ def main(argv: list[str]) -> None:
             goes += 1
             if goes == crash_on:
                 sys.exit(3)
+            if goes == hang_on:
+                silent = True
+                continue
             depth = tokens[tokens.index("depth") + 1] if "depth" in tokens else "1"
+            if goes == slow_on and "movetime" in tokens:
+                time.sleep(int(tokens[tokens.index("movetime") + 1]) / 1000)
+                depth = "1"
             moves = sorted(board.legal_moves, key=lambda m: m.uci())
             for k, move in enumerate(moves[:multipv], start=1):
                 score = scores[min(k, len(scores)) - 1]

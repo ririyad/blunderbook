@@ -8,12 +8,20 @@
   returns the findings for one side.
 
 Scores leave this module as :class:`Eval` from White's point of view.
+
+Depth decides every judgment. Each search also has a safety limit (:data:`SEARCH_LIMIT_S`),
+so one stuck search can't hang an import: a search cut short by it is an
+:class:`EngineTimeout`, never a score (ROADMAP 21.10).
 """
 
+import asyncio
+import contextlib
 import re
 import shlex
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from types import TracebackType
@@ -36,6 +44,7 @@ from blunderbook.core.models import (
 
 MIN_STOCKFISH_MAJOR: Final = 17
 MULTIPV: Final = 3  # pass 2 asks for the top 3 moves
+SEARCH_LIMIT_S: Final = 120.0  # a safety limit per search; depth 16 takes well under 1 s
 
 _VERSION: Final = re.compile(r"Stockfish (\d+)(?:\.(\d+))?\b")
 
@@ -44,6 +53,20 @@ Progress = Callable[[int, int], None]  # (positions done, total)
 
 class EngineError(Exception):
     """The engine couldn't be started or used. The message is safe to show as is."""
+
+
+class EngineTimeout(EngineError):
+    """One search ran into the safety limit before reaching its depth. The engine is
+    ready for the next one: restarted when it had stopped answering. ``where`` names the
+    position ("after 23. Nf5") once the analysis knows it."""
+
+    def __init__(self, limit_s: float, where: str = "on one position") -> None:
+        super().__init__(f"Stockfish took over {limit_s:g} s {where}.")
+        self.limit_s = limit_s
+        self.where = where
+
+
+_Started = tuple[chess.engine.SimpleEngine, "EngineInfo", dict[str, int]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,11 +135,19 @@ class Engine:
         *,
         threads: int | None = None,
         hash_mb: int | None = None,
+        search_limit_s: float = SEARCH_LIMIT_S,
+        grace_s: float = 5.0,
+        start: Callable[[], _Started] | None = None,
     ) -> None:
         self._simple = simple
         self.info = info
         self.threads = threads  # as applied; None when not set (stored with each game)
         self.hash_mb = hash_mb
+        self.search_limit_s = search_limit_s
+        # A search with no answer this long after the limit is stuck. It must be shorter
+        # than python-chess's own wait (the limit plus the command timeout), see _Watchdog.
+        self.grace_s = grace_s
+        self._start = start  # starts the same engine again, after it stopped answering
         self.closed = False
 
     @classmethod
@@ -127,19 +158,35 @@ class Engine:
         threads: int | None = None,
         hash_mb: int | None = None,
         timeout: float = 10.0,
+        search_limit_s: float = SEARCH_LIMIT_S,
     ) -> Self:
         """Start the engine, check it's Stockfish, and apply Threads / Hash if given.
 
+        ``timeout`` is how long it may take to answer a command; ``search_limit_s`` the
+        safety limit per search (tests pass a short one).
         Raises EngineError (with the process already closed) if any of that fails.
         """
-        simple = _popen(command, timeout)
-        try:
-            info = _identify(simple.id.get("name", "").strip())
-            applied = _configure(simple, threads=threads, hash_mb=hash_mb)
-        except BaseException:
-            simple.close()
-            raise
-        return cls(simple, info, threads=applied.get("Threads"), hash_mb=applied.get("Hash"))
+
+        def start() -> _Started:
+            simple = _popen(command, timeout)
+            try:
+                info = _identify(simple.id.get("name", "").strip())
+                applied = _configure(simple, threads=threads, hash_mb=hash_mb)
+            except BaseException:
+                simple.close()
+                raise
+            return simple, info, applied
+
+        simple, info, applied = start()
+        return cls(
+            simple,
+            info,
+            threads=applied.get("Threads"),
+            hash_mb=applied.get("Hash"),
+            search_limit_s=search_limit_s,
+            grace_s=timeout / 2,
+            start=start,
+        )
 
     @property
     def name(self) -> str:
@@ -152,19 +199,50 @@ class Engine:
 
         ``game`` is any object identifying the game: the engine starts a new game
         (``ucinewgame``) whenever it changes.
+
+        Raises :class:`EngineTimeout` when the safety limit ends the search before
+        ``depth``. An engine that stopped answering is restarted first, so the next search
+        works; if it can't be started again, that's a plain EngineError.
         """
+        limit = chess.engine.Limit(depth=depth, time=self.search_limit_s)
+        watchdog = _Watchdog(self._simple, self.search_limit_s + self.grace_s)
+        started = time.monotonic()
         try:
-            infos = self._simple.analyse(
-                board, chess.engine.Limit(depth=depth), multipv=multipv, game=game
-            )
-        except chess.engine.EngineTerminatedError:
-            raise EngineError("Stockfish stopped unexpectedly.") from None
+            infos = self._simple.analyse(board, limit, multipv=multipv, game=game)
+        except (chess.engine.EngineTerminatedError, TimeoutError) as exc:
+            if not watchdog.fired and not isinstance(exc, TimeoutError):
+                raise EngineError("Stockfish stopped unexpectedly.") from None
+            self._restart()
+            raise EngineTimeout(self.search_limit_s) from None
         except chess.engine.EngineError as exc:
             raise EngineError(f"Stockfish couldn't analyse a position: {exc}") from None
+        finally:
+            watchdog.cancel()
+        if watchdog.fired:  # it answered just as the watchdog ended it: start a fresh one
+            self._restart()
+        if time.monotonic() - started >= self.search_limit_s and _shallower(infos, depth):
+            raise EngineTimeout(self.search_limit_s)
         return [_line(info) for info in infos if "score" in info]
 
-    def close(self) -> None:
+    def _restart(self) -> None:
+        """Close the stuck (now ended) process and start the same engine again."""
+        _end(self._simple)
         self._simple.close()
+        if self._start is None:
+            self.closed = True
+            raise EngineError("Stockfish stopped answering.")
+        try:
+            self._simple, _, _ = self._start()
+        except EngineError as exc:
+            self.closed = True
+            raise EngineError(
+                f"Stockfish stopped answering and couldn't start again: {exc}"
+            ) from None
+        self.closed = False
+
+    def close(self) -> None:
+        if not self.closed:
+            self._simple.close()
         self.closed = True
 
     def __enter__(self) -> Self:
@@ -177,6 +255,48 @@ class Engine:
         tb: TracebackType | None,
     ) -> None:
         self.close()
+
+
+class _Watchdog:
+    """Ends the engine process if one search has no answer after ``after_s`` seconds.
+
+    It has to come before python-chess's own wait runs out: python-chess then cancels the
+    search, and a process ended after that leaves its background thread waiting for good
+    (1.11: the cancelled search raises while the exit is being recorded). Ended while
+    python-chess still waits, the search fails as "engine terminated" and everything
+    closes.
+    """
+
+    def __init__(self, simple: chess.engine.SimpleEngine, after_s: float) -> None:
+        self.fired = False
+        self._simple = simple
+        self._timer = threading.Timer(after_s, self._fire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _fire(self) -> None:
+        self.fired = True
+        _end(self._simple)
+
+    def cancel(self) -> None:
+        self._timer.cancel()
+
+
+def _shallower(infos: list[chess.engine.InfoDict], depth: int) -> bool:
+    """Whether any line of the search stopped before ``depth`` (or didn't say)."""
+    return any(info.get("depth", 0) < depth for info in infos)
+
+
+def _end(simple: chess.engine.SimpleEngine) -> None:
+    """Kill the engine process from any thread; python-chess then sees it exit."""
+    transport = simple.protocol.transport
+    if transport is not None:
+        simple.protocol.loop.call_soon_threadsafe(_kill_quietly, transport)
+
+
+def _kill_quietly(transport: asyncio.SubprocessTransport) -> None:
+    with contextlib.suppress(ProcessLookupError):  # it had already gone
+        transport.kill()
 
 
 def probe(command: str | Sequence[str], timeout: float = 10.0) -> EngineInfo:
@@ -354,7 +474,7 @@ def analyse_game(
     total += len(flagged)
     findings: list[Finding] = []
     for k, (ply, swing, judgment) in enumerate(flagged, start=1):
-        multi = analyser.lines(_board_at(game, ply.index), depth, MULTIPV, game=key)
+        multi = _search(analyser, _board_at(game, ply.index), depth, MULTIPV, key, game)
         before, after = pass1[ply.index], pass1[ply.index + 1]
         findings.append(_finding(ply, swing, judgment, before, after, multi, me, thresholds))
         if progress is not None:
@@ -420,11 +540,32 @@ def _evaluate(
     done = terminal_line(board)
     if done is not None:
         return done
-    found = analyser.lines(board, depth, 1, game=key)
+    found = _search(analyser, board, depth, 1, key, game)
     if not found:
         where = game.plies[i - 1].label if i else "the start position"
         raise EngineError(f"Stockfish gave no score after {where}.")
     return found[0]
+
+
+def _search(
+    analyser: Analyser,
+    board: chess.Board,
+    depth: int,
+    multipv: int,
+    key: object,
+    game: ParsedGame,
+) -> list[Line]:
+    """``analyser.lines``, naming the position when the safety limit stops the search."""
+    try:
+        return analyser.lines(board, depth, multipv, game=key)
+    except EngineTimeout as exc:
+        raise EngineTimeout(exc.limit_s, position_name(game, len(board.move_stack))) from None
+
+
+def position_name(game: ParsedGame, i: int) -> str:
+    """Where position ``i`` of ``game`` is, for a message: "after 23. Nf5", or "in the start
+    position"."""
+    return f"after {game.plies[i - 1].label}" if i else "in the start position"
 
 
 def _board_at(game: ParsedGame, index: int) -> chess.Board:

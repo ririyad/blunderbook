@@ -5,6 +5,8 @@ tests/fixtures/fake_uci.py, so they run without Stockfish. The ``engine`` tests 
 end use the real one.
 """
 
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,6 +20,7 @@ from blunderbook.core.engine import (
     Engine,
     EngineError,
     EngineInfo,
+    EngineTimeout,
     Line,
     analyse_game,
     score_positions,
@@ -409,7 +412,7 @@ def test_settings_and_new_games_reach_the_engine(fake_engine: FakeEngine, tmp_pa
     assert "setoption name Threads value 3" in sent
     assert "setoption name Hash value 64" in sent
     assert sent.count("ucinewgame") == 2
-    assert sent.count("go depth 7") == 3
+    assert sent.count("go depth 7 movetime 120000") == 3  # depth decides; the limit is a guard
     assert (engine.threads, engine.hash_mb) == (3, 64)  # kept, to store with each game
 
 
@@ -441,7 +444,7 @@ def test_whole_game_through_a_uci_process(fake_engine: FakeEngine, tmp_path: Pat
     assert result.positions[-1].best_uci is None  # checkmate: no move, no engine
     assert (result.threads, result.hash_mb) == (None, None)  # none were set
     sent = log.read_text("utf-8").splitlines()
-    assert sent.count("go depth 6") == 7  # the final checkmate isn't sent
+    assert sent.count("go depth 6 movetime 120000") == 7  # the final checkmate isn't sent
     assert sent.count("ucinewgame") == 1
 
 
@@ -451,6 +454,68 @@ def test_crash_mid_game_closes_the_process(fake_engine: FakeEngine) -> None:
     with pytest.raises(EngineError, match="stopped unexpectedly"), engine:
         analyse_game(game, "white", engine, depth=6, thresholds=TH)
     assert engine.closed
+
+
+# ---------------------------------------------------------------- the safety limit (21.10)
+
+LIMIT = 0.2  # seconds: a short limit stands in for the real 120 s
+
+
+def test_a_search_cut_short_by_the_limit_is_an_error(fake_engine: FakeEngine) -> None:
+    """The engine answers when its time runs out, but short of the depth: no score from that,
+    and the same engine goes on (it never stopped answering)."""
+    with Engine.open(fake_engine("--slow-on-go", "2"), search_limit_s=LIMIT) as engine:
+        assert engine.lines(chess.Board(), 7)
+        with pytest.raises(EngineTimeout, match=r"^Stockfish took over 0.2 s on one position\.$"):
+            engine.lines(chess.Board(), 7)
+        assert engine.lines(chess.Board(), 7)
+        assert not engine.closed
+
+
+def test_a_stuck_engine_is_restarted(fake_engine: FakeEngine, tmp_path: Path) -> None:
+    log = tmp_path / "uci.log"
+    command = fake_engine("--hang-on-go", "2", "--log", str(log))
+    with Engine.open(command, threads=2, timeout=1, search_limit_s=LIMIT) as engine:
+        assert engine.lines(chess.Board(), 7)
+        stuck = f"SimpleEngine (pid={engine._simple.transport.get_pid()})"
+        with pytest.raises(EngineTimeout):
+            engine.lines(chess.Board(), 7)  # no answer at all: killed and started again
+        assert engine.lines(BLACK_TO_MOVE, 7)  # the new process's first search
+        assert not engine.closed
+    # the stuck process's thread ends too, or Python would wait for it on exit
+    deadline = time.monotonic() + 5
+    while stuck in {t.name for t in threading.enumerate()} and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert stuck not in {t.name for t in threading.enumerate()}
+    sent = log.read_text("utf-8").splitlines()
+    assert sent.count("uci") == 2
+    assert sent.count("setoption name Threads value 2") == 2  # the same settings again
+
+
+def test_a_stuck_engine_that_cant_start_again(fake_engine: FakeEngine) -> None:
+    simple = chess.engine.SimpleEngine.popen_uci(fake_engine("--hang-on-go", "1"), timeout=1)
+    info = EngineInfo("Stockfish 17.1", 17, 1)
+    engine = Engine(simple, info, search_limit_s=LIMIT, grace_s=0.5)  # under python-chess's 1 s
+    with pytest.raises(EngineError, match="stopped answering") as raised, engine:
+        engine.lines(chess.Board(), 7)
+    assert not isinstance(raised.value, EngineTimeout)  # that stops the import
+    assert engine.closed
+
+
+def test_the_limit_names_the_position(fake_engine: FakeEngine) -> None:
+    game = fixture("scholars_mate.pgn")
+    engine = Engine.open(fake_engine("--slow-on-go", "3"), search_limit_s=LIMIT)
+    with engine, pytest.raises(EngineTimeout) as raised:
+        analyse_game(game, "black", engine, depth=6, thresholds=TH)
+    assert str(raised.value) == "Stockfish took over 0.2 s after 1... e5."
+    assert raised.value.where == "after 1... e5"
+
+
+def test_a_limit_in_the_start_position(fake_engine: FakeEngine) -> None:
+    game = fixture("scholars_mate.pgn")
+    engine = Engine.open(fake_engine("--slow-on-go", "1"), search_limit_s=LIMIT)
+    with engine, pytest.raises(EngineTimeout, match="in the start position"):
+        score_positions(game, engine, depth=6)
 
 
 # ---------------------------------------------------------------- real Stockfish
@@ -481,3 +546,14 @@ def test_stockfish_mate_scores_are_whites_point_of_view(stockfish_path: Path) ->
     assert nf6.eval_after == Eval(mate=1)  # White mates in 1
     assert nf6.refutation_san == "4. Qxf7#"
     assert result.evals[-1] == Eval(mate=0)
+
+
+@pytest.mark.engine
+def test_stockfish_stops_at_the_safety_limit(stockfish_path: Path) -> None:
+    """Real Stockfish honours the limit and reports the depth it reached, so a deep search
+    cut short is an error, not a score (21.10)."""
+    engine = Engine.open(str(stockfish_path), threads=1, hash_mb=16, search_limit_s=0.2)
+    with engine, pytest.raises(EngineTimeout):
+        engine.lines(chess.Board(), 40)
+    with Engine.open(str(stockfish_path), threads=1, hash_mb=16) as engine:
+        assert engine.lines(chess.Board(), 12)  # a normal search is untouched

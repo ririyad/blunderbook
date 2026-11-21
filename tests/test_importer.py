@@ -13,7 +13,7 @@ import chess
 import pytest
 
 from blunderbook import importer
-from blunderbook.core.engine import EngineError, Line
+from blunderbook.core.engine import EngineError, EngineTimeout, Line
 from blunderbook.core.models import Batch, Eval, Thresholds
 from blunderbook.db import connection, repo
 
@@ -403,6 +403,22 @@ class Failing(Scripted):
         return super().lines(board, depth, multipv, game=game)
 
 
+class Slow(Scripted):
+    """Its ``at``-th search hits the safety limit, like a stuck Stockfish."""
+
+    def __init__(self, at: int) -> None:
+        super().__init__()
+        self.at = at
+
+    def lines(
+        self, board: chess.Board, depth: int, multipv: int = 1, *, game: object = None
+    ) -> list[Line]:
+        if self.positions + 1 == self.at:
+            self.positions += 1
+            raise EngineTimeout(120)
+        return super().lines(board, depth, multipv, game=game)
+
+
 def run(conn: sqlite3.Connection, analyser: Scripted, **options: Any) -> importer.RunResult:
     queue = importer.prepare(read("multi_game.pgn"), NAMES, known=repo.known_fingerprints(conn))
     return importer.run(conn, queue, analyser, depth=8, thresholds=Thresholds(), **options)
@@ -463,6 +479,21 @@ def test_run_checks_before_each_game(conn: sqlite3.Connection) -> None:
     analyser = Scripted()
     result = run(conn, analyser, should_stop=lambda: True)
     assert result.stopped and result.saved == {} and analyser.positions == 0
+
+
+def test_run_skips_only_the_game_that_hits_the_limit(conn: sqlite3.Connection) -> None:
+    """A search over the safety limit skips its game and the import goes on (21.10)."""
+    result = run(conn, Slow(at=3))  # game 1, position 2: after 1... c5
+    assert result.error is None and not result.stopped
+    statuses = [(q.number, q.status) for q in result.queue]
+    assert statuses == [(1, "error"), (2, "error"), (3, "ready"), (4, "needs_side")]
+    assert result.queue[0].reason == (
+        "Stockfish took over 120 s after 1... c5, so this game was skipped. "
+        "Importing the file again tries it once more."
+    )
+    assert sorted(result.saved) == [3]
+    again = importer.prepare(read("multi_game.pgn"), NAMES, known=repo.known_fingerprints(conn))
+    assert again[0].status == "ready"  # not saved, so the next import tries it again
 
 
 def test_run_keeps_the_games_before_an_engine_failure(conn: sqlite3.Connection) -> None:

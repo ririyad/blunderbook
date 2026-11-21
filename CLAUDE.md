@@ -500,7 +500,12 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
   engine's Threads and Hash (as applied) on the game, so a game can be judged again
   without Stockfish.
   Each position is sent with the game's moves (so Stockfish sees repetitions), and each game
-  starts with `ucinewgame`. Depth is the only limit; there is no time limit per position.
+  starts with `ucinewgame`. Depth decides every judgment. Each search also has a safety
+  limit of 120 s (`SEARCH_LIMIT_S`), only to catch a stuck engine: a search it cuts short
+  before the depth is an error, never a score. An engine that stopped answering is killed
+  and started again with the same settings. In an import, that game is reported as an
+  error ("Stockfish took over 120 s after 23. Nf5, so this game was skipped…"), isn't
+  saved, and the import goes on; importing the file again tries it once more.
   - Terminal positions are not sent to the engine: checkmate → `mate 0` (lost for the side
     to move); stalemate and draws that end the game by themselves (insufficient material,
     75 moves, fivefold repetition) → `cp 0`. Threefold and the 50-move rule only count when
@@ -674,7 +679,8 @@ Every command prints a short, readable summary, e.g.
 Exit codes: `import` exits 1 only when it can't run (the file can't be read, it holds no
 games, the database can't be used, there's no Stockfish while some game is ready, or the
 engine fails; in that last case the games done so far are saved and reported first, and
-importing the file again finishes the rest). A report with needs-side games or errors exits 0.
+importing the file again finishes the rest). A report with needs-side games or errors exits 0,
+a game skipped by the engine's safety limit (§7.6) included.
 `doctor` exits 1 when it finds a problem (AI on with no key or model is one; it never calls
 OpenRouter; an extension that's on but missing or broken is one too). Warnings (an old backup, a missing backup folder)
 are shown but don't change the exit code. `serve` exits 1 only when it can't start (bad

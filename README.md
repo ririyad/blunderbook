@@ -753,6 +753,12 @@ command, or **Open Anyway** in System Settings > Privacy & Security.
 **"Which side were you?"**: none of your names matched the game's players (or both did). Add
 the name to `my_names`, or run `blunderbook import FILE --side white` (or `black`).
 
+**"Stockfish took over 120 s … so this game was skipped"**: one position took Stockfish far
+longer than it ever should (depth 16 takes well under a second), so Blunderbook stopped it,
+started Stockfish again and went on with the other games. That game wasn't saved: import the
+file again to try it once more. If it keeps happening, run `blunderbook doctor` to check
+Stockfish.
+
 **"Port 8732 is already in use"**: Blunderbook is probably running already. Use that window,
 or `blunderbook serve --port 8733`.
 
