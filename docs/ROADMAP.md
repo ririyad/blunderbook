@@ -32,18 +32,48 @@ _Last updated: 2026-11-21_
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
 | M21 Solid core | Planned | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
-**Order of work** (decided 2026-11-20, see Decided):
+**Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
 1. **M19 Journal.** Started 2026-11-20, after the prototype's feedback; done 2026-11-20.
-2. **M20 Cost, not count.**
-3. **M18 Game commentary.**
-4. **M21 Solid core.** Added 2026-11-21, before the desktop app. Whether it should come
-   first instead is an Open decision.
-5. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
 
-The milestone numbers stay as they are; only the order changes.
+_Stage 1: a safety net and the data (no change to what's logged)_
 
-**Next up:** M20, Cost, not count (next in the order of work). M19, the Journal extension,
+2. **21.2 Clean-game fixture.** First, so every later change to detection is checked for
+   false entries. It may show some the app logs today.
+3. **21.1 Keep the evals.** 21.3, 21.5, 21.9 and M18 build on them, and on `phase` and
+   accuracy moving into core.
+4. **21.10 Engine safety limit.** Small, and it protects every later engine run, including
+   the long `reanalyse` runs.
+
+_Stage 2: what gets logged_
+
+5. **21.3 Check each flag with the move you played.**
+6. **21.6 Fairer re-test answers.** The same pass-2 loop as 21.3, so the two land together.
+7. **21.5 More suggested causes.** Before `reanalyse`, so one run refreshes them too.
+
+_Stage 3: your old games_
+
+8. **21.4 `reanalyse`.** One run brings old games to every rule from stages 1 and 2.
+
+_Stage 4: Patterns, from checked entries_
+
+9. **M20 Cost, not count.** Its costs add up swings, so they come after 21.3 and 21.4.
+10. **21.9 When you blunder.** The same `core/patterns.py` and view as M20.
+
+_Stage 5: the re-test loop_
+
+11. **21.7 Re-test scheduling.**
+12. **21.8 The same position again.** After 21.7: both change how the queue is built.
+
+_Stage 6: the milestones planned before M21_
+
+13. **M18 Game commentary.** Accuracy and phase from core (21.1), checked entries (21.3).
+14. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8. Its
+    bundled Stockfish (15.5) relies on `reanalyse` (21.4).
+
+The milestone and slice numbers stay as they are; only the order changes.
+
+**Next up:** 21.2, the clean-game fixture (first in the order of work). M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -1881,8 +1911,9 @@ build step), and CodeMirror (a bundle built outside the app).
 
 ### M20 Cost, not count (planned, not started)
 
-Planned on 2026-11-20 from an idea you picked earlier ("Cost, not count", recommended). It's
-second in the order of work. Patterns counts blunders per cause. Each entry already
+Planned on 2026-11-20 from an idea you picked earlier ("Cost, not count", recommended). It
+comes after M21's stages 1 to 3 (21.2 to 21.4), so its costs add up checked swings, and
+21.9 follows it. Patterns counts blunders per cause. Each entry already
 stores its swing: the share of the game's result it cost you (0..1, §2). So adding the
 swings up gives what each cause cost, in game points. "Points per 10 games" puts every
 cause on the same scale, so a rare but expensive cause stands out.
@@ -1920,6 +1951,9 @@ prevention loop (re-test and suggested causes).
 
 Most slices change a product rule. Each one marked **§ change** says the rule it proposes;
 nothing changes until you accept it, and then CLAUDE.md changes in the same commit.
+
+The slices run in the Order of work at the top, not by number: stages 1 to 3 (21.2, 21.1,
+21.10, 21.3, 21.6, 21.5, 21.4) before M20, then 21.9, 21.7 and 21.8.
 
 - [ ] **21.1** Keep the evals (§5 change).
       - `engine.analyse_game` scores every position (`GameAnalysis.evals`), and
@@ -2025,15 +2059,23 @@ dependency, still works, so that warning is filtered too.
 
 ## Open decisions
 
-- **2026-11-21: Where M21 goes in the order of work.** It's listed before M15 for now.
-  My recommendation: 21.1 (keep the evals) and 21.3 (check each flag) first, before M20,
-  since M20's costs add up swings, and those should come from checked entries; 21.1's evals
-  also feed M18's commentary. The rest of M21 can follow M18.
 - **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
   no on its proposed rule (21.1, 21.3 to 21.10).
 
 ### Decided
 
+- **2026-11-21: The order of work, revised.** Asked for: a logical order once M21 was
+  planned. It replaces the 2026-11-20 order (below).
+  - **A safety net first:** the clean-game fixture (21.2), so every later change to
+    detection is checked for false entries.
+  - **The evals before what builds on them:** 21.1 feeds 21.3, 21.5, 21.9 and M18.
+  - **The changes to pass 2 together:** 21.3 and 21.6 share one loop, and the engine
+    safety limit (21.10) lands before the long runs.
+  - **Causes before `reanalyse`:** 21.5, then 21.4, so one run applies every rule.
+  - **Patterns from checked entries:** M20, then 21.9 on the same files.
+  - **The re-test queue:** 21.7, then 21.8, which both change how it's built.
+  - **M18 and M15 last:** M18 uses 21.1's accuracy and phase; M15's bundled Stockfish
+    relies on `reanalyse`.
 - **2026-11-04: Settings live in config.toml only.** The CLI reads and writes it. The DB never
   stores settings. (On 2026-11-05 the settings and engine API routes and the DB `settings` table
   were dropped from v1.) (CLAUDE.md §5, §6)
