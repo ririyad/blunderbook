@@ -54,7 +54,7 @@ Everything stays on your computer: one SQLite file, no account, no cloud, no tra
 | **One position, no PGN** | Log a single position from its FEN and the move you played. |
 | **Same judgement everywhere** | Every game gets its own Stockfish analysis, whatever the source, so a blunder means the same thing in every entry. |
 | **Missed wins** | A mate or a big gain you didn't take is logged too, even when you stay winning, so it comes back in Re-test. |
-| **Suggested causes** | Time trouble, moving too fast, a missed threat, a hung piece or a missed tactic are suggested from the clock and the engine's line. You confirm them. |
+| **Suggested causes** | Nine of the twelve causes, from a hung piece or a missed threat to a long think, the opening or the endgame, are suggested from the clock, the position and the engine's line. You confirm them. |
 | **Re-test** | Each blunder comes back as a puzzle on a schedule: 1, 3, 7, 14, 30, then 60 days after each correct answer. |
 | **Patterns** | Your most common causes, blunders by time control, and your re-test history. |
 | **Print** | An A4 page per two entries, black and white, like the paper log. |
@@ -629,9 +629,16 @@ are ignored, so every game is judged the same way.
 |---|---|
 | Time trouble | Less than 10% of the base time, or under 20 s, on your clock. |
 | Moved too fast | 3 s or less on the move while you still had more than 30% of your time. |
-| Missed their threat | After your move, the opponent has a forced mate. |
-| Hung a piece | You're 3 or more points of material down (P 1, N/B 3, R 5, Q 9) after the engine's reply line. |
+| Missed their threat | After your move, the opponent has a forced mate. Or you lose 3 or more points (below), and their first capture was already on before your move: the same piece could already take the same piece. |
+| Hung a piece | You're 3 or more points of material down (P 1, N/B 3, R 5, Q 9) after the engine's reply line, and your move made it possible. |
 | Missed my tactic | You had a forced mate and lost it, or Stockfish's best line (up to 6 moves from the position before yours) leaves you 3 or more points up. |
+| Miscalculated a line | You spent 10% of the base time or more on the move (18 s in 3+2). |
+| Opening gap | Move 10 or earlier, unless it's already an endgame. |
+| Endgame technique | Six pieces or fewer left besides kings and pawns, both sides together. |
+| Overconfident / tilt | You were 3 pawns or more ahead (or had a mate) before a blunder. |
+
+Wrong plan, Skipped blunder check and Other are never suggested: only you know those.
+Entries logged before a suggestion existed keep the ones they had.
 
 The time-based ones need clock times and a time control in the PGN. The full cause list is:
 Hung a piece, Missed their threat, Missed my tactic, Miscalculated a line, Time trouble, Moved

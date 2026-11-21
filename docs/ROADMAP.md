@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | In progress (5/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (6/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,10 +73,10 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.5, more suggested causes (next in the order of work; its exact lines
-still need your yes). Done in M21 so far: 21.2, the clean-game fixture; 21.1, keep the
-evals; 21.10, the engine's safety limit; 21.3, check each flag with the move you played;
-21.6, fairer re-test answers. M19, the Journal extension,
+**Next up:** 21.4, `blunderbook reanalyse` (stage 3; its rule still needs your yes).
+Done in M21 so far: 21.2, the clean-game fixture; 21.1, keep the evals; 21.10, the
+engine's safety limit; 21.3, check each flag with the move you played; 21.6, fairer
+re-test answers; 21.5, more suggested causes. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -2021,19 +2021,29 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
         backup first, like restore.
       - **To settle when it starts:** whether a still-flagged entry keeps its old
         `accept_uci` or gets the new one.
-- [ ] **21.5** More suggested causes (§7.7 change). Today 5 of the 11 are ever suggested.
+- [x] **21.5** More suggested causes (§7.7 change, accepted 2026-11-21). Today 5 of the 11
+      are ever suggested; now 9.
       - **Missed their threat vs Hung a piece:** if the refutation's first move was already
         a winning capture before your move (the same position with the opponent to move),
         the threat was there and you missed it. If your move made it possible, you hung a
         piece. Today only a mate counts as a missed threat.
-      - **Opening gap:** move 12 or earlier.
+      - **Opening gap:** the opening by `detect.phase` (moves 1–10; settled: one number,
+        the Collection's).
       - **Endgame technique:** few pieces left (`phase`, from 21.1).
       - **Miscalculated a line:** a long think, 10% of the base time or more, that still
         ended in the mistake.
-      - **Overconfident / tilt:** you were 3 pawns or more ahead before the move.
+      - **Overconfident / tilt:** you were 3 pawns or more ahead before the move, and it's
+        a blunder (settled: missed wins under the blunder line don't get it).
       - All pure, in `core/hints.py`, from data an entry already has. "Wrong plan",
         "Skipped blunder check" and "Other" stay yours.
-      - **To settle when it starts:** the exact lines (move 12, 10%, 3 pawns).
+      - Settled: move 10 (`phase`), 10% of the base, 3 pawns on blunders only, and the
+        threat test on the refutation's first capture.
+      - Done 2026-11-21: `threat_was_there`, `long_think`, `overconfident` and the phase
+        causes in `core/hints.py`, pure and tested. On the §12 fixtures: 5. Nxf7 is now
+        "Missed their threat" (4... Qg5 already hit g2), 4... Nf6 stays "Hung a piece"
+        (Nc6 isn't a capture), the opening traps get "Opening gap" and 32. Rc7 "Endgame
+        technique". CLAUDE.md §7.7 and the README's table. Old entries keep their
+        suggestions until `reanalyse` (21.4).
 - [x] **21.6** Fairer re-test answers (§7.6 and §6 change, accepted 2026-11-21).
       - `detect.accepted_moves` accepts moves within 60 cp of the best. At +9, a move
         that keeps +7 is refused; at 0.00, 60 cp is generous.
@@ -2119,10 +2129,19 @@ dependency, still works, so that warning is filtered too.
 ## Open decisions
 
 - **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
-  no on its proposed rule (21.4, 21.5, 21.7, 21.8 and 21.9).
+  no on its proposed rule (21.4, 21.7, 21.8 and 21.9).
 
 ### Decided
 
+- **2026-11-21: The new suggested causes (21.5).**
+  - **Opening gap uses `detect.phase` (move 10)**, not move 12: one opening line for the
+    hint and the Collection's stats.
+  - **A missed threat is a capture that was already on:** the refutation's first move,
+    legal on the same piece before your move with them to move. Otherwise, your move
+    hung the piece.
+  - **A long think is 10% of the base time.**
+  - **Overconfident only on blunders:** every missed win by eval is 3+ ahead, and those
+    already get "Missed my tactic".
 - **2026-11-21: Which re-test answers count (21.6).**
   - **"Not a flag"**, not the swing alone: a move counts when the same rule wouldn't flag
     it against the best line from the inaccuracy line, missed wins included. With the

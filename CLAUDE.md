@@ -560,11 +560,23 @@ Suggestions only (dashed "auto" chips in the UI). The user confirms them.
   - A game that doesn't start from the standard position: the first move's time is unknown
     (the game started midway).
   - A negative result (e.g. the opponent added time) is unknown, not 0.
-- **Missed their threat:** eval after my move is a forced mate against me. It wins over
-  "Hung a piece"; the time rules can appear alongside either.
+- **Missed their threat:** eval after my move is a forced mate against me; or the material
+  loss below, when the refutation's first move was already there (`threat_was_there`): it's
+  a capture, and in the position before my move, with the opponent to move, the same piece
+  could already make it on the same piece. Unknown when I was in check (then "Hung a piece").
+  The time rules can appear alongside either.
 - **Hung a piece:** not the mate case, and my material balance drops by `>= 3` after playing
   out up to 6 plies of the refutation PV (P=1, N=B=3, R=5, Q=9), compared with the position
-  before my move.
+  before my move, and my move made the first capture possible (or it isn't a capture).
+- **Miscalculated a line:** time spent `>= 10%` of the base (a long think that still went
+  wrong). Needs clocks and a time control; never with "Moved too fast".
+- **Opening gap / Endgame technique:** `detect.phase` of the position before my move:
+  the opening is moves 1–10, the endgame six or fewer pieces besides kings and pawns
+  (both sides; the endgame wins over the move number). The Collection uses the same lines.
+- **Overconfident / tilt:** I was `>= 300` cp ahead before my move (a mate of mine counts),
+  and the entry is a `blunder`. A missed win under the blunder line doesn't get it.
+- "Wrong plan", "Skipped blunder check" and "Other" are never suggested: only you know.
+  Entries saved before a rule existed keep their suggestions until they're analysed again.
 - **Missed my tactic:** I had a forced mate before my move and not after it, or the best PV
   from the position before my move, played out up to 6 plies, leaves my material balance
   `>= 3` higher than in that position. It can appear with any other suggestion.

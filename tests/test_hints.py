@@ -15,15 +15,26 @@ from blunderbook.core.engine import Engine, analyse_game
 from blunderbook.core.hints import (
     Hints,
     hung_a_piece,
+    long_think,
     material_balance,
     missed_my_tactic,
     missed_their_threat,
     moved_too_fast,
+    overconfident,
     suggest,
+    threat_was_there,
     time_spent,
     time_trouble,
 )
-from blunderbook.core.models import Color, Eval, Finding, ParsedGame, Thresholds, TimeControl
+from blunderbook.core.models import (
+    Color,
+    Eval,
+    Finding,
+    Judgment,
+    ParsedGame,
+    Thresholds,
+    TimeControl,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pgn"
 
@@ -71,45 +82,51 @@ def hints_for(name: str, index: int, after: Eval, refutation: tuple[str, ...] = 
 
 def test_back_rank_time_trouble() -> None:
     hints = hints_for("back_rank.pgn", 0, Eval(mate=-1), ("e7e1",))
-    assert hints.causes == ("Missed their threat", "Time trouble")
+    # four pieces besides kings and pawns: an endgame by detect.phase
+    assert hints.causes == ("Missed their threat", "Time trouble", "Endgame technique")
     assert hints.clock_left_s == 9
     assert hints.time_spent_s is None  # first move of a game set up from a FEN
 
 
 def test_scholars_mate_missed_their_threat() -> None:
     hints = hints_for("scholars_mate.pgn", 5, Eval(mate=1), ("h5f7",))
-    assert hints.causes == ("Missed their threat",)
+    assert hints.causes == ("Missed their threat", "Opening gap")
     assert (hints.clock_left_s, hints.time_spent_s) == (173, 4)
 
 
 def test_legal_trap_fast_and_missed_mate() -> None:
     hints = hints_for("legal_trap.pgn", 9, Eval(mate=2), ("c4f7", "e8e7", "c3d5"))
-    assert hints.causes == ("Missed their threat", "Moved too fast")
+    assert hints.causes == ("Missed their threat", "Moved too fast", "Opening gap")
     assert hints.time_spent_s == pytest.approx(2.6)
 
 
 def test_unmatched_name_fixture() -> None:
     hints = hints_for("chesscom_unmatched_name.pgn", 9, Eval(mate=1), ("e4d6",))
-    assert hints.causes == ("Missed their threat", "Moved too fast")
+    assert hints.causes == ("Missed their threat", "Moved too fast", "Opening gap")
     assert hints.time_spent_s == 1
 
 
-def test_blackburne_shilling_hung_a_piece() -> None:
+def test_blackburne_shilling_missed_their_threat() -> None:
+    """4... Qg5 already hit g2 and e5; 5. Nxf7 ignores it and Qxg2 comes (21.5)."""
     refutation = ("g5g2", "d2d3", "g2h1", "e1d2", "h1d1", "d2d1")
     hints = hints_for("blackburne_shilling.pgn", 8, Eval(cp=-538), refutation)
-    assert hints == Hints(causes=("Hung a piece",), clock_left_s=None, time_spent_s=None)
+    causes = ("Missed their threat", "Opening gap")
+    assert hints == Hints(causes=causes, clock_left_s=None, time_spent_s=None)
 
 
 def test_petroff_trap_hung_the_queen() -> None:
     refutation = ("e5c6", "d8e7", "c6e7", "f8e7", "e2d1")
-    assert hints_for("petroff_trap.pgn", 7, Eval(cp=500), refutation).causes == ("Hung a piece",)
+    # Nc6 isn't a capture: 4... Nf6 itself opened the e-file to the queen
+    hints = hints_for("petroff_trap.pgn", 7, Eval(cp=500), refutation)
+    assert hints.causes == ("Hung a piece", "Opening gap")
 
 
 def test_elephant_trap_is_a_piece_for_a_pawn() -> None:
     # 6. Nxd5 Nxd5 7. Bxd8 Bb4+ 8. Qd2 Bxd2+ 9. Kxd2: White ends a pawn up after 6 plies
-    # (Kxd8 comes next), so no cause is suggested. The user picks one.
+    # (Kxd8 comes next), so no material cause is suggested. The user picks one.
     refutation = ("f6d5", "g5d8", "f8b4", "d1d2", "b4d2", "e1d2", "e8d8")
-    assert hints_for("qgd_elephant.pgn", 10, Eval(cp=-409), refutation).causes == ()
+    hints = hints_for("qgd_elephant.pgn", 10, Eval(cp=-409), refutation)
+    assert hints.causes == ("Opening gap",)
 
 
 # ---------------------------------------------------------------- no clocks -> skip
@@ -123,14 +140,14 @@ def test_no_clocks_skips_the_time_rules() -> None:
 def test_clocks_without_a_time_control_skip_the_time_rules() -> None:
     game = fixture("legal_trap.pgn")
     hints = suggest(finding(game, 9, Eval(cp=-300)), game, None)
-    assert (hints.causes, hints.time_spent_s) == ((), None)
+    assert (hints.causes, hints.time_spent_s) == (("Opening gap",), None)
     assert hints.clock_left_s == pytest.approx(587.6)  # still reported
 
 
 def test_time_control_without_clocks_skips_the_time_rules() -> None:
     game = only_game('[TimeControl "180+2"]\n\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0')
     hints = suggest(finding(game, 5, Eval(mate=1)), game, tc_of(game))
-    assert hints.causes == ("Missed their threat",)
+    assert hints.causes == ("Missed their threat", "Opening gap")
     assert (hints.clock_left_s, hints.time_spent_s) == (None, None)
 
 
@@ -250,6 +267,86 @@ def test_mate_wins_over_hung_a_piece() -> None:
     assert "Hung a piece" not in hints.causes
 
 
+# ---------------------------------------------------------------- the threat was there (21.5)
+
+# White's knight on c3 is attacked by the pawn on b4. Black to move after White's move.
+KNIGHT_HIT = "4k3/8/8/8/1p6/2N5/8/4K2R w - - 0 30"
+
+
+def test_a_capture_that_was_there_is_a_missed_threat() -> None:
+    """30. Rh8+?? leaves the knight, and bxc3 was already on."""
+    played = after(KNIGHT_HIT, "h1h2")
+    assert threat_was_there(KNIGHT_HIT, played, ("b4c3", "h2h8"))
+
+
+def test_a_capture_my_move_made_is_a_hung_piece() -> None:
+    """30. Ne4?? puts the knight where the d5 pawn takes it: dxe4 wasn't there before."""
+    fen = "4k3/8/8/3p4/8/8/5N2/4K3 w - - 0 30"
+    assert not threat_was_there(fen, after(fen, "f2e4"), ("d5e4",))
+
+
+def test_a_threat_cant_be_told_when_i_was_in_check() -> None:
+    fen = "4k3/8/8/8/1p6/2N5/8/r3K3 w - - 0 30"  # Ra1+: bxc3 was on, but I had to move
+    assert not threat_was_there(fen, after(fen, "e1f2"), ("b4c3",))
+
+
+def test_the_threat_test_needs_a_capture() -> None:
+    played = after(KNIGHT_HIT, "h1h2")
+    assert not threat_was_there(KNIGHT_HIT, played, ("e8d7",))  # not a capture
+    assert not threat_was_there(KNIGHT_HIT, played, ("zz",))  # unreadable
+    assert not threat_was_there(KNIGHT_HIT, played, ())
+
+
+# ---------------------------------------------------------------- long think, overconfident
+
+
+@pytest.mark.parametrize(
+    ("spent", "tc", "expected"),
+    [
+        (18, TimeControl(180, 2), True),  # 10% of 3 minutes
+        (17.9, TimeControl(180, 2), False),
+        (60, TimeControl(600, 0), True),
+        (30, TimeControl(0, 5), False),  # no base time: no share of it
+        (None, TimeControl(180, 2), False),
+        (60, None, False),
+    ],
+)
+def test_long_think(spent: float | None, tc: TimeControl | None, expected: bool) -> None:
+    assert long_think(spent, tc) is expected
+
+
+def test_a_long_think_suggests_miscalculated_a_line() -> None:
+    game = only_game(
+        '[TimeControl "180+0"]\n\n1. e4 {[%clk 0:03:00]} e5 {[%clk 0:03:00]} '
+        "2. Qh5 {[%clk 0:02:40]} *"
+    )
+    hints = suggest(finding(game, 2, Eval(cp=-50)), game, tc_of(game))
+    assert hints.time_spent_s == 20
+    assert hints.causes == ("Miscalculated a line", "Opening gap")
+
+
+@pytest.mark.parametrize(
+    ("before", "judgment", "me", "expected"),
+    [
+        (Eval(cp=300), "blunder", "white", True),
+        (Eval(cp=299), "blunder", "white", False),
+        (Eval(mate=4), "blunder", "white", True),
+        (Eval(cp=-350), "blunder", "black", True),
+        (Eval(cp=350), "blunder", "black", False),  # Black was losing
+        (Eval(cp=900), "missed", "white", False),  # still winning after it
+        (Eval(cp=900), "mistake", "white", False),  # a FEN entry under the blunder line
+    ],
+)
+def test_overconfident(before: Eval, judgment: Judgment, me: Color, expected: bool) -> None:
+    found = replace(finding(only_game(HANGING_QUEEN), 0, Eval(cp=0)), judgment=judgment)
+    assert overconfident(replace(found, eval_before=before), me) is expected
+
+
+def test_the_middlegame_gets_no_phase_cause() -> None:
+    # 13. Nc3 in the club game: move 13, plenty of pieces
+    assert hints_for("otb_club_no_clocks.pgn", 24, Eval(cp=-150)).causes == ()
+
+
 # ---------------------------------------------------------------- hung a piece
 
 
@@ -365,4 +462,6 @@ def test_suggest_lists_it_in_cause_order() -> None:
     assert suggest(found, only_game(HANGING_QUEEN), None).causes == (
         "Missed their threat",
         "Missed my tactic",
+        "Endgame technique",  # two queens: an endgame
+        "Overconfident / tilt",  # a queen up before a blunder
     )

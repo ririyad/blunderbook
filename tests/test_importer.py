@@ -150,7 +150,7 @@ def test_analyse_adds_hints_to_each_blunder() -> None:
     (found,) = result.blunders
     assert found.finding.ply.label == "5... Bxd1"
     assert found.finding.best_san == "dxe5"
-    assert found.hints.causes == ("Missed their threat", "Moved too fast")
+    assert found.hints.causes == ("Missed their threat", "Moved too fast", "Opening gap")
     assert found.hints.time_spent_s == pytest.approx(2.6)
     # every position but the last (checkmate), then pass 2: its MultiPV and Bxd1 alone (21.3)
     assert engine.positions == len(queued.game.plies) + 2
@@ -243,7 +243,7 @@ def test_new_blunder_from_a_finding() -> None:
         "blunder",
     )
     assert (b.clock_left_s, b.time_spent_s) == (found.hints.clock_left_s, pytest.approx(2.6))
-    assert b.auto_causes == ("Missed their threat", "Moved too fast")
+    assert b.auto_causes == ("Missed their threat", "Moved too fast", "Opening gap")
 
 
 def test_save_stores_the_game_and_its_entries(conn: sqlite3.Connection) -> None:

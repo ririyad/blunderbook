@@ -10,7 +10,7 @@ from typing import Final
 
 import chess
 
-from blunderbook.core.detect import mover_mates
+from blunderbook.core.detect import maths_cp, mover_mates, phase
 from blunderbook.core.models import CAUSES, Color, Eval, Finding, ParsedGame, Ply, TimeControl
 
 TIME_TROUBLE_SHARE: Final = 0.10  # clock left < 10% of base ...
@@ -21,6 +21,8 @@ HUNG_PIECE_PLIES: Final = 6
 HUNG_PIECE_DROP: Final = 3
 MISSED_TACTIC_PLIES: Final = 6
 MISSED_TACTIC_GAIN: Final = 3
+LONG_THINK_SHARE: Final = 0.10  # time spent >= 10% of base: a long think (21.5)
+OVERCONFIDENT_CP: Final = 300  # 3 pawns or more ahead before a blunder (21.5)
 
 PIECE_VALUES: Final = {
     chess.PAWN: 1,
@@ -54,10 +56,20 @@ def suggest(finding: Finding, game: ParsedGame, tc: TimeControl | None) -> Hints
         found.add("Time trouble")
     if moved_too_fast(spent, clock_left, tc):
         found.add("Moved too fast")
+    if long_think(spent, tc):
+        found.add("Miscalculated a line")
     if missed_their_threat(finding.eval_after, me):
         found.add("Missed their threat")
     elif hung_a_piece(ply.fen_before, ply.fen_after, finding.refutation_uci, me):
-        found.add("Hung a piece")
+        threat = threat_was_there(ply.fen_before, ply.fen_after, finding.refutation_uci)
+        found.add("Missed their threat" if threat else "Hung a piece")
+    stage = phase(chess.Board(ply.fen_before))
+    if stage == "opening":
+        found.add("Opening gap")
+    elif stage == "endgame":
+        found.add("Endgame technique")
+    if overconfident(finding, me):
+        found.add("Overconfident / tilt")
 
     causes = tuple(cause for cause in CAUSES if cause in found)
     return Hints(causes=causes, clock_left_s=clock_left, time_spent_s=spent)
@@ -104,6 +116,14 @@ def moved_too_fast(spent: float | None, clock_left: float | None, tc: TimeContro
     return spent <= FAST_MOVE_S and clock_left > FAST_MOVE_CLOCK_SHARE * tc.base_s
 
 
+def long_think(spent: float | None, tc: TimeControl | None) -> bool:
+    """10% of the base time or more on a move that still went wrong: a line you worked out
+    and got wrong ("Miscalculated a line"). Never with "Moved too fast"."""
+    if spent is None or tc is None or tc.base_s <= 0:
+        return False
+    return spent >= LONG_THINK_SHARE * tc.base_s
+
+
 # ---------------------------------------------------------------- board rules
 
 
@@ -112,6 +132,42 @@ def missed_their_threat(eval_after: Eval, me: Color) -> bool:
     if eval_after.mate is None or eval_after.mate == 0:
         return False
     return eval_after.mate < 0 if me == "white" else eval_after.mate > 0
+
+
+def threat_was_there(fen_before: str, fen_after: str, refutation: Sequence[str]) -> bool:
+    """The refutation's first move takes a piece, and it already could before my move:
+    the same piece, from the same square, taking the same piece on the same square, with
+    the opponent to move in the position before it. Then the threat was there and I missed
+    it; otherwise my move made it possible (I hung the piece). Unknown (False) when I was
+    in check, so the opponent couldn't have moved there."""
+    if not refutation:
+        return False
+    try:
+        move = chess.Move.from_uci(refutation[0])
+    except ValueError:
+        return False
+    after = chess.Board(fen_after)
+    if not after.is_legal(move) or not after.is_capture(move) or after.is_en_passant(move):
+        return False
+    before = chess.Board(fen_before)
+    if before.is_check():
+        return False
+    before.push(chess.Move.null())  # the same position, the opponent to move
+    return (
+        before.is_legal(move)
+        and before.piece_at(move.from_square) == after.piece_at(move.from_square)
+        and before.piece_at(move.to_square) == after.piece_at(move.to_square)
+    )
+
+
+def overconfident(finding: Finding, me: Color) -> bool:
+    """3 pawns or more ahead (or a mate of my own) before the move, and it's a blunder: a
+    won game thrown away. A missed win under the blunder line (judgment "missed") doesn't
+    count: it already gets "Missed my tactic"."""
+    if finding.judgment != "blunder":
+        return False
+    sign = 1 if me == "white" else -1
+    return sign * maths_cp(finding.eval_before, me) >= OVERCONFIDENT_CP
 
 
 def missed_my_tactic(finding: Finding, me: Color) -> bool:
