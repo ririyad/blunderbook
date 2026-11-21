@@ -5,7 +5,7 @@ Blunderbook, see the [README](../README.md). The spec is [CLAUDE.md](../CLAUDE.m
 
 ## Status
 
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-21_
 
 | Milestone | State | Notes |
 |---|---|---|
@@ -30,13 +30,16 @@ _Last updated: 2026-11-16_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
+| M21 Solid core | Planned | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, see Decided):
 
 1. **M19 Journal.** Started 2026-11-20, after the prototype's feedback; done 2026-11-20.
 2. **M20 Cost, not count.**
 3. **M18 Game commentary.**
-4. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
+4. **M21 Solid core.** Added 2026-11-21, before the desktop app. Whether it should come
+   first instead is an Open decision.
+5. **M15 Desktop app.** It opens with a packaging test (15.0), then 15.1 to 15.8.
 
 The milestone numbers stay as they are; only the order changes.
 
@@ -1891,6 +1894,9 @@ cause on the same scale, so a rare but expensive cause stands out.
       - The games behind each figure, so a cost can be shown per 10 games.
       - The biggest leak by cost, next to the one by count.
       - Missed wins count with their own swing, which is small by design.
+      - Blunders per 10 games by month and by speed, from every game you imported (clean
+        ones are saved too): the number that says whether you're improving. Added from
+        the 2026-11-21 core review (M21).
       - Tests with hand-made entries.
 - [ ] **20.2** The page.
       - A "Count | Cost" switch on the Patterns view. The bars stay solid for confirmed and
@@ -1903,6 +1909,91 @@ cause on the same scale, so a rare but expensive cause stands out.
 - **To settle when it starts:** what "games" means for a cost per 10 games, either every
   game you imported or only the games of that speed or opening. Also, whether FEN entries
   (no game) count.
+
+### M21 Solid core (planned, not started)
+
+Planned on 2026-11-21 from a review of the core (`core/detect.py`, `core/engine.py`,
+`core/hints.py`, `core/retest.py`, `core/patterns.py`, `importer.py`), asked for before
+the desktop app. The core works and is well tested. The gaps are about trust (is each
+entry a real mistake?), data the engine works out and the import throws away, and the
+prevention loop (re-test and suggested causes).
+
+Most slices change a product rule. Each one marked **§ change** says the rule it proposes;
+nothing changes until you accept it, and then CLAUDE.md changes in the same commit.
+
+- [ ] **21.1** Keep the evals (§5 change).
+      - `engine.analyse_game` scores every position (`GameAnalysis.evals`), and
+        `importer.new_game` drops them. Migration `0004`: `games.evals`, a JSON list of
+        N + 1 scores, White POV, in `eval_before`'s form. Games saved before it have
+        `NULL`. Also `engine_threads` and `engine_hash_mb`: with more than one thread,
+        Stockfish isn't deterministic, so the same game can give other entries elsewhere.
+      - `move_accuracy`, `game_accuracy` and `phase` move from the Collection's
+        `stats.py` to `core/detect.py`, and the Collection imports them from there.
+      - Unlocks without Stockfish: your accuracy and mistakes per game, an eval graph on
+        the game page, re-judging after a threshold change, and 21.9.
+      - _Done when_ an imported fixture has N + 1 evals, and an old database migrates
+        with `NULL`.
+- [ ] **21.2** A clean-game fixture.
+      - `tests/fixtures/pgn/` only checks that blunders are found. Add a short quiet game
+        where nothing may be flagged at depth 12, so a false entry fails a test.
+- [ ] **21.3** Check each flag with the move you played (§7.6 change).
+      - Today a move is flagged from two separate searches, before and after it. At depth
+        16 that's noisy, and it makes false missed wins: "mate in 7" before, "+12" after,
+        because the mate moved past the engine's horizon.
+      - **Proposed rule:** pass 2 also searches the played move alone from the position
+        before it (`root_moves=[played]`, same depth). The flag is dropped when that score
+        is within `accept_margin_cp` of the top line, or, for a missed win, when it still
+        mates. One extra search per flagged move.
+      - The §12 fixtures still flag their move; 21.2's flags nothing.
+- [ ] **21.4** `blunderbook reanalyse [--depth N] [--game ID]` (§9 change).
+      - Games imported before missed wins were never re-analysed, and the desktop app will
+        ship a newer Stockfish.
+      - **Proposed rule:** run both passes again and save the new evals. An entry at the
+        same ply keeps your notes, causes and attempts and gets the new engine facts. A new
+        flag becomes a new entry. An entry that's no longer flagged stays, marked "not
+        flagged by the last analysis", so nothing you wrote is lost. A `-pre-reanalyse`
+        backup first, like restore.
+      - **To settle when it starts:** whether a still-flagged entry keeps its old
+        `accept_uci` or gets the new one.
+- [ ] **21.5** More suggested causes (§7.7 change). Today 5 of the 11 are ever suggested.
+      - **Missed their threat vs Hung a piece:** if the refutation's first move was already
+        a winning capture before your move (the same position with the opponent to move),
+        the threat was there and you missed it. If your move made it possible, you hung a
+        piece. Today only a mate counts as a missed threat.
+      - **Opening gap:** move 12 or earlier.
+      - **Endgame technique:** few pieces left (`phase`, from 21.1).
+      - **Miscalculated a line:** a long think, 10% of the base time or more, that still
+        ended in the mistake.
+      - **Overconfident / tilt:** you were 3 pawns or more ahead before the move.
+      - All pure, in `core/hints.py`, from data an entry already has. "Wrong plan",
+        "Skipped blunder check" and "Other" stay yours.
+      - **To settle when it starts:** the exact lines (move 12, 10%, 3 pawns).
+- [ ] **21.6** Fairer re-test answers (§7.6 change).
+      - `detect.accepted_moves` accepts moves within 60 cp of the best. At +9, a move
+        that keeps +7 is refused; at 0.00, 60 cp is generous.
+      - **Proposed rule:** accept a MultiPV move whose swing against the top line is under
+        the inaccuracy line, the same maths as the blunders. MultiPV 5 instead of 3.
+        `accept_margin_cp` goes.
+- [ ] **21.7** Re-test scheduling (§7.8 and §6 change).
+      - **Proposed rules:** solved with the hint keeps the streak and comes back
+        tomorrow (today the hint is recorded and ignored). At most `retest.new_per_day`
+        new entries (default 10) join the queue each day, oldest game first, so a big
+        sync doesn't put 40 positions in one day.
+- [ ] **21.8** The same position again (§7.8 and §11 change).
+      - The same opening mistake in three games is three entries and three re-tests.
+      - **Proposed rule:** entries whose position matches (FEN without the move counters)
+        and that you played the same move in are re-tested once, and the Log says "You
+        went wrong here 3 times" with links to the games.
+- [ ] **21.9** When you blunder (§7.9 change).
+      - Patterns by game phase, by how the game stood before the move (winning, level,
+        losing, from your evals), and by clock left. Needs 21.1.
+- [ ] **21.10** A safety limit on the engine (§7.6 change).
+      - Depth is the only limit, so one stuck search (a broken binary, a rare position)
+        hangs an import for good.
+      - **Proposed rule:** a generous cap per position (120 s) that stops the import with
+        an engine error, as a crash does. It never decides a judgment.
+- **Later, not in M21:** a "spot the threat" re-test for missed threats (name the
+  opponent's move), and playing out the best line for tactics longer than one move.
 
 ## Development notes
 
@@ -1934,7 +2025,12 @@ dependency, still works, so that warning is filtered too.
 
 ## Open decisions
 
-None open.
+- **2026-11-21: Where M21 goes in the order of work.** It's listed before M15 for now.
+  My recommendation: 21.1 (keep the evals) and 21.3 (check each flag) first, before M20,
+  since M20's costs add up swings, and those should come from checked entries; 21.1's evals
+  also feed M18's commentary. The rest of M21 can follow M18.
+- **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
+  no on its proposed rule (21.1, 21.3 to 21.10).
 
 ### Decided
 
