@@ -70,6 +70,19 @@ def test_fixture_flags_its_blunder(
     assert result.analysis.depth == DEPTH
 
 
+@pytest.mark.parametrize("me", ["Rashed", "Farhan K."])
+def test_a_clean_game_logs_nothing(stockfish: Engine, me: str) -> None:
+    """A quiet Berlin endgame where neither side goes wrong: nothing is flagged for either
+    side, even from the inaccuracy line, so a false entry fails here. Every move's swing was
+    0.02 or less when it was chosen (depth 12 and 16, Stockfish 19)."""
+    (queued,) = importer.prepare((FIXTURES / "clean_berlin.pgn").read_text("utf-8"), [me])
+    assert queued.status == "ready", queued
+    result = importer.analyse(
+        queued, stockfish, depth=DEPTH, thresholds=Thresholds(), flag_at="inaccuracy"
+    )
+    assert [b.finding.ply.label for b in result.blunders] == []
+
+
 def test_otb_game_has_no_time_hints(stockfish: Engine) -> None:
     result = analyse("otb_club_no_clocks.pgn", stockfish)
     assert result.queued.source is not None

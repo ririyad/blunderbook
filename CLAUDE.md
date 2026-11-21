@@ -935,6 +935,7 @@ Design language (from the demo and the paper template):
 | `chesscom_unmatched_name.pgn` | Black ("rashed_blitz", not in names) | `5... Ngf6??` | Caro-Kann, 6.Nd6#; must come back as `needs_side` |
 | `missed_mate.pgn` | White ("Rashed") | `30. h3` missed win (best `Rd8#`) | `[FEN "6k1/5ppp/8/8/8/2N1B3/r4PPP/3R2K1 w - - 0 30"]`; stays winning, swing under the inaccuracy line; hint "Missed my tactic" |
 | `multi_game.pgn` | — | — | Several games, one deliberately broken; report shows it, others import |
+| `clean_berlin.pgn` | Both ("Rashed" White, "Farhan K." Black) | none | Quiet Berlin endgame; nothing flagged for either side, even from the inaccuracy line (false entries fail here) |
 
 - Unit tests (no engine): time-control parsing and speed, clock parsing, time-spent maths
   with increment, side detection, fingerprints and dedupe, source detection, the

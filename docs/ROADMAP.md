@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | Planned | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (1/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,7 +73,8 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.2, the clean-game fixture (first in the order of work). M19, the Journal extension,
+**Next up:** 21.1, keep the evals (next in the order of work). 21.2, the clean-game
+fixture, is done. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -1976,9 +1977,14 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
         the game page, re-judging after a threshold change, and 21.9.
       - _Done when_ an imported fixture has N + 1 positions, a FEN entry has 2, and an old
         database migrates with none.
-- [ ] **21.2** A clean-game fixture.
+- [x] **21.2** A clean-game fixture.
       - `tests/fixtures/pgn/` only checks that blunders are found. Add a short quiet game
         where nothing may be flagged at depth 12, so a false entry fails a test.
+      - Done 2026-11-21: `clean_berlin.pgn`, a quiet Berlin endgame (17 moves, a draw).
+        `test_a_clean_game_logs_nothing` analyses it as each side and flags nothing, even
+        from the inaccuracy line. When chosen, no move's swing passed 0.02 for either side
+        (depth 12 with one thread, and depth 16 with two; Stockfish 19), so it doesn't sit
+        near a line. It found no false entries in today's rules. CLAUDE.md §12 lists it.
 - [ ] **21.3** Check each flag with the move you played (§7.6 change).
       - Today a move is flagged from two separate searches, before and after it. At depth
         16 that's noisy, and it makes false missed wins: "mate in 7" before, "+12" after,
