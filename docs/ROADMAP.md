@@ -1955,18 +1955,27 @@ nothing changes until you accept it, and then CLAUDE.md changes in the same comm
 The slices run in the Order of work at the top, not by number: stages 1 to 3 (21.2, 21.1,
 21.10, 21.3, 21.6, 21.5, 21.4) before M20, then 21.9, 21.7 and 21.8.
 
-- [ ] **21.1** Keep the evals (§5 change).
+- [ ] **21.1** Keep the evals (§5 change, accepted 2026-11-21).
       - `engine.analyse_game` scores every position (`GameAnalysis.evals`), and
-        `importer.new_game` drops them. Migration `0004`: `games.evals`, a JSON list of
-        N + 1 scores, White POV, in `eval_before`'s form. Games saved before it have
-        `NULL`. Also `engine_threads` and `engine_hash_mb`: with more than one thread,
-        Stockfish isn't deterministic, so the same game can give other entries elsewhere.
+        `importer.new_game` drops them. Migration `0004`: a `positions` table,
+        `(game_id, ply, eval, best_uci)`, primary key `(game_id, ply)`, `ON DELETE
+        CASCADE`, N + 1 rows per game: the Collection's shape (`eval` in `eval_before`'s
+        form, White POV; `best_uci` NULL when the game is over). The best move is kept so
+        a move can be re-judged without Stockfish.
+      - `games.engine_threads` and `games.engine_hash_mb`, next to `engine_name` and
+        `engine_depth`. Imports keep the configured threads, so the same game can still
+        give slightly different entries elsewhere (Stockfish isn't deterministic with
+        more than one thread); now you can see why.
+      - Games saved before 0004 have no positions until `reanalyse` (21.4).
       - `move_accuracy`, `game_accuracy` and `phase` move from the Collection's
         `stats.py` to `core/detect.py`, and the Collection imports them from there.
+        `core/detect.py` is already open to extensions, so §15 doesn't change. The
+        Collection's `phase` counts moves 1 to 10 as the opening, while 21.5's "Opening
+        gap" says move 12: settle one number at 21.5.
       - Unlocks without Stockfish: your accuracy and mistakes per game, an eval graph on
         the game page, re-judging after a threshold change, and 21.9.
-      - _Done when_ an imported fixture has N + 1 evals, and an old database migrates
-        with `NULL`.
+      - _Done when_ an imported fixture has N + 1 positions, a FEN entry has 2, and an old
+        database migrates with none.
 - [ ] **21.2** A clean-game fixture.
       - `tests/fixtures/pgn/` only checks that blunders are found. Add a short quiet game
         where nothing may be flagged at depth 12, so a false entry fails a test.
@@ -2021,11 +2030,19 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
 - [ ] **21.9** When you blunder (§7.9 change).
       - Patterns by game phase, by how the game stood before the move (winning, level,
         losing, from your evals), and by clock left. Needs 21.1.
-- [ ] **21.10** A safety limit on the engine (§7.6 change).
+- [ ] **21.10** A safety limit on the engine (§7.6 and §9 change, accepted 2026-11-21).
       - Depth is the only limit, so one stuck search (a broken binary, a rare position)
         hangs an import for good.
-      - **Proposed rule:** a generous cap per position (120 s) that stops the import with
-        an engine error, as a crash does. It never decides a judgment.
+      - Each search gets `Limit(depth=d, time=SEARCH_LIMIT_S)`, a fixed 120 s in
+        `core/engine.py` (no setting). A search that ends before reaching depth `d` was cut
+        short: that's an error, never a judgment. A wedged engine is caught by
+        python-chess's own timeout (the limit plus `Engine.open`'s 10 s).
+      - `Engine` restarts its own process (it keeps the command, threads and hash) and
+        raises `EngineTimeout`, an `EngineError`. `importer.run` reports that game as an
+        error, "Stockfish took over 120 s after 23. Nf5", and goes on with the next. The
+        game isn't saved, so importing again retries it. Any other `EngineError` still
+        stops the import.
+      - §9: the import exits 0 with a skipped game, like other per-game errors.
 - **Later, not in M21:** a "spot the threat" re-test for missed threats (name the
   opponent's move), and playing out the best line for tactics longer than one move.
 
@@ -2060,9 +2077,19 @@ dependency, still works, so that warning is filtered too.
 ## Open decisions
 
 - **2026-11-21: The M21 rule changes.** Each slice marked "§ change" waits for your yes or
-  no on its proposed rule (21.1, 21.3 to 21.10).
+  no on its proposed rule (21.3 to 21.9).
 
 ### Decided
+
+- **2026-11-21: Keeping the evals, and the engine's safety limit (21.1, 21.10).**
+  - **A `positions` table**, not a JSON column: the same shape as the Collection's, easy
+    to query across games for 21.9, and the best move is kept for re-judging.
+  - **Threads and hash recorded**, not forced to one thread: imports stay as fast, and a
+    difference between two runs can be explained.
+  - **A stuck search skips its game**, not the whole import: degrade gracefully (§1.4),
+    and never judge from a search cut short (§1.5). Importing again retries the game.
+  - **A fixed 120 s**, not a setting: depth 16 takes well under a second per position, so
+    it only catches a stuck engine.
 
 - **2026-11-21: The order of work, revised.** Asked for: a logical order once M21 was
   planned. It replaces the 2026-11-20 order (below).
