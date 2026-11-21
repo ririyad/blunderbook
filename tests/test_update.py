@@ -19,7 +19,20 @@ needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git isn't in
 
 def git(folder: Path, *args: str) -> str:
     done = subprocess.run(
-        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid", *args],
+        # No signing in these throwaway repos: with commit.gpgsign on in your own config, a
+        # commit would wait for a passphrase nobody sees once gpg-agent forgets it.
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "tag.gpgsign=false",
+            *args,
+        ],
         cwd=folder,
         capture_output=True,
         text=True,
