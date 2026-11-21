@@ -1,5 +1,6 @@
 """Blunder maths (CLAUDE.md §7.6): winning chances, swing, judgment, flagging, accepted moves,
-and the move lines shown as "Best was" and "Refutation".
+and the move lines shown as "Best was" and "Refutation". Also a move's and a game's
+accuracy, and a position's phase, which the Collection and the later M21 slices use.
 
 Engine scores arrive as :class:`Eval` from White's point of view. Everything here is pure:
 the engine wrapper (1.7) feeds it.
@@ -12,13 +13,15 @@ from typing import Final
 
 import chess
 
-from blunderbook.core.models import Color, Eval, Judgment, Thresholds
+from blunderbook.core.models import Color, Eval, Judgment, Phase, Thresholds
 
 WIN_K: Final = 0.00368208  # Lichess winning-chances constant
 MATE_CP: Final = 10_000  # mates count as this many centipawns, for the maths only
 MISSED_WIN_CAP: Final = 1_000  # evals are capped at +-10 pawns when looking for missed wins
 BEST_LINE_PLIES: Final = 6
 REFUTATION_PLIES: Final = 5
+OPENING_MOVES: Final = 10  # moves 1..10 are the opening
+ENDGAME_PIECES: Final = 6  # knights, bishops, rooks and queens of both sides
 
 
 def winning_chances(cp: float) -> float:
@@ -180,3 +183,44 @@ def best_line_san(fen_before: str, pv: Iterable[chess.Move]) -> str:
 def refutation_san(fen_after: str, pv: Iterable[chess.Move]) -> str | None:
     """The "Refutation": the first 5 plies of the engine line after my move, None if empty."""
     return line_san(fen_after, pv, REFUTATION_PLIES) or None
+
+
+# ---------------------------------------------------------------- accuracy and phase
+
+
+def win_percent(cp: float) -> float:
+    """The mover's winning chances in percent: 50 is level."""
+    return 50 * (1 + winning_chances(cp))
+
+
+def move_accuracy(cp_before: float, cp_after: float) -> float:
+    """Lichess's accuracy of a move, from the mover's evals before and after it, in percent:
+    ``103.1668 * exp(-0.04354 * (before - after)) - 3.1669`` on the winning chances, kept
+    within 0..100."""
+    drop = win_percent(cp_before) - win_percent(cp_after)
+    value = 103.1668 * math.exp(-0.04354 * drop) - 3.1669
+    return min(100.0, max(0.0, value))
+
+
+def game_accuracy(accuracies: Sequence[float]) -> float | None:
+    """A side's accuracy in a game: the average of the mean and the harmonic mean of its
+    moves' (each counted as at least 1 for the harmonic mean), so one bad move costs more
+    than a plain average shows. None with no moves."""
+    if not accuracies:
+        return None
+    mean = sum(accuracies) / len(accuracies)
+    harmonic = len(accuracies) / sum(1 / max(a, 1.0) for a in accuracies)
+    return (mean + harmonic) / 2
+
+
+def phase(board: chess.Board) -> Phase:
+    """The endgame once there are six pieces or fewer besides kings and pawns, both sides
+    together; otherwise the opening up to move 10, then the middlegame."""
+    pieces = sum(
+        len(board.pieces(kind, color))
+        for kind in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
+        for color in chess.COLORS
+    )
+    if pieces <= ENDGAME_PIECES:
+        return "endgame"
+    return "opening" if board.fullmove_number <= OPENING_MOVES else "middlegame"

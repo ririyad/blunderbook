@@ -11,7 +11,7 @@ from pathlib import Path
 import chess
 import pytest
 
-from blunderbook.core.models import Batch, Eval, NewBlunder, NewGame, needs_notes
+from blunderbook.core.models import Batch, Eval, NewBlunder, NewGame, ScoredPosition, needs_notes
 from blunderbook.db import connection, repo
 
 NOW = datetime(2026, 11, 5, 9, 30, tzinfo=UTC)
@@ -34,6 +34,8 @@ def new_game(**changes: object) -> NewGame:
         pgn='[White "Rashed"]\n\n1. d4 d5 2. c4 e6 *',
         engine_name="Stockfish 17.1",
         engine_depth=16,
+        engine_threads=2,
+        engine_hash_mb=128,
         site_label="Lichess",
         external_id="abcd1234",
         white="Rashed",
@@ -87,6 +89,23 @@ def ids(entries: list) -> list[int]:
 
 
 # ---------------------------------------------------------------- games
+
+
+def test_a_games_positions_are_saved_with_it(conn: sqlite3.Connection) -> None:
+    positions = [
+        ScoredPosition(0, Eval(cp=20), "d2d4"),
+        ScoredPosition(1, Eval(cp=31), "d7d5"),
+        ScoredPosition(2, Eval(mate=-1), None),
+    ]
+    saved = repo.add_game(conn, new_game(), [new_blunder()], now=NOW, positions=positions)
+    assert saved is not None
+    assert repo.game_positions(conn, saved.game_id) == tuple(positions)
+    other = repo.add_game(conn, new_game(fingerprint="fp-other"), now=NOW)
+    assert other is not None
+    assert repo.game_positions(conn, other.game_id) == ()  # none given: none kept
+    # a known game writes nothing, its positions included
+    assert repo.add_game(conn, new_game(), now=NOW, positions=positions[:1]) is None
+    assert len(repo.game_positions(conn, saved.game_id)) == 3
 
 
 def test_totals(conn: sqlite3.Connection) -> None:

@@ -21,7 +21,7 @@ import typer
 
 from blunderbook import ext, host
 from blunderbook.core import engine, pgn
-from blunderbook.core.models import Thresholds
+from blunderbook.core.models import Phase, Thresholds
 from blunderbook_collection import collect, games, stats, store
 from blunderbook_collection.routes import router
 
@@ -274,7 +274,7 @@ _RESULTS: dict[_Result, stats.Result] = {
     _Result.white: "white",
     _Result.black: "black",
 }
-_PHASES: dict[_Phase, stats.Phase] = {
+_PHASES: dict[_Phase, Phase] = {
     _Phase.opening: "opening",
     _Phase.middlegame: "middlegame",
     _Phase.endgame: "endgame",

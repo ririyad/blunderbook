@@ -410,6 +410,12 @@ def test_settings_and_new_games_reach_the_engine(fake_engine: FakeEngine, tmp_pa
     assert "setoption name Hash value 64" in sent
     assert sent.count("ucinewgame") == 2
     assert sent.count("go depth 7") == 3
+    assert (engine.threads, engine.hash_mb) == (3, 64)  # kept, to store with each game
+
+
+def test_settings_not_given_are_unknown(fake_engine: FakeEngine) -> None:
+    with Engine.open(fake_engine(), hash_mb=32) as engine:
+        assert (engine.threads, engine.hash_mb) == (None, 32)
 
 
 def test_settings_the_engine_rejects(fake_engine: FakeEngine) -> None:
@@ -430,6 +436,10 @@ def test_whole_game_through_a_uci_process(fake_engine: FakeEngine, tmp_path: Pat
     assert result.engine_name == "Stockfish 17.1"
     assert result.evals == (Eval(cp=0),) * 7 + (Eval(mate=0),)
     assert result.findings == ()
+    assert len(result.positions) == 8
+    assert all(p.best_uci is not None for p in result.positions[:-1])  # the fake's legal move
+    assert result.positions[-1].best_uci is None  # checkmate: no move, no engine
+    assert (result.threads, result.hash_mb) == (None, None)  # none were set
     sent = log.read_text("utf-8").splitlines()
     assert sent.count("go depth 6") == 7  # the final checkmate isn't sent
     assert sent.count("ucinewgame") == 1
@@ -458,6 +468,8 @@ def test_stockfish_flags_the_elephant_trap(stockfish_path: Path) -> None:
     assert nxd5.best_uci in nxd5.accept_uci
     assert "c3d5" not in nxd5.accept_uci
     assert result.engine_name.startswith("Stockfish")
+    assert (result.threads, result.hash_mb) == (1, 16)
+    assert result.positions[nxd5.ply.index].best_uci == nxd5.best_uci
 
 
 @pytest.mark.engine

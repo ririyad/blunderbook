@@ -3,7 +3,6 @@ loss, phases, the filters, openings and players, from evals made up for the test
 
 from contextlib import closing
 
-import chess
 import pytest
 from blunderbook_collection import collect, extension, games, stats, store
 from collection_fakes import (  # noqa: F401  (fixtures)
@@ -79,21 +78,6 @@ def legal(**kw: object) -> stats.Game:
 # ---------------------------------------------------------------- one move
 
 
-def test_accuracy_of_a_move() -> None:
-    assert stats.win_percent(0) == 50
-    assert stats.move_accuracy(30, 30) == pytest.approx(100, abs=1e-3)
-    assert stats.move_accuracy(0, 50) == 100  # it got better: no more than 100
-    assert stats.move_accuracy(300, -300) == pytest.approx(8.41, abs=0.01)
-    assert stats.move_accuracy(10_000, -10_000) == 0
-
-
-def test_accuracy_of_a_game() -> None:
-    assert stats.game_accuracy([]) is None
-    assert stats.game_accuracy([90, 90]) == pytest.approx(90)
-    # one bad move costs more than the plain average (50): mean 50, harmonic ~1.98
-    assert stats.game_accuracy([100, 0]) == pytest.approx((50 + 2 / 1.01) / 2)
-
-
 def test_every_move_is_judged() -> None:
     moves = stats.moves(legal(), TH)
     assert len(moves) == 13
@@ -126,19 +110,6 @@ def test_a_check_mate_at_the_end_counts_as_won() -> None:
     last = stats.moves(legal(), TH)[-1]
     assert (last.san, last.judgment, last.cp_loss) == ("Nd5#", None, 0)
     assert last.accuracy == pytest.approx(100, abs=1e-3)
-
-
-def test_phases() -> None:
-    assert stats.phase(chess.Board()) == "opening"
-    middle = chess.Board()
-    middle.fullmove_number = 11
-    assert stats.phase(middle) == "middlegame"
-    ending = chess.Board("4k3/8/8/8/8/8/4P3/R2QK2R w - - 0 5")  # 3 pieces, move 5
-    assert stats.phase(ending) == "endgame"
-    six = chess.Board("r2qk2r/8/8/8/8/8/8/R2QK2R w - - 0 30")
-    assert stats.phase(six) == "endgame"
-    seven = chess.Board("rn1qk2r/8/8/8/8/8/8/R2QK2R w - - 0 30")
-    assert stats.phase(seven) == "middlegame"
 
 
 def test_a_game_from_a_position_counts_its_own_move_numbers() -> None:

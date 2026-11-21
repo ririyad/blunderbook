@@ -9,7 +9,7 @@ local ``YYYY-MM-DD``. Sync state arrives with M5.
 
 import json
 import sqlite3
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Sequence
 from datetime import UTC, date, datetime
 from typing import Any, cast
 
@@ -34,6 +34,7 @@ from blunderbook.core.models import (
     NewGame,
     Outcome,
     SavedIds,
+    ScoredPosition,
     Source,
     Speed,
     Status,
@@ -69,6 +70,8 @@ _GAME_COLUMNS = (
     "engine_depth",
     "imported_at",
     "import_id",
+    "engine_threads",
+    "engine_hash_mb",
 )
 _BLUNDER_COLUMNS = (
     "game_id",
@@ -109,6 +112,7 @@ _INSERT_BLUNDER = (
     f"INSERT INTO blunders ({', '.join(_BLUNDER_COLUMNS)}) "
     f"VALUES ({', '.join(':' + c for c in _BLUNDER_COLUMNS)}) RETURNING id"
 )
+_INSERT_POSITION = "INSERT INTO positions (game_id, ply, eval, best_uci) VALUES (?, ?, ?, ?)"
 _SELECT_GAME = f"SELECT id, {', '.join(_GAME_COLUMNS)} FROM games"
 _SELECT_ENTRY = (
     "SELECT "
@@ -136,9 +140,10 @@ def add_game(
     *,
     now: datetime | None = None,
     import_id: int | None = None,
+    positions: Sequence[ScoredPosition] = (),
 ) -> SavedIds | None:
-    """Save an analysed game and its blunders in one transaction, and return their ids.
-    ``import_id`` is the import it came from (``add_import``).
+    """Save an analysed game, its blunders and its scored positions in one transaction, and
+    return the ids. ``import_id`` is the import it came from (``add_import``).
 
     A game with no blunders is saved too, so importing it again is skipped. Returns None,
     and writes nothing, when a game with the same fingerprint is already saved. New entries
@@ -152,6 +157,10 @@ def add_game(
         if row is None:
             return None
         game_id = int(row[0])
+        conn.executemany(
+            _INSERT_POSITION,
+            [(game_id, p.ply, _json(p.eval.to_dict()), p.best_uci) for p in positions],
+        )
         blunder_ids = tuple(
             int(
                 conn.execute(_INSERT_BLUNDER, _blunder_params(game_id, b, stamp, due)).fetchone()[0]
@@ -159,6 +168,18 @@ def add_game(
             for b in blunders
         )
     return SavedIds(game_id, blunder_ids)
+
+
+def game_positions(conn: sqlite3.Connection, game_id: int) -> tuple[ScoredPosition, ...]:
+    """A game's scored positions from pass 1, start first. Empty for a game saved before
+    0004 (CLAUDE.md §5)."""
+    rows = conn.execute(
+        "SELECT ply, eval, best_uci FROM positions WHERE game_id = ? ORDER BY ply", (game_id,)
+    )
+    return tuple(
+        ScoredPosition(row["ply"], Eval.from_dict(json.loads(row["eval"])), row["best_uci"])
+        for row in rows
+    )
 
 
 def find_saved(conn: sqlite3.Connection, fingerprint: str) -> SavedIds | None:
@@ -310,6 +331,8 @@ def _game_params(game: NewGame, stamp: str, import_id: int | None = None) -> dic
         "engine_depth": game.engine_depth,
         "imported_at": stamp,
         "import_id": import_id,
+        "engine_threads": game.engine_threads,
+        "engine_hash_mb": game.engine_hash_mb,
     }
 
 
@@ -342,6 +365,8 @@ def _game(row: sqlite3.Row, prefix: str = "") -> Game:
         analysis_status=cast(AnalysisStatus, col("analysis_status")),
         engine_name=col("engine_name"),
         engine_depth=col("engine_depth"),
+        engine_threads=col("engine_threads"),
+        engine_hash_mb=col("engine_hash_mb"),
         imported_at=datetime.fromisoformat(col("imported_at")),
         import_id=col("import_id"),
     )

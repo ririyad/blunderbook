@@ -16,11 +16,13 @@ the engine's own move. On top of that:
   fewer besides kings and pawns, both sides together; otherwise the opening up to move 10,
   then the middlegame.
 
+Accuracy and phases are ``core.detect``'s (``move_accuracy``, ``game_accuracy``, ``phase``),
+shared with Blunderbook's own games.
+
 :func:`report` filters the games and the moves (by player, colour, result, opening and
 phase) and adds everything up; :func:`players` lists who played.
 """
 
-import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Literal
@@ -28,15 +30,12 @@ from typing import Final, Literal
 import chess
 
 from blunderbook.core import detect, identity
-from blunderbook.core.models import Color, Judgment, Thresholds
+from blunderbook.core.models import Color, Judgment, Phase, Thresholds
 from blunderbook_collection.games import Position
 
-Phase = Literal["opening", "middlegame", "endgame"]
 Result = Literal["won", "lost", "drawn", "white", "black"]
 
 PHASES: Final[tuple[Phase, ...]] = ("opening", "middlegame", "endgame")
-OPENING_MOVES: Final = 10  # moves 1..10 are the opening
-ENDGAME_PIECES: Final = 6  # knights, bishops, rooks and queens of both sides
 CP_CAP: Final = 1000
 _ECO: Final = frozenset("ABCDE")
 
@@ -96,44 +95,12 @@ def moves(game: Game, thresholds: Thresholds) -> tuple[Move, ...]:
                 san=after.move_san,
                 swing=swing,
                 judgment=detect.judgment(swing, thresholds) if flagged else None,
-                accuracy=move_accuracy(cp_before, cp_after),
+                accuracy=detect.move_accuracy(cp_before, cp_after),
                 cp_loss=max(0, _cap(cp_before) - _cap(cp_after)),
-                phase=phase(board),
+                phase=detect.phase(board),
             )
         )
     return tuple(found)
-
-
-def win_percent(cp: float) -> float:
-    """The mover's winning chances in percent: 50 is level."""
-    return 50 * (1 + detect.winning_chances(cp))
-
-
-def move_accuracy(cp_before: float, cp_after: float) -> float:
-    """Lichess's accuracy of a move, from the mover's evals before and after it."""
-    drop = win_percent(cp_before) - win_percent(cp_after)
-    value = 103.1668 * math.exp(-0.04354 * drop) - 3.1669
-    return min(100.0, max(0.0, value))
-
-
-def game_accuracy(accuracies: Sequence[float]) -> float | None:
-    """A side's accuracy in a game: the average of the mean and the harmonic mean."""
-    if not accuracies:
-        return None
-    mean = sum(accuracies) / len(accuracies)
-    harmonic = len(accuracies) / sum(1 / max(a, 1.0) for a in accuracies)
-    return (mean + harmonic) / 2
-
-
-def phase(board: chess.Board) -> Phase:
-    pieces = sum(
-        len(board.pieces(kind, color))
-        for kind in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN)
-        for color in chess.COLORS
-    )
-    if pieces <= ENDGAME_PIECES:
-        return "endgame"
-    return "opening" if board.fullmove_number <= OPENING_MOVES else "middlegame"
 
 
 def _cap(cp: int) -> int:
@@ -247,7 +214,7 @@ class Tally:
             return
         self.games += 1
         self.add(counted)
-        accuracy = game_accuracy([m.accuracy for m in counted])
+        accuracy = detect.game_accuracy([m.accuracy for m in counted])
         if accuracy is not None:
             self.game_accuracies.append(accuracy)
 

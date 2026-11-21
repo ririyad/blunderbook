@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from blunderbook.core.models import CAUSES, Eval
+from blunderbook.core.models import CAUSES, Eval, GameAnalysis, ScoredPosition
 
 
 def test_causes_fixed_order() -> None:
@@ -63,3 +63,13 @@ def test_eval_from_dict_rejects_bad_shape(data: dict[str, int]) -> None:
 def test_eval_from_dict_rejects_non_int(data: dict[str, object]) -> None:
     with pytest.raises(TypeError):
         Eval.from_dict(data)
+
+
+def test_an_analysis_lists_its_positions() -> None:
+    evals = (Eval(cp=20), Eval(mate=0))
+    analysis = GameAnalysis("Stockfish 17.1", 12, evals, (), best_uci=("e2e4", None))
+    assert analysis.positions == (
+        ScoredPosition(0, Eval(cp=20), "e2e4"),
+        ScoredPosition(1, Eval(mate=0), None),
+    )
+    assert GameAnalysis("Stockfish 17.1", 12, evals, ()).positions == ()  # no best moves kept

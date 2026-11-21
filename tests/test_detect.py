@@ -9,14 +9,18 @@ from blunderbook.core.detect import (
     accepted_moves,
     best_line_san,
     chances,
+    game_accuracy,
     is_flagged,
     judgment,
     line_san,
     maths_cp,
     missed_win,
+    move_accuracy,
     mover_mates,
+    phase,
     refutation_san,
     swing,
+    win_percent,
     winning_chances,
 )
 from blunderbook.core.models import Color, Eval, Judgment, Thresholds
@@ -353,3 +357,34 @@ def test_missed_wins_can_be_turned_off() -> None:
 def test_the_missed_win_line_is_yours() -> None:
     assert missed_win(Eval(cp=600), Eval(cp=400), "white", Thresholds(missed_win_cp=200))
     assert not missed_win(Eval(cp=600), Eval(cp=400), "white", TH)
+
+
+# ---------------------------------------------------------------- accuracy and phase
+
+
+def test_accuracy_of_a_move() -> None:
+    assert win_percent(0) == 50
+    assert move_accuracy(30, 30) == pytest.approx(100, abs=1e-3)
+    assert move_accuracy(0, 50) == 100  # it got better: no more than 100
+    assert move_accuracy(300, -300) == pytest.approx(8.41, abs=0.01)
+    assert move_accuracy(10_000, -10_000) == 0
+
+
+def test_accuracy_of_a_game() -> None:
+    assert game_accuracy([]) is None
+    assert game_accuracy([90, 90]) == pytest.approx(90)
+    # one bad move costs more than the plain average (50): mean 50, harmonic ~1.98
+    assert game_accuracy([100, 0]) == pytest.approx((50 + 2 / 1.01) / 2)
+
+
+def test_phases() -> None:
+    assert phase(chess.Board()) == "opening"
+    middle = chess.Board()
+    middle.fullmove_number = 11
+    assert phase(middle) == "middlegame"
+    ending = chess.Board("4k3/8/8/8/8/8/4P3/R2QK2R w - - 0 5")  # 3 pieces, move 5
+    assert phase(ending) == "endgame"
+    six = chess.Board("r2qk2r/8/8/8/8/8/8/R2QK2R w - - 0 30")
+    assert phase(six) == "endgame"
+    seven = chess.Board("rn1qk2r/8/8/8/8/8/8/R2QK2R w - - 0 30")
+    assert phase(seven) == "middlegame"

@@ -23,6 +23,7 @@ Status = Literal["new", "solved", "missed"]
 AnalysisStatus = Literal["pending", "running", "done", "error"]
 ImportKind = Literal["file", "paste", "sync"]
 Outcome = Literal["won", "lost", "drawn"]
+Phase = Literal["opening", "middlegame", "endgame"]
 
 # Fixed order everywhere: UI chips, print page, Patterns (CLAUDE.md §5).
 CAUSES: Final[tuple[str, ...]] = (
@@ -207,6 +208,15 @@ class Finding:
 
 
 @dataclass(frozen=True, slots=True)
+class ScoredPosition:
+    """One position of a game with its pass-1 score: a ``positions`` row (CLAUDE.md §5)."""
+
+    ply: int  # 0 = the start, i = after ply i - 1
+    eval: Eval  # White POV
+    best_uci: str | None  # the engine's move here; None when the game is over
+
+
+@dataclass(frozen=True, slots=True)
 class GameAnalysis:
     """The result of analysing one game for one side."""
 
@@ -214,6 +224,20 @@ class GameAnalysis:
     depth: int
     evals: tuple[Eval, ...]  # positions 0..N: before ply 0, then after each ply
     findings: tuple[Finding, ...]  # flagged moves, in game order
+    best_uci: tuple[str | None, ...] = ()  # the engine's move in each position, as evals
+    threads: int | None = None  # the engine's Threads and Hash as applied; None if unknown
+    hash_mb: int | None = None
+
+    @property
+    def positions(self) -> tuple[ScoredPosition, ...]:
+        """Each position's score and best move, ready for the ``positions`` table. Empty
+        when the best moves weren't kept."""
+        if len(self.best_uci) != len(self.evals):
+            return ()
+        return tuple(
+            ScoredPosition(i, score, best)
+            for i, (score, best) in enumerate(zip(self.evals, self.best_uci, strict=True))
+        )
 
 
 # ---------------------------------------------------------------- source (core/source.py)
@@ -246,6 +270,8 @@ class NewGame:
     pgn: str  # the game's own text, verbatim
     engine_name: str  # e.g. "Stockfish 17.1"
     engine_depth: int
+    engine_threads: int | None = None  # as applied; None before 0004 or when unknown
+    engine_hash_mb: int | None = None
     site_label: str | None = None
     external_id: str | None = None  # site game id when known
     white: str | None = None

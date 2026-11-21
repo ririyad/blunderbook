@@ -248,6 +248,23 @@ def test_save_stores_the_game_and_its_entries(conn: sqlite3.Connection) -> None:
     assert entry.game.imported_at == now
 
 
+def test_save_keeps_every_position(conn: sqlite3.Connection) -> None:
+    """Pass 1's score and best move for each position, start first (ROADMAP 21.1)."""
+    result, _ = legal_trap()
+    saved = importer.save(conn, result)
+    assert saved is not None
+    positions = repo.game_positions(conn, saved.game_id)
+    assert result.queued.game is not None
+    assert [p.ply for p in positions] == list(range(len(result.queued.game.plies) + 1))
+    assert positions == result.analysis.positions
+    assert (positions[9].eval, positions[9].best_uci) == (Eval(cp=-208), "d6e5")  # before Bxd1
+    assert (positions[10].eval, positions[10].best_uci) == (Eval(mate=2), "c4f7")
+    assert (positions[0].eval, positions[0].best_uci) == (Eval(cp=20), None)  # no line given
+    game = repo.get_game(conn, saved.game_id)
+    assert game is not None
+    assert (game.engine_threads, game.engine_hash_mb) == (None, None)  # a stand-in engine
+
+
 def test_saved_games_are_skipped_next_time(conn: sqlite3.Connection) -> None:
     result, _ = legal_trap()
     assert importer.save(conn, result) is not None
@@ -478,6 +495,11 @@ def test_log_fen_logs_a_mistake(conn: sqlite3.Connection) -> None:
     assert outcome.result == "logged"
     assert outcome.saved is not None and outcome.entry_id == outcome.saved.blunder_ids[0]
     assert outcome.message == f"Logged 32. Rc7? as a mistake: entry #{outcome.entry_id}."
+    positions = repo.game_positions(conn, outcome.saved.game_id)
+    assert [(p.ply, p.eval, p.best_uci) for p in positions] == [
+        (0, Eval(cp=30), "b3c4"),
+        (1, Eval(cp=-100), "e7c7"),
+    ]
 
     again = importer.find_logged(conn, queued)
     assert again is not None

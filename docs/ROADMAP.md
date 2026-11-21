@@ -30,7 +30,7 @@ _Last updated: 2026-11-21_
 | M18 Game commentary | Planned | Collection: every move explained (what, why, what followed), from Stockfish's lines, with optional AI prose |
 | M19 Journal | Done (5/5) | Extension: fast chess notes in Markdown, with PGN and FEN that play on a board |
 | M20 Cost, not count | Planned | Patterns: what each cause, time control and opening costs you, in points per 10 games |
-| M21 Solid core | In progress (1/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
+| M21 Solid core | In progress (2/10) | Fewer false entries, the evals kept, `reanalyse`, more suggested causes, a fairer re-test |
 
 **Order of work** (decided 2026-11-20, revised 2026-11-21, see Decided):
 
@@ -73,8 +73,8 @@ _Stage 6: the milestones planned before M21_
 
 The milestone and slice numbers stay as they are; only the order changes.
 
-**Next up:** 21.1, keep the evals (next in the order of work). 21.2, the clean-game
-fixture, is done. M19, the Journal extension,
+**Next up:** 21.10, the engine's safety limit (next in the order of work). 21.2, the
+clean-game fixture, and 21.1, keep the evals, are done. M19, the Journal extension,
 is done: notes in Markdown with PGN, FEN and moves in sentences that play on a board,
 boards that write, Analyse, history and export. Still to check from M19: the tab on a real
 phone at 390 px (Chrome on this Mac stops at 570 px, where it was checked). M17, the Profile extension,
@@ -1956,7 +1956,7 @@ nothing changes until you accept it, and then CLAUDE.md changes in the same comm
 The slices run in the Order of work at the top, not by number: stages 1 to 3 (21.2, 21.1,
 21.10, 21.3, 21.6, 21.5, 21.4) before M20, then 21.9, 21.7 and 21.8.
 
-- [ ] **21.1** Keep the evals (§5 change, accepted 2026-11-21).
+- [x] **21.1** Keep the evals (§5 change, accepted 2026-11-21).
       - `engine.analyse_game` scores every position (`GameAnalysis.evals`), and
         `importer.new_game` drops them. Migration `0004`: a `positions` table,
         `(game_id, ply, eval, best_uci)`, primary key `(game_id, ply)`, `ON DELETE
@@ -1977,6 +1977,14 @@ The slices run in the Order of work at the top, not by number: stages 1 to 3 (21
         the game page, re-judging after a threshold change, and 21.9.
       - _Done when_ an imported fixture has N + 1 positions, a FEN entry has 2, and an old
         database migrates with none.
+      - Done 2026-11-21: `0004_positions.sql`; `repo.add_game(positions=…)` saves them in
+        the game's transaction and `repo.game_positions()` reads them back.
+        `GameAnalysis` carries each position's best move and the engine's Threads and Hash
+        as applied (`Engine.threads` / `Engine.hash_mb`; None from a stand-in engine), and
+        `GameAnalysis.positions` lists them. The helpers are in `core/detect.py`, with
+        their tests in `tests/test_detect.py`; `Phase` is in `core/models.py`. CLAUDE.md §5
+        and §7.6 and the README say what's saved. Nothing reads the positions yet: 21.3,
+        21.4, 21.9 and M18 will.
 - [x] **21.2** A clean-game fixture.
       - `tests/fixtures/pgn/` only checks that blunders are found. Add a short quiet game
         where nothing may be flagged at depth 12, so a false entry fails a test.

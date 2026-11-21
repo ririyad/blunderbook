@@ -224,7 +224,16 @@ CREATE TABLE games (
   analysis_status TEXT NOT NULL DEFAULT 'pending', -- pending|running|done|error
   engine_name     TEXT, engine_depth INTEGER,
   imported_at     TEXT NOT NULL,
-  import_id       INTEGER REFERENCES imports(id)  -- NULL: a FEN entry, or saved before 0003
+  import_id       INTEGER REFERENCES imports(id), -- NULL: a FEN entry, or saved before 0003
+  engine_threads  INTEGER, engine_hash_mb INTEGER  -- as applied; NULL: saved before 0004
+);
+
+CREATE TABLE positions (                       -- pass 1, every position (§7.6)
+  game_id   INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  ply       INTEGER NOT NULL,                 -- 0 = the start, i = after ply i - 1
+  eval      TEXT NOT NULL,                    -- JSON {"cp":36} | {"mate":-2}, White POV
+  best_uci  TEXT,                             -- the engine's move here; NULL when it's over
+  PRIMARY KEY (game_id, ply)
 );
 
 CREATE TABLE blunders (
@@ -302,7 +311,8 @@ names become `'`. FEN entries have no import (`import_id` NULL) and aren't liste
 Each import that saves a game gets an `imports` row when its first game is saved, so an
 import that adds nothing leaves none: `blunderbook import FILE` is labelled with the file's
 name, `sync` with "Lichess sync" / "Chess.com sync", the page with the chosen file's name or
-"Pasted PGN". Games saved before migration 0003 have no import.
+"Pasted PGN". Games saved before migration 0003 have no import. Games saved before 0004
+have no `positions` and no engine threads or hash; a FEN entry has two positions.
 
 The fixed cause list (keep this order everywhere: UI chips, print page, Patterns):
 
@@ -486,6 +496,9 @@ won't start and carries the `com.apple.quarantine` mark gets a message with the 
 ### 7.6 Analysis and blunder detection (`core/engine.py`, `core/detect.py`)
 - **Pass 1:** analyse every position in the game once at `engine_depth`
   (positions 0..N, where position i+1 is after ply i). Cache `{score, best, pv}` per position.
+  Each position's score and best move are saved in `positions` with the game, and the
+  engine's Threads and Hash (as applied) on the game, so a game can be judged again
+  without Stockfish.
   Each position is sent with the game's moves (so Stockfish sees repetitions), and each game
   starts with `ucinewgame`. Depth is the only limit; there is no time limit per position.
   - Terminal positions are not sent to the engine: checkmate → `mate 0` (lost for the side

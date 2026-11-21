@@ -612,7 +612,8 @@ position.
 6. For each logged position, Stockfish looks at its top three moves. Any move within
    `accept_margin_cp` (60 cp) of the best counts as a correct answer in the re-test.
 
-The engine's version and depth are saved with every game. Evals already in a PGN (`[%eval]`)
+The engine's version, depth, threads and hash are saved with every game, and so is
+its score and best move for every position. Evals already in a PGN (`[%eval]`)
 are ignored, so every game is judged the same way.
 
 **Suggested causes** come from the data, and stay suggestions until you confirm them:

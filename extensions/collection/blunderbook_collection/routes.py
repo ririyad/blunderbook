@@ -22,7 +22,7 @@ from starlette.concurrency import run_in_threadpool
 
 from blunderbook import host
 from blunderbook.core import detect
-from blunderbook.core.models import Color, Entry, Judgment, Source, Status, Thresholds
+from blunderbook.core.models import Color, Entry, Judgment, Phase, Source, Status, Thresholds
 from blunderbook_collection import games, jobs, stats, store
 from blunderbook_collection.games import Position
 
@@ -97,7 +97,7 @@ class TallyOut(BaseModel):
 
 
 class PhaseOut(TallyOut):
-    phase: stats.Phase
+    phase: Phase
 
 
 class OpeningOut(BaseModel):
@@ -155,7 +155,7 @@ def get_stats(
     color: Color | None = None,
     result: ResultParam | None = None,
     opening: Text = None,
-    phase: stats.Phase | None = None,
+    phase: Phase | None = None,
 ) -> StatsOut:
     """A collection's stats (every collection's with ``all``), with the CLI's filters."""
     f = stats.Filter(
@@ -265,7 +265,7 @@ class MoveOut(BaseModel):
     judgment: Judgment | None  # blunder / mistake / inaccuracy; None when it's fine
     accuracy: float
     cp_loss: int
-    phase: stats.Phase
+    phase: Phase
     best_san: str | None  # Stockfish's move instead, for a marked move
     best_line: str | None  # its line: "6. e3 Be7 7. Bd3"
     refutation: str | None  # Stockfish's line after the move, for a marked move

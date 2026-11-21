@@ -304,6 +304,7 @@ def save(
         [new_blunder(b) for b in analysed.blunders],
         now=now,
         import_id=import_id,
+        positions=analysed.analysis.positions,
     )
     if ids is None:
         return None
@@ -326,6 +327,8 @@ def new_game(analysed: AnalysedGame) -> NewGame:
         pgn=game.pgn,
         engine_name=analysed.analysis.engine_name,
         engine_depth=analysed.analysis.depth,
+        engine_threads=analysed.analysis.threads,
+        engine_hash_mb=analysed.analysis.hash_mb,
         site_label=source.label,
         external_id=source.url or source.game_id,
         white=game.header("White"),

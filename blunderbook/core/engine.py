@@ -105,9 +105,18 @@ class Analyser(Protocol):
 class Engine:
     """A running Stockfish. Open with :meth:`open`, inside a ``with`` block."""
 
-    def __init__(self, simple: chess.engine.SimpleEngine, info: EngineInfo) -> None:
+    def __init__(
+        self,
+        simple: chess.engine.SimpleEngine,
+        info: EngineInfo,
+        *,
+        threads: int | None = None,
+        hash_mb: int | None = None,
+    ) -> None:
         self._simple = simple
         self.info = info
+        self.threads = threads  # as applied; None when not set (stored with each game)
+        self.hash_mb = hash_mb
         self.closed = False
 
     @classmethod
@@ -126,11 +135,11 @@ class Engine:
         simple = _popen(command, timeout)
         try:
             info = _identify(simple.id.get("name", "").strip())
-            _configure(simple, threads=threads, hash_mb=hash_mb)
+            applied = _configure(simple, threads=threads, hash_mb=hash_mb)
         except BaseException:
             simple.close()
             raise
-        return cls(simple, info)
+        return cls(simple, info, threads=applied.get("Threads"), hash_mb=applied.get("Hash"))
 
     @property
     def name(self) -> str:
@@ -253,17 +262,19 @@ def _identify(name: str) -> EngineInfo:
 
 def _configure(
     simple: chess.engine.SimpleEngine, *, threads: int | None, hash_mb: int | None
-) -> None:
+) -> dict[str, int]:
+    """Apply Threads and Hash where given and the engine has them; returns what was set."""
     wanted = {"Threads": threads, "Hash": hash_mb}
     options = {k: v for k, v in wanted.items() if v is not None and k in simple.options}
     if not options:
-        return
+        return options
     try:
         simple.configure(options)
     except chess.engine.EngineError as exc:
         raise EngineError(f"Stockfish didn't accept the settings: {exc}") from None
     except chess.engine.EngineTerminatedError:
         raise EngineError("Stockfish stopped unexpectedly.") from None
+    return options
 
 
 def _line(info: chess.engine.InfoDict) -> Line:
@@ -349,11 +360,15 @@ def analyse_game(
         if progress is not None:
             progress(n + 1 + k, total)
 
+    real = analyser if isinstance(analyser, Engine) else None  # stand-ins have no settings
     return GameAnalysis(
         engine_name=analyser.name,
         depth=depth,
         evals=tuple(line.score for line in pass1),
         findings=tuple(findings),
+        best_uci=tuple(None if line.move is None else line.move.uci() for line in pass1),
+        threads=None if real is None else real.threads,
+        hash_mb=None if real is None else real.hash_mb,
     )
 
 
